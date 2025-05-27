@@ -73,7 +73,7 @@ public partial class MainWindow : IDisposable
         else
         {
             LogMessage("WARNING: extract-xiso.exe not found. ISO conversion will fail.");
-            Task.Run(async () => await ReportBugAsync("extract-xiso.exe not found."));
+            Task.Run(() => Task.FromResult(_ = ReportBugAsync("extract-xiso.exe not found.")));
         }
 
         // Verify 7z.exe
