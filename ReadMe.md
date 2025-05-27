@@ -2,7 +2,7 @@
 
 A simple Windows WPF application for batch converting Xbox Original ISO files to the optimized XISO format using the `extract-xiso` command-line tool. It also supports extracting and converting ISO files contained within ZIP, 7Z, and RAR archives using `7z.exe`.
 
-![Batch Convert ISO to XISO](screenshot.png) <!-- Placeholder for a screenshot -->
+![Batch Convert ISO to XISO](screenshot.png)
 
 ## Overview
 

@@ -55,7 +55,10 @@ public partial class MainWindow : IDisposable
 
         LogMessage("Welcome to the Batch Convert ISO to XISO.");
         LogMessage("This program will convert ISO/XISO files (and ISOs within ZIP/7Z/RAR archives) to Xbox XISO format using extract-xiso.");
-        // ... (rest of welcome messages) ...
+        LogMessage("Please follow these steps:");
+        LogMessage("1. Select the input folder containing ISO files to convert");
+        LogMessage("2. Select the output folder where converted XISO files will be saved");
+        LogMessage("3. Choose whether to delete original files after conversion");
         LogMessage("4. Click 'Start Conversion' to begin the process");
         LogMessage("");
 
@@ -89,22 +92,13 @@ public partial class MainWindow : IDisposable
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         _cts.Cancel();
-        // Allow ongoing operations to attempt graceful shutdown before forcing exit.
-        // Application.Current.Shutdown() might be too abrupt if called here directly with async ops.
-        // Consider a more graceful shutdown sequence if needed, or rely on Dispose.
-        // For simplicity, current approach is okay for this app.
-        // Environment.Exit(0) is generally discouraged in WPF apps; Shutdown() is preferred.
     }
 
     protected override void OnClosing(CancelEventArgs e) // More standard way to handle closing
     {
         _cts.Cancel();
-        // If you have long running tasks that don't respond to cancellation quickly,
-        // you might want to wait for them or inform the user.
-        // For this app, cancelling and letting Dispose handle cleanup is likely fine.
         base.OnClosing(e);
     }
-
 
     private void LogMessage(string message)
     {
@@ -140,13 +134,13 @@ public partial class MainWindow : IDisposable
         {
             var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
-            var sevenZipPath = Path.Combine(appDirectory, "7z.exe"); // Define here for access
+            var sevenZipPath = Path.Combine(appDirectory, "7z.exe");
 
             if (!File.Exists(extractXisoPath))
             {
                 LogMessage("Error: extract-xiso.exe not found.");
                 ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
-                await ReportBugAsync("extract-xiso.exe not found at start of conversion.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
+                _ = ReportBugAsync("extract-xiso.exe not found at start of conversion.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
                 return;
             }
 
@@ -181,7 +175,7 @@ public partial class MainWindow : IDisposable
             catch (Exception ex)
             {
                 LogMessage($"Critical Error: {ex.Message}");
-                await ReportBugAsync("Critical error during batch conversion process", ex);
+                _ = ReportBugAsync("Critical error during batch conversion process", ex);
             }
             finally
             {
@@ -190,6 +184,7 @@ public partial class MainWindow : IDisposable
         }
         catch (Exception ex)
         {
+            _ = ReportBugAsync($"Error during batch conversion process: {ex.Message}", ex);
             LogMessage($"Error during batch conversion process: {ex.Message}");
         }
     }
@@ -306,14 +301,12 @@ public partial class MainWindow : IDisposable
         catch (Exception ex)
         {
             LogMessage($"Error during pre-scan/extraction phase: {ex.Message}");
-            await ReportBugAsync("Error in pre-scan/extraction phase", ex);
-            // Potentially stop here or allow processing of whatever was collected. For now, continue if possible.
+            _ = ReportBugAsync("Error in pre-scan/extraction phase", ex);
         }
         finally
         {
             Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
         }
-
 
         if (_cts.Token.IsCancellationRequested)
         {
@@ -417,7 +410,6 @@ public partial class MainWindow : IDisposable
         }
     }
 
-
     private async Task<FileProcessingStatus> ConvertFileAsync(string extractXisoPath, string inputFile, string outputFolder, bool deleteOriginalIsoFile)
     {
         var fileName = Path.GetFileName(inputFile); // This is the ISO name
@@ -429,7 +421,7 @@ public partial class MainWindow : IDisposable
             if (toolResult == ConversionToolResultStatus.Failed)
             {
                 LogMessage($"{logPrefix} extract-xiso tool reported failure. This might be due to a corrupted ISO or an issue with the tool itself.");
-                await ReportBugAsync($"extract-xiso tool reported failure for file: {fileName}. Check application log for tool output.");
+                _ = ReportBugAsync($"extract-xiso tool reported failure for file: {fileName}. Check application log for tool output.");
                 return FileProcessingStatus.Failed;
             }
 
@@ -442,6 +434,7 @@ public partial class MainWindow : IDisposable
                 await Task.Run(() => File.Copy(inputFile, destinationPath, true), _cts.Token);
 
                 if (!deleteOriginalIsoFile) return FileProcessingStatus.Skipped; // This applies only to standalone ISOs
+
                 LogMessage($"{logPrefix} Deleting original (skipped) file: {fileName}");
                 await Task.Run(() => File.Delete(inputFile), _cts.Token);
                 return FileProcessingStatus.Skipped;
@@ -485,7 +478,7 @@ public partial class MainWindow : IDisposable
         catch (Exception ex)
         {
             LogMessage($"{logPrefix} Error processing: {ex.Message}");
-            await ReportBugAsync($"Error processing file: {fileName}", ex);
+            _ = ReportBugAsync($"Error processing file: {fileName}", ex);
             return FileProcessingStatus.Failed;
         }
     }
@@ -598,7 +591,7 @@ public partial class MainWindow : IDisposable
         catch (Exception ex)
         {
             LogMessage($"Error running extract-xiso for {isoFileName}: {ex.Message}");
-            await ReportBugAsync($"Exception during extract-xiso for {isoFileName}", ex);
+            _ = ReportBugAsync($"Exception during extract-xiso for {isoFileName}", ex);
             return ConversionToolResultStatus.Failed;
         }
     }
@@ -677,7 +670,7 @@ public partial class MainWindow : IDisposable
             else
             {
                 LogMessage($"7z.exe failed to extract {archiveFileName}. Exit Code: {process.ExitCode}. Errors: {string.Join("; ", errorMessages)}");
-                await ReportBugAsync($"7z.exe failed for {archiveFileName}. Exit: {process.ExitCode}", new Exception($"7z Errors: {string.Join("\n", errorMessages)}"));
+                _ = ReportBugAsync($"7z.exe failed for {archiveFileName}. Exit: {process.ExitCode}", new Exception($"7z Errors: {string.Join("\n", errorMessages)}"));
                 return false;
             }
         }
@@ -688,7 +681,7 @@ public partial class MainWindow : IDisposable
         catch (Exception ex)
         {
             LogMessage($"Exception during extraction of {archiveFileName}: {ex.Message}");
-            await ReportBugAsync($"Exception extracting {archiveFileName}", ex);
+            _ = ReportBugAsync($"Exception extracting {archiveFileName}", ex);
             return false;
         }
     }
@@ -727,10 +720,8 @@ public partial class MainWindow : IDisposable
         catch (Exception ex)
         {
             LogMessage($"Error deleting file {Path.GetFileName(filePath)}: {ex.Message}");
-            // Optionally report this
         }
     }
-
 
     private void ShowMessageBox(string message, string title, MessageBoxButton buttons, MessageBoxImage icon)
     {
@@ -744,7 +735,6 @@ public partial class MainWindow : IDisposable
 
     private async Task ReportBugAsync(string message, Exception? exception = null)
     {
-        // ... (ReportBugAsync implementation remains the same)
         try
         {
             var fullReport = new StringBuilder();
