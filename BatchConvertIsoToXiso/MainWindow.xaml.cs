@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using Microsoft.Win32;
+using System.Windows.Threading; 
 
 namespace BatchConvertIsoToXiso;
 
@@ -20,6 +21,13 @@ public partial class MainWindow : IDisposable
 
     private readonly List<string> _processOutputLines = new();
 
+    // Summary Stats
+    private DateTime _conversionStartTime;
+    private readonly DispatcherTimer _processingTimer;
+    private int _uiTotalFiles; // Total ISOs expected to be processed (dynamically updated)
+    private int _uiSuccessCount; // ISOs successfully converted or skipped
+    private int _uiFailedCount; // ISOs that failed conversion
+
     private enum ConversionToolResultStatus
     {
         Success,
@@ -34,24 +42,15 @@ public partial class MainWindow : IDisposable
         Failed
     }
 
-    private sealed class ProcessableItem
-    {
-        public string FilePath { get; } // Path to the ISO file (original or extracted)
-        public string? OriginalArchivePath { get; } // Path to the original archive, if this ISO was extracted
-        public bool IsFromArchive => OriginalArchivePath != null;
-
-        public ProcessableItem(string filePath, string? originalArchivePath = null)
-        {
-            FilePath = filePath;
-            OriginalArchivePath = originalArchivePath;
-        }
-    }
-
     public MainWindow()
     {
         InitializeComponent();
         _cts = new CancellationTokenSource();
         _bugReportService = new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName);
+
+        _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _processingTimer.Tick += ProcessingTimer_Tick;
+        ResetSummaryStats();
 
         LogMessage("Welcome to the Batch Convert ISO to XISO.");
         LogMessage("This program will convert ISO/XISO files (and ISOs within ZIP/7Z/RAR archives) to Xbox XISO format using extract-xiso.");
@@ -64,7 +63,6 @@ public partial class MainWindow : IDisposable
 
         var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
 
-        // Verify extract-xiso.exe
         var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
         if (File.Exists(extractXisoPath))
         {
@@ -76,7 +74,6 @@ public partial class MainWindow : IDisposable
             Task.Run(() => Task.FromResult(_ = ReportBugAsync("extract-xiso.exe not found.")));
         }
 
-        // Verify 7z.exe
         var sevenZipPath = Path.Combine(appDirectory, "7z.exe");
         if (File.Exists(sevenZipPath))
         {
@@ -85,7 +82,6 @@ public partial class MainWindow : IDisposable
         else
         {
             LogMessage("WARNING: 7z.exe not found. Archive extraction (ZIP, 7Z, RAR) will not be available.");
-            // Optionally report this, but it's a soft dependency for a feature.
         }
     }
 
@@ -94,7 +90,7 @@ public partial class MainWindow : IDisposable
         _cts.Cancel();
     }
 
-    protected override void OnClosing(CancelEventArgs e) // More standard way to handle closing
+    protected override void OnClosing(CancelEventArgs e)
     {
         _cts.Cancel();
         base.OnClosing(e);
@@ -160,9 +156,12 @@ public partial class MainWindow : IDisposable
                 _cts = new CancellationTokenSource();
             }
 
+            ResetSummaryStats();
+            _conversionStartTime = DateTime.Now;
+            _processingTimer.Start();
+
             SetControlsState(false);
             LogMessage("Starting batch conversion process...");
-            // ... (logging input parameters)
 
             try
             {
@@ -179,6 +178,9 @@ public partial class MainWindow : IDisposable
             }
             finally
             {
+                _processingTimer.Stop();
+                var finalElapsedTime = DateTime.Now - _conversionStartTime;
+                ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                 SetControlsState(true);
             }
         }
@@ -192,7 +194,7 @@ public partial class MainWindow : IDisposable
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         _cts.Cancel();
-        LogMessage("Cancellation requested. Finishing current file...");
+        LogMessage("Cancellation requested. Finishing current file/archive...");
     }
 
     private void SetControlsState(bool enabled)
@@ -207,7 +209,7 @@ public partial class MainWindow : IDisposable
         CancelButton.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         if (enabled)
         {
-            ProgressBar.IsIndeterminate = false; // Reset indeterminate state
+            ProgressBar.IsIndeterminate = false;
         }
     }
 
@@ -217,202 +219,299 @@ public partial class MainWindow : IDisposable
         return dialog.ShowDialog() == true ? dialog.FolderName : null;
     }
 
+    private void ResetSummaryStats()
+    {
+        _uiTotalFiles = 0;
+        _uiSuccessCount = 0;
+        _uiFailedCount = 0;
+        UpdateSummaryStatsUi(); // Initial update
+        Application.Current.Dispatcher.Invoke(() => {
+            ProgressBar.Value = 0;
+            ProgressBar.Maximum = 1; // Default to 1 to avoid division by zero or invisible bar
+        });
+        ProcessingTimeValue.Text = "00:00:00";
+    }
+
+    private void UpdateSummaryStatsUi(int? newTotalFiles = null, int? newProgressMax = null)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (newTotalFiles.HasValue)
+            {
+                _uiTotalFiles = newTotalFiles.Value;
+            }
+
+            TotalFilesValue.Text = _uiTotalFiles.ToString(CultureInfo.InvariantCulture);
+            SuccessValue.Text = _uiSuccessCount.ToString(CultureInfo.InvariantCulture);
+            FailedValue.Text = _uiFailedCount.ToString(CultureInfo.InvariantCulture);
+            if (newProgressMax.HasValue)
+            {
+                ProgressBar.Maximum = newProgressMax.Value > 0 ? newProgressMax.Value : 1;
+            }
+        });
+    }
+
+
+    private void ProcessingTimer_Tick(object? sender, EventArgs e)
+    {
+        var elapsedTime = DateTime.Now - _conversionStartTime;
+        ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+    }
+
     private async Task PerformBatchConversionAsync(string extractXisoPath, string sevenZipPath, string inputFolder, string outputFolder, bool deleteOriginals)
     {
-        var processableIsoItems = new List<ProcessableItem>();
-        var tempFoldersToClean = new List<string>();
-        // Tracks results for ISOs from each archive, to decide if original archive can be deleted.
-        // Key: Original Archive Path, Value: List of FileProcessingStatus for ISOs from that archive.
-        var archiveFileResults = new Dictionary<string, List<FileProcessingStatus>>();
-        var archivesFailedToExtract = 0;
+        var tempFoldersToCleanUpAtEnd = new List<string>();
+        var archivesFailedToExtractOrProcess = 0;
         var sevenZipAvailable = File.Exists(sevenZipPath);
+
+        var overallIsosSuccessfullyConverted = 0;
+        var overallIsosSkipped = 0;
+        var overallIsosFailed = 0;
+        var actualIsosProcessedForProgress = 0;
+
+        // Reset UI stats (already done in StartButton_Click, but good to ensure)
+        _uiSuccessCount = 0;
+        _uiFailedCount = 0;
+        ProgressBar.Value = 0;
 
         if (!sevenZipAvailable)
         {
             LogMessage("WARNING: 7z.exe not found. Archive processing will be skipped.");
         }
 
-        LogMessage("Scanning input folder and pre-processing archives...");
+        LogMessage("Scanning input folder for items to process...");
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = true);
 
+        List<string> initialEntriesToProcess;
         try
         {
-            var initialFiles = Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
+            initialEntriesToProcess = Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
                 .Where(f =>
                 {
                     var ext = Path.GetExtension(f).ToLowerInvariant();
                     return ext == ".iso" || (sevenZipAvailable && ext is ".zip" or ".7z" or ".rar");
                 }).ToList();
-
-            LogMessage($"Found {initialFiles.Count} potential ISO files or archives to process.");
-
-            foreach (var filePath in initialFiles)
-            {
-                _cts.Token.ThrowIfCancellationRequested();
-
-                var fileExtension = Path.GetExtension(filePath).ToLowerInvariant();
-
-                if (fileExtension == ".iso")
-                {
-                    processableIsoItems.Add(new ProcessableItem(filePath));
-                }
-                else // Is an archive (.zip, .7z, .rar) and 7z.exe is available
-                {
-                    var archiveFileName = Path.GetFileName(filePath);
-                    LogMessage($"Processing archive: {archiveFileName}");
-                    archiveFileResults[filePath] = new List<FileProcessingStatus>(); // Initialize for this archive
-
-                    var tempExtractionDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Extract", Guid.NewGuid().ToString());
-                    Directory.CreateDirectory(tempExtractionDir);
-                    tempFoldersToClean.Add(tempExtractionDir);
-
-                    var extractionSuccess = await ExtractArchiveAsync(sevenZipPath, filePath, tempExtractionDir);
-                    if (extractionSuccess)
-                    {
-                        var extractedIsos = Directory.GetFiles(tempExtractionDir, "*.iso", SearchOption.AllDirectories);
-                        if (extractedIsos.Length > 0)
-                        {
-                            LogMessage($"Found {extractedIsos.Length} ISO(s) in {archiveFileName}. Adding to queue.");
-                            foreach (var extractedIsoPath in extractedIsos)
-                            {
-                                processableIsoItems.Add(new ProcessableItem(extractedIsoPath, filePath));
-                            }
-                        }
-                        else
-                        {
-                            LogMessage($"No ISO files found in archive: {archiveFileName}.");
-                            // Mark archive as "processed" (empty of ISOs) for deletion logic
-                            archiveFileResults[filePath].Add(FileProcessingStatus.Skipped);
-                        }
-                    }
-                    else
-                    {
-                        LogMessage($"Failed to extract archive: {archiveFileName}. It will be skipped.");
-                        archivesFailedToExtract++;
-                        archiveFileResults[filePath].Add(FileProcessingStatus.Failed); // Mark archive as failed extraction
-                    }
-                }
-            }
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        } // Rethrow to be caught by StartButton_Click
         catch (Exception ex)
         {
-            LogMessage($"Error during pre-scan/extraction phase: {ex.Message}");
-            _ = ReportBugAsync("Error in pre-scan/extraction phase", ex);
-        }
-        finally
-        {
+            LogMessage($"Error scanning input folder: {ex.Message}");
+            _ = ReportBugAsync("Error scanning input folder", ex);
             Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
-        }
-
-        if (_cts.Token.IsCancellationRequested)
-        {
-            CleanupTempFolders(tempFoldersToClean);
-            throw new OperationCanceledException();
-        }
-
-        if (processableIsoItems.Count == 0)
-        {
-            LogMessage("No ISO files to convert (either standalone or found in archives).");
-            if (deleteOriginals) HandleArchiveDeletion(archiveFileResults, processableIsoItems, deleteOriginals); // Delete empty successfully extracted archives
-            CleanupTempFolders(tempFoldersToClean);
-            ShowMessageBox("No ISO files found to process.", "Process Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
-        LogMessage($"Total ISO files to process: {processableIsoItems.Count}");
-        ProgressBar.Maximum = processableIsoItems.Count;
-        ProgressBar.Value = 0;
+        if (initialEntriesToProcess.Count == 0)
+        {
+            LogMessage("No ISO files or supported archives found in the input folder.");
+            ShowMessageBox("No ISO files or supported archives found.", "Process Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
+            return;
+        }
 
-        int successCount = 0, skippedCount = 0, failureCount = 0;
+        LogMessage($"Found {initialEntriesToProcess.Count} top-level items (ISOs or archives).");
+        var currentExpectedTotalIsos = initialEntriesToProcess.Count; // Initial estimate
+        UpdateSummaryStatsUi(currentExpectedTotalIsos, currentExpectedTotalIsos);
+        Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
+        LogMessage($"Starting conversion... Total items to process initially: {currentExpectedTotalIsos}. This may increase if archives contain multiple ISOs.");
 
-        for (var i = 0; i < processableIsoItems.Count; i++)
+
+        // --- Main Processing Loop ---
+        foreach (var currentEntryPath in initialEntriesToProcess)
         {
             _cts.Token.ThrowIfCancellationRequested();
 
-            var currentItem = processableIsoItems[i];
-            var isoFileName = Path.GetFileName(currentItem.FilePath);
-            var logPrefix = currentItem.IsFromArchive
-                ? $"[{Path.GetFileName(currentItem.OriginalArchivePath!)} -> {isoFileName}]"
-                : $"[{isoFileName}]";
+            var entryFileName = Path.GetFileName(currentEntryPath);
+            var entryExtension = Path.GetExtension(currentEntryPath).ToLowerInvariant();
 
-            LogMessage($"[{i + 1}/{processableIsoItems.Count}] {logPrefix} Processing...");
-
-            // If ISO is from archive, `deleteOriginals` for ConvertFileAsync should be false.
-            // Original archive deletion is handled separately.
-            var deleteThisIsoFile = deleteOriginals && !currentItem.IsFromArchive;
-            var status = await ConvertFileAsync(extractXisoPath, currentItem.FilePath, outputFolder, deleteThisIsoFile);
-
-            switch (status)
+            if (entryExtension == ".iso")
             {
-                case FileProcessingStatus.Converted: successCount++; break;
-                case FileProcessingStatus.Skipped: skippedCount++; break;
-                case FileProcessingStatus.Failed: failureCount++; break;
-            }
+                LogMessage($"Processing standalone ISO: {entryFileName}...");
 
-            if (currentItem.IsFromArchive)
+                var status = await ConvertFileAsync(extractXisoPath, currentEntryPath, outputFolder, deleteOriginals);
+                actualIsosProcessedForProgress++;
+                switch (status)
+                {
+                    case FileProcessingStatus.Converted:
+                        overallIsosSuccessfullyConverted++;
+                        _uiSuccessCount++;
+                        break;
+                    case FileProcessingStatus.Skipped:
+                        overallIsosSkipped++;
+                        _uiSuccessCount++;
+                        break;
+                    case FileProcessingStatus.Failed:
+                        overallIsosFailed++;
+                        _uiFailedCount++;
+                        break;
+                }
+
+                UpdateSummaryStatsUi(); // Only update counts, not total/max here
+                ProgressBar.Value = actualIsosProcessedForProgress;
+            }
+            else if (sevenZipAvailable && entryExtension is ".zip" or ".7z" or ".rar")
             {
-                archiveFileResults[currentItem.OriginalArchivePath!].Add(status);
-            }
+                LogMessage($"Processing archive: {entryFileName}...");
+                var statusesOfIsosInThisArchive = new List<FileProcessingStatus>();
+                string? currentArchiveTempExtractionDir = null;
+                var archiveExtractedSuccessfully = false;
 
-            ProgressBar.Value = i + 1;
+                try
+                {
+                    currentArchiveTempExtractionDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Extract", Guid.NewGuid().ToString());
+                    Directory.CreateDirectory(currentArchiveTempExtractionDir);
+                    tempFoldersToCleanUpAtEnd.Add(currentArchiveTempExtractionDir);
+
+                    archiveExtractedSuccessfully = await ExtractArchiveAsync(sevenZipPath, currentEntryPath, currentArchiveTempExtractionDir);
+                    if (archiveExtractedSuccessfully)
+                    {
+                        var extractedIsoFiles = Directory.GetFiles(currentArchiveTempExtractionDir, "*.iso", SearchOption.AllDirectories);
+
+                        // Dynamically update total expected ISOs and progress bar maximum
+                        if (extractedIsoFiles.Length > 0)
+                        {
+                            // The archive itself (1 item) is being replaced by N ISOs.
+                            // So, the net change to total items is (N - 1).
+                            var newIsosFound = extractedIsoFiles.Length;
+                            currentExpectedTotalIsos += (newIsosFound - 1); // Adjust total
+                            UpdateSummaryStatsUi(currentExpectedTotalIsos, currentExpectedTotalIsos);
+                            LogMessage($"Found {newIsosFound} ISO(s) in {entryFileName}. Total expected ISOs now: {currentExpectedTotalIsos}. Processing them now...");
+                        }
+                        else if (extractedIsoFiles.Length == 0) // No ISOs in archive
+                        {
+                             // The archive was counted as 1 item, and it yields 0 ISOs.
+                             // So, effectively, 1 item is "processed" without yielding ISOs.
+                             // We should decrement the expected total if it was counted as a potential ISO source.
+                             // And increment actualIsosProcessedForProgress as the archive itself is "done".
+                             LogMessage($"No ISO files found in archive: {entryFileName}.");
+                             actualIsosProcessedForProgress++; // Count the archive itself as processed
+                             ProgressBar.Value = actualIsosProcessedForProgress;
+                             // No change to _uiSuccessCount or _uiFailedCount for an empty archive
+                        }
+
+
+                        foreach (var extractedIsoPath in extractedIsoFiles)
+                        {
+                            _cts.Token.ThrowIfCancellationRequested();
+                            var extractedIsoName = Path.GetFileName(extractedIsoPath);
+                            LogMessage($"  Converting ISO from archive: {extractedIsoName}...");
+
+                            var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false);
+                            statusesOfIsosInThisArchive.Add(status);
+                            actualIsosProcessedForProgress++;
+
+                            switch (status)
+                            {
+                                case FileProcessingStatus.Converted:
+                                    overallIsosSuccessfullyConverted++;
+                                    _uiSuccessCount++;
+                                    break;
+                                case FileProcessingStatus.Skipped:
+                                    overallIsosSkipped++;
+                                    _uiSuccessCount++; break;
+                                case FileProcessingStatus.Failed: overallIsosFailed++; _uiFailedCount++; break;
+                            }
+
+                            UpdateSummaryStatsUi(); // Update counts
+                            ProgressBar.Value = actualIsosProcessedForProgress;
+                        }
+
+                        if (extractedIsoFiles.Length == 0) // If archive was empty, mark it as skipped for deletion logic
+                        {
+                            statusesOfIsosInThisArchive.Add(FileProcessingStatus.Skipped);
+                        }
+                    }
+                    else // Archive extraction failed
+                    {
+                        LogMessage($"Failed to extract archive: {entryFileName}. It will be skipped.");
+                        archivesFailedToExtractOrProcess++;
+                        statusesOfIsosInThisArchive.Add(FileProcessingStatus.Failed);
+                        actualIsosProcessedForProgress++; // Count the archive itself as "processed" (failed)
+                        _uiFailedCount++; // Count the archive itself as a failed item in UI
+                        UpdateSummaryStatsUi();
+                        ProgressBar.Value = actualIsosProcessedForProgress;
+                    }
+
+                    if (deleteOriginals && archiveExtractedSuccessfully)
+                    {
+                        var allIsosFromArchiveOk = statusesOfIsosInThisArchive.Count > 0 &&
+                                                   statusesOfIsosInThisArchive.All(s => s is FileProcessingStatus.Converted or FileProcessingStatus.Skipped);
+                        if (allIsosFromArchiveOk)
+                        {
+                            LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
+                            TryDeleteFile(currentEntryPath);
+                        }
+                        else if (statusesOfIsosInThisArchive.Count > 0) // Some ISOs processed, but not all successfully
+                        {
+                            LogMessage($"Not deleting archive {entryFileName} due to processing issues with its contents.");
+                        }
+                        // If statusesOfIsosInThisArchive is empty (e.g. extraction failed before finding ISOs), don't delete.
+                    }
+                    else if (deleteOriginals && !archiveExtractedSuccessfully) // Extraction failed
+                    {
+                         LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
+                    }
+
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    LogMessage($"Error processing archive {entryFileName}: {ex.Message}");
+                    _ = ReportBugAsync($"Error during processing of archive {entryFileName}", ex);
+                    archivesFailedToExtractOrProcess++;
+                    // If an error occurs mid-archive processing, ensure progress reflects the attempt
+                    if (!archiveExtractedSuccessfully) {
+                        actualIsosProcessedForProgress++; // Count the archive itself
+                        _uiFailedCount++;
+                        UpdateSummaryStatsUi();
+                        ProgressBar.Value = actualIsosProcessedForProgress;
+                    }
+                }
+                finally
+                {
+                    if (currentArchiveTempExtractionDir != null && Directory.Exists(currentArchiveTempExtractionDir))
+                    {
+                        try
+                        {
+                            Directory.Delete(currentArchiveTempExtractionDir, true);
+                            tempFoldersToCleanUpAtEnd.Remove(currentArchiveTempExtractionDir);
+                            LogMessage($"Cleaned up temporary folder for {entryFileName}.");
+                        }
+                        catch (Exception ex)
+                        {
+                            LogMessage($"Error cleaning temp folder {currentArchiveTempExtractionDir} for {entryFileName}: {ex.Message}. Will retry at end.");
+                        }
+                    }
+                }
+            }
         }
+
+        // Ensure progress bar reaches maximum if all items were processed, even if total was adjusted.
+        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= ProgressBar.Maximum)
+        {
+            ProgressBar.Value = ProgressBar.Maximum;
+        }
+
 
         LogMessage("\nBatch conversion summary:");
-        LogMessage($"Successfully converted: {successCount} ISO files");
-        LogMessage($"Skipped (already optimized): {skippedCount} ISO files");
-        LogMessage($"Failed to process: {failureCount} ISO files");
-        if (archivesFailedToExtract > 0) LogMessage($"Archives failed to extract: {archivesFailedToExtract}");
+        LogMessage($"Successfully converted: {overallIsosSuccessfullyConverted} ISO files");
+        LogMessage($"Skipped (already optimized): {overallIsosSkipped} ISO files");
+        LogMessage($"Failed to process: {overallIsosFailed} ISO files");
+        if (archivesFailedToExtractOrProcess > 0) LogMessage($"Archives failed to extract or had processing errors: {archivesFailedToExtractOrProcess}");
 
         ShowMessageBox($"Batch conversion completed.\n\n" +
-                       $"Successfully converted: {successCount} ISO files\n" +
-                       $"Skipped (already optimized): {skippedCount} ISO files\n" +
-                       $"Failed to process: {failureCount} ISO files\n" +
-                       (archivesFailedToExtract > 0 ? $"Archives failed to extract: {archivesFailedToExtract}\n" : ""),
+                       $"Successfully converted: {overallIsosSuccessfullyConverted} ISO files\n" +
+                       $"Skipped (already optimized): {overallIsosSkipped} ISO files\n" +
+                       $"Failed to process: {overallIsosFailed} ISO files\n" +
+                       (archivesFailedToExtractOrProcess > 0 ? $"Archives failed to extract/process: {archivesFailedToExtractOrProcess}\n" : ""),
             "Conversion Complete", MessageBoxButton.OK,
-            (failureCount > 0 || archivesFailedToExtract > 0) ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            (overallIsosFailed > 0 || archivesFailedToExtractOrProcess > 0) ? MessageBoxImage.Warning : MessageBoxImage.Information);
 
-        if (deleteOriginals)
-        {
-            HandleArchiveDeletion(archiveFileResults, processableIsoItems, deleteOriginals);
-        }
-
-        CleanupTempFolders(tempFoldersToClean);
-    }
-
-    private void HandleArchiveDeletion(Dictionary<string, List<FileProcessingStatus>> archiveFileResults, List<ProcessableItem> allProcessedIsos, bool deleteFlag)
-    {
-        if (!deleteFlag) return;
-
-        LogMessage("Handling deletion of original archive files...");
-        foreach (var archivePath in archiveFileResults.Keys)
-        {
-            var resultsForThisArchive = archiveFileResults[archivePath];
-
-            // Condition for deleting an archive:
-            // 1. It must have been attempted (i.e., has entries in resultsForThisArchive).
-            // 2. All entries must be either Converted or Skipped (i.e., no Failed entries for its ISOs or extraction itself).
-            var canDeleteArchive = resultsForThisArchive.Count != 0 &&
-                                   resultsForThisArchive.All(static s => s is FileProcessingStatus.Converted or FileProcessingStatus.Skipped);
-
-            if (canDeleteArchive)
-            {
-                LogMessage($"All contents of archive {Path.GetFileName(archivePath)} processed successfully. Deleting original archive.");
-                TryDeleteFile(archivePath);
-            }
-            else
-            {
-                LogMessage($"Not deleting archive {Path.GetFileName(archivePath)} due to processing failures of its contents or extraction failure.");
-            }
-        }
+        CleanupTempFolders(tempFoldersToCleanUpAtEnd);
     }
 
     private async Task<FileProcessingStatus> ConvertFileAsync(string extractXisoPath, string inputFile, string outputFolder, bool deleteOriginalIsoFile)
     {
-        var fileName = Path.GetFileName(inputFile); // This is the ISO name
+        var fileName = Path.GetFileName(inputFile);
         var logPrefix = $"File '{fileName}':";
         try
         {
@@ -425,24 +524,23 @@ public partial class MainWindow : IDisposable
                 return FileProcessingStatus.Failed;
             }
 
-            var destinationPath = Path.Combine(outputFolder, fileName); // Final destination for the ISO
-            Directory.CreateDirectory(outputFolder); // Ensure output directory exists
+            var destinationPath = Path.Combine(outputFolder, fileName);
+            Directory.CreateDirectory(outputFolder);
 
             if (toolResult == ConversionToolResultStatus.Skipped)
             {
                 LogMessage($"{logPrefix} Already optimized (skipped by extract-xiso). Copying to output.");
                 await Task.Run(() => File.Copy(inputFile, destinationPath, true), _cts.Token);
 
-                if (!deleteOriginalIsoFile) return FileProcessingStatus.Skipped; // This applies only to standalone ISOs
-
-                LogMessage($"{logPrefix} Deleting original (skipped) file: {fileName}");
-                await Task.Run(() => File.Delete(inputFile), _cts.Token);
+                if (deleteOriginalIsoFile)
+                {
+                    LogMessage($"{logPrefix} Deleting original (skipped) file: {fileName}");
+                    await Task.Run(() => File.Delete(inputFile), _cts.Token);
+                }
                 return FileProcessingStatus.Skipped;
             }
 
-            // If ConversionToolResultStatus.Success (actual conversion took place by extract-xiso -r)
-            // The original `inputFile` has been replaced by the converted version, and `inputFile.old` is the backup.
-            var convertedFilePath = inputFile; // The new file is at the original inputFile path
+            var convertedFilePath = inputFile;
             var originalBackupPath = inputFile + ".old";
 
             LogMessage($"{logPrefix} Moving converted file to output folder: {destinationPath}");
@@ -450,22 +548,20 @@ public partial class MainWindow : IDisposable
 
             if (File.Exists(originalBackupPath))
             {
-                if (deleteOriginalIsoFile) // This applies only to standalone ISOs
+                if (deleteOriginalIsoFile)
                 {
                     LogMessage($"{logPrefix} Deleting original backup file: {Path.GetFileName(originalBackupPath)}");
                     await Task.Run(() => File.Delete(originalBackupPath), _cts.Token);
                 }
                 else
                 {
-                    LogMessage($"{logPrefix} Restoring original file from backup: {fileName}");
+                    LogMessage($"{logPrefix} Restoring original file from backup: {fileName} (as original was not to be deleted or was temporary)");
                     await Task.Run(() => File.Move(originalBackupPath, inputFile, true), _cts.Token);
                 }
             }
-            else
+            else if (deleteOriginalIsoFile)
             {
-                LogMessage($"{logPrefix} No .old backup file found after conversion. This is unexpected if extract-xiso -r ran successfully and modified the file.");
-                // If deleteOriginalIsoFile was true, the original (which was converted in-place) is now moved.
-                // If deleteOriginalIsoFile was false, the original (converted in-place) is moved, nothing to restore.
+                LogMessage($"{logPrefix} Converted file moved. Original (in-place converted) is now at destination. No separate .old file to delete.");
             }
 
             return FileProcessingStatus.Converted;
@@ -482,6 +578,7 @@ public partial class MainWindow : IDisposable
             return FileProcessingStatus.Failed;
         }
     }
+
 
     private async Task<ConversionToolResultStatus> RunConversionToolAsync(string extractXisoPath, string inputFile)
     {
@@ -529,27 +626,19 @@ public partial class MainWindow : IDisposable
             var cancellationRegistration = _cts.Token.Register(() =>
             {
                 if (process.HasExited) return;
-
-                try
-                {
-                    process.Kill(true);
-                }
-                catch
-                {
-                    /* ignore */
-                }
+                try { process.Kill(true); } catch { /* ignore */ }
             });
 
             await process.WaitForExitAsync(_cts.Token);
             await cancellationRegistration.DisposeAsync();
 
-            if (_cts.Token.IsCancellationRequested && process.ExitCode != 0 && process.ExitCode != 1) // 1 can be warning/skipped
+            if (_cts.Token.IsCancellationRequested && process.ExitCode != 0 && process.ExitCode != 1)
             {
                 LogMessage($"extract-xiso for {isoFileName} was canceled, exit code {process.ExitCode}.");
                 throw new OperationCanceledException(_cts.Token);
             }
 
-            if (process.ExitCode != 0 && process.ExitCode != 1) // extract-xiso might return 1 for skipped/already optimized
+            if (process.ExitCode != 0 && process.ExitCode != 1)
             {
                 return ConversionToolResultStatus.Failed;
             }
@@ -560,28 +649,12 @@ public partial class MainWindow : IDisposable
                 currentOutput = new List<string>(_processOutputLines);
             }
 
-            // extract-xiso v2.7.1 output for skipped: "H:\path\to\file.iso is already optimized, skipping..."
-            // extract-xiso might also just exit with 0 or 1 if it skips without explicit message depending on version/mode.
-            // The -r command should ideally always try to rebuild. If it doesn't change the file, it's effectively "skipped" or "no change".
-            // For simplicity, if exit code is 0 or 1, and output contains "skipping", it's Skipped. Otherwise Success.
-            // If extract-xiso -r doesn't modify the file but exits 0, it's still a "success" in terms of tool run.
-            // The crucial part is that the `inputFile` path now points to the (potentially) modified ISO.
-
-            // Let's check for "is already optimized, skipping..." or similar.
-            // If extract-xiso -r is used, it might not always say "skipping" but just rebuild it to the same state.
-            // The old logic for checking "skipping" message is still good.
             if (currentOutput.Any(line => line.Contains("is already optimized, skipping...", StringComparison.OrdinalIgnoreCase) ||
-                                          line.Contains("already an XISO image", StringComparison.OrdinalIgnoreCase))) // Add more skip phrases if known
+                                          line.Contains("already an XISO image", StringComparison.OrdinalIgnoreCase)))
             {
                 return ConversionToolResultStatus.Skipped;
             }
 
-            // If exit code is 0 or 1, and no explicit "skipping" message, assume it processed.
-            // extract-xiso with -r might return 0 even if it did work.
-            // If it returns 1 (warning) but didn't say skipping, it might still have worked.
-            // This part is tricky without exact knowledge of all extract-xiso exit codes and outputs for -r.
-            // Safest: if exit code 0 or 1, and no "skipping" message, assume it did its job (Success).
-            // If it didn't create an .old file, our logic in ConvertFileAsync handles that.
             return ConversionToolResultStatus.Success;
         }
         catch (OperationCanceledException)
@@ -596,7 +669,7 @@ public partial class MainWindow : IDisposable
         }
     }
 
-    private async Task<bool> ExtractArchiveAsync(string sevenZipPath, string archivePath, string extractionPath)
+    private async Task<bool> ExtractArchiveAsync(string sevenZipPath, string archivePath, string extractionPath) // Removed silent param
     {
         var archiveFileName = Path.GetFileName(archivePath);
         LogMessage($"Extracting: {archiveFileName} using 7z.exe to {extractionPath}");
@@ -607,27 +680,22 @@ public partial class MainWindow : IDisposable
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = sevenZipPath,
-                Arguments = $"x \"{archivePath}\" -o\"{extractionPath}\" -y -bsp0 -bso0", // x=extract with paths, -o=output, -y=yes, -bsp0/bso0=no progress
-                RedirectStandardOutput = true, // Keep true to capture any messages
+                Arguments = $"x \"{archivePath}\" -o\"{extractionPath}\" -y -bsp0 -bso0",
+                RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
             };
 
-            // Minimal logging for 7z unless errors occur to prevent log spam
             var errorMessages = new List<string>();
-            process.OutputDataReceived += static (_, args) =>
+            process.OutputDataReceived += (_, args) =>
             {
-                if (args.Data != null)
-                {
-                    /* LogMessage($"7z: {args.Data}"); */
-                }
-            }; // Can be verbose
+                // if (args.Data != null) { /* LogMessage($"7z: {args.Data}"); */ } // Can be very verbose
+            };
             process.ErrorDataReceived += (_, args) =>
             {
                 if (string.IsNullOrEmpty(args.Data)) return;
-
                 errorMessages.Add(args.Data);
                 LogMessage($"7z error: {args.Data}");
             };
@@ -639,29 +707,19 @@ public partial class MainWindow : IDisposable
             var cancellationRegistration = _cts.Token.Register(() =>
             {
                 if (process.HasExited) return;
-
-                try
-                {
-                    process.Kill(true);
-                }
-                catch
-                {
-                    /* ignore */
-                }
+                try { process.Kill(true); } catch { /* ignore */ }
             });
 
             await process.WaitForExitAsync(_cts.Token);
             await cancellationRegistration.DisposeAsync();
 
-            // 7-Zip Exit Codes: 0 = No error, 1 = Warning, 2 = Fatal error
-            // 7 = Command line error, 8 = Not enough memory, 255 = User stopped process
             if (_cts.Token.IsCancellationRequested && process.ExitCode != 0)
             {
                 LogMessage($"Extraction of {archiveFileName} canceled, 7z exit code: {process.ExitCode}.");
                 throw new OperationCanceledException(_cts.Token);
             }
 
-            var success = process.ExitCode is 0 or 1; // Treat warnings as non-fatal for extraction completion
+            var success = process.ExitCode is 0 or 1;
             if (success)
             {
                 LogMessage($"Successfully extracted: {archiveFileName}");
@@ -688,7 +746,9 @@ public partial class MainWindow : IDisposable
 
     private void CleanupTempFolders(List<string> tempFolders)
     {
-        LogMessage("Cleaning up temporary extraction folders...");
+        if (!tempFolders.Any()) return;
+
+        LogMessage("Cleaning up remaining temporary extraction folders...");
         foreach (var folder in tempFolders)
         {
             try
@@ -696,7 +756,6 @@ public partial class MainWindow : IDisposable
                 if (Directory.Exists(folder))
                 {
                     Directory.Delete(folder, true);
-                    // LogMessage($"Cleaned up: {folder}"); // Can be verbose
                 }
             }
             catch (Exception ex)
@@ -704,7 +763,7 @@ public partial class MainWindow : IDisposable
                 LogMessage($"Error cleaning temp folder {folder}: {ex.Message}");
             }
         }
-
+        tempFolders.Clear();
         LogMessage("Temporary folder cleanup complete.");
     }
 
@@ -788,6 +847,8 @@ public partial class MainWindow : IDisposable
 
     public void Dispose()
     {
+        _processingTimer.Tick -= ProcessingTimer_Tick;
+        _processingTimer.Stop();
         _cts?.Cancel();
         _cts?.Dispose();
         _bugReportService?.Dispose();
