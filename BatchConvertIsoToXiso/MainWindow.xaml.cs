@@ -225,7 +225,8 @@ public partial class MainWindow : IDisposable
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
         UpdateSummaryStatsUi(); // Initial update
-        Application.Current.Dispatcher.Invoke(() => {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
             ProgressBar.Value = 0;
             ProgressBar.Maximum = 1; // Default to 1 to avoid division by zero or invisible bar
         });
@@ -407,8 +408,12 @@ public partial class MainWindow : IDisposable
                                     break;
                                 case FileProcessingStatus.Skipped:
                                     overallIsosSkipped++;
-                                    _uiSuccessCount++; break;
-                                case FileProcessingStatus.Failed: overallIsosFailed++; _uiFailedCount++; break;
+                                    _uiSuccessCount++;
+                                    break;
+                                case FileProcessingStatus.Failed:
+                                    overallIsosFailed++;
+                                    _uiFailedCount++;
+                                    break;
                             }
 
                             UpdateSummaryStatsUi(); // Update counts
@@ -448,18 +453,21 @@ public partial class MainWindow : IDisposable
                     }
                     else if (deleteOriginals && !archiveExtractedSuccessfully) // Extraction failed
                     {
-                         LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
+                        LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
                     }
-
                 }
-                catch (OperationCanceledException) { throw; }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     LogMessage($"Error processing archive {entryFileName}: {ex.Message}");
                     _ = ReportBugAsync($"Error during processing of archive {entryFileName}", ex);
                     archivesFailedToExtractOrProcess++;
                     // If an error occurs mid-archive processing, ensure progress reflects the attempt
-                    if (!archiveExtractedSuccessfully) {
+                    if (!archiveExtractedSuccessfully)
+                    {
                         actualIsosProcessedForProgress++; // Count the archive itself
                         _uiFailedCount++;
                         UpdateSummaryStatsUi();
@@ -532,11 +540,10 @@ public partial class MainWindow : IDisposable
                 LogMessage($"{logPrefix} Already optimized (skipped by extract-xiso). Copying to output.");
                 await Task.Run(() => File.Copy(inputFile, destinationPath, true), _cts.Token);
 
-                if (deleteOriginalIsoFile)
-                {
-                    LogMessage($"{logPrefix} Deleting original (skipped) file: {fileName}");
-                    await Task.Run(() => File.Delete(inputFile), _cts.Token);
-                }
+                if (!deleteOriginalIsoFile) return FileProcessingStatus.Skipped;
+
+                LogMessage($"{logPrefix} Deleting original (skipped) file: {fileName}");
+                await Task.Run(() => File.Delete(inputFile), _cts.Token);
                 return FileProcessingStatus.Skipped;
             }
 
@@ -590,9 +597,12 @@ public partial class MainWindow : IDisposable
         var isoFileName = Path.GetFileName(inputFile);
         LogMessage($"Running extract-xiso on: {isoFileName}");
 
+        Process? processRef;
+
         try
         {
             using var process = new Process();
+            processRef = process;
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = extractXisoPath,
@@ -625,8 +635,16 @@ public partial class MainWindow : IDisposable
 
             var cancellationRegistration = _cts.Token.Register(() =>
             {
-                if (process.HasExited) return;
-                try { process.Kill(true); } catch { /* ignore */ }
+                if (processRef?.HasExited != false) return;
+
+                try
+                {
+                    processRef.Kill(true);
+                }
+                catch
+                {
+                    /* ignore */
+                }
             });
 
             await process.WaitForExitAsync(_cts.Token);
@@ -674,9 +692,12 @@ public partial class MainWindow : IDisposable
         var archiveFileName = Path.GetFileName(archivePath);
         LogMessage($"Extracting: {archiveFileName} using 7z.exe to {extractionPath}");
 
+        Process? processRef;
+
         try
         {
             using var process = new Process();
+            processRef = process;
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = sevenZipPath,
@@ -696,6 +717,7 @@ public partial class MainWindow : IDisposable
             process.ErrorDataReceived += (_, args) =>
             {
                 if (string.IsNullOrEmpty(args.Data)) return;
+
                 errorMessages.Add(args.Data);
                 LogMessage($"7z error: {args.Data}");
             };
@@ -706,8 +728,16 @@ public partial class MainWindow : IDisposable
 
             var cancellationRegistration = _cts.Token.Register(() =>
             {
-                if (process.HasExited) return;
-                try { process.Kill(true); } catch { /* ignore */ }
+                if (processRef?.HasExited != false) return;
+
+                try
+                {
+                    processRef.Kill(true);
+                }
+                catch
+                {
+                    /* ignore */
+                }
             });
 
             await process.WaitForExitAsync(_cts.Token);
@@ -746,7 +776,7 @@ public partial class MainWindow : IDisposable
 
     private void CleanupTempFolders(List<string> tempFolders)
     {
-        if (!tempFolders.Any()) return;
+        if (tempFolders.Count == 0) return;
 
         LogMessage("Cleaning up remaining temporary extraction folders...");
         foreach (var folder in tempFolders)
@@ -763,6 +793,7 @@ public partial class MainWindow : IDisposable
                 LogMessage($"Error cleaning temp folder {folder}: {ex.Message}");
             }
         }
+
         tempFolders.Clear();
         LogMessage("Temporary folder cleanup complete.");
     }
