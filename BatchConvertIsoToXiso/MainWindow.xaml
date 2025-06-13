@@ -9,7 +9,7 @@
             <RowDefinition Height="Auto"/> <!-- 0: Input -->
             <RowDefinition Height="Auto"/> <!-- 1: Output -->
             <RowDefinition Height="Auto"/> <!-- 2: Checkbox -->
-            <RowDefinition Height="Auto"/> <!-- 3: Start Button -->
+            <RowDefinition Height="Auto"/> <!-- 3: Action Buttons -->
             <RowDefinition Height="*"/>    <!-- 4: LogViewer -->
             <RowDefinition Height="Auto"/> <!-- 5: Summary Stats -->
             <RowDefinition Height="Auto"/> <!-- 6: Progress Bar Grid -->
@@ -46,15 +46,20 @@
                   Margin="10,5,10,5"
                   HorizontalAlignment="Left"/>
         
-        <!-- Start Conversion Button -->
-        <Button x:Name="StartButton" 
-                Grid.Row="3" 
-                Content="Start Conversion" 
-                Click="StartButton_Click" 
-                Margin="10,10,10,15" 
-                Padding="15,8" 
-                HorizontalAlignment="Center" 
-                FontWeight="Bold"/>
+        <!-- Action Buttons -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="10,10,10,15">
+            <Button x:Name="StartButton" 
+                    Content="Start Conversion" 
+                    Click="StartButton_Click" 
+                    Padding="15,8" 
+                    FontWeight="Bold"/>
+            <Button x:Name="TestIsosButton"
+                    Content="Test ISOs"
+                    Click="TestIsosButton_Click"
+                    Padding="15,8"
+                    Margin="20,0,0,0"
+                    FontWeight="Bold"/>
+        </StackPanel>
         
         <!-- Log TextBox -->
         <TextBox x:Name="LogViewer"
@@ -124,3 +129,4 @@
         </Grid>
     </Grid>
 </Window>
+
