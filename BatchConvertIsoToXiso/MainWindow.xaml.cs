@@ -22,9 +22,9 @@ public partial class MainWindow : IDisposable
     // Summary Stats
     private DateTime _conversionStartTime;
     private readonly DispatcherTimer _processingTimer;
-    private int _uiTotalFiles; 
-    private int _uiSuccessCount; 
-    private int _uiFailedCount; 
+    private int _uiTotalFiles;
+    private int _uiSuccessCount;
+    private int _uiFailedCount;
 
     private enum ConversionToolResultStatus
     {
@@ -135,7 +135,7 @@ public partial class MainWindow : IDisposable
     {
         try
         {
-            Application.Current.Dispatcher.Invoke(() => LogViewer.Clear()); 
+            Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
 
             var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
@@ -161,8 +161,8 @@ public partial class MainWindow : IDisposable
 
             if (_cts.IsCancellationRequested)
             {
-                _cts.Dispose(); 
-                _cts = new CancellationTokenSource(); 
+                _cts.Dispose();
+                _cts = new CancellationTokenSource();
             }
 
             ResetSummaryStats();
@@ -204,7 +204,7 @@ public partial class MainWindow : IDisposable
     {
         try
         {
-            Application.Current.Dispatcher.Invoke(() => LogViewer.Clear()); 
+            Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
 
             var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
@@ -231,8 +231,8 @@ public partial class MainWindow : IDisposable
                 _cts = new CancellationTokenSource();
             }
 
-            ResetSummaryStats(); 
-            _conversionStartTime = DateTime.Now; 
+            ResetSummaryStats();
+            _conversionStartTime = DateTime.Now;
             _processingTimer.Start();
 
             SetControlsState(false);
@@ -281,7 +281,7 @@ public partial class MainWindow : IDisposable
         BrowseOutputButton.IsEnabled = enabled;
         DeleteFilesCheckBox.IsEnabled = enabled;
         StartButton.IsEnabled = enabled;
-        TestIsosButton.IsEnabled = enabled; 
+        TestIsosButton.IsEnabled = enabled;
         ProgressBar.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         CancelButton.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         if (enabled)
@@ -301,11 +301,11 @@ public partial class MainWindow : IDisposable
         _uiTotalFiles = 0;
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
-        UpdateSummaryStatsUi(); 
+        UpdateSummaryStatsUi();
         Application.Current.Dispatcher.Invoke(() =>
         {
             ProgressBar.Value = 0;
-            ProgressBar.Maximum = 1; 
+            ProgressBar.Maximum = 1;
         });
         ProcessingTimeValue.Text = "00:00:00";
     }
@@ -346,7 +346,7 @@ public partial class MainWindow : IDisposable
         var overallIsosSkipped = 0;
         var overallIsosFailed = 0;
         var actualIsosProcessedForProgress = 0;
-        var failedConversionFilePaths = new List<string>(); 
+        var failedConversionFilePaths = new List<string>();
 
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
@@ -363,13 +363,13 @@ public partial class MainWindow : IDisposable
         List<string> initialEntriesToProcess;
         try
         {
-            initialEntriesToProcess = await Task.Run(() => 
-                Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
-                    .Where(f =>
-                    {
-                        var ext = Path.GetExtension(f).ToLowerInvariant();
-                        return ext == ".iso" || (sevenZipAvailable && ext is ".zip" or ".7z" or ".rar");
-                    }).ToList(), 
+            initialEntriesToProcess = await Task.Run(() =>
+                    Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
+                        .Where(f =>
+                        {
+                            var ext = Path.GetExtension(f).ToLowerInvariant();
+                            return ext == ".iso" || (sevenZipAvailable && ext is ".zip" or ".7z" or ".rar");
+                        }).ToList(),
                 _cts.Token);
         }
         catch (Exception ex)
@@ -389,7 +389,7 @@ public partial class MainWindow : IDisposable
         }
 
         LogMessage($"Found {initialEntriesToProcess.Count} top-level items (ISOs or archives) for conversion.");
-        var currentExpectedTotalIsos = initialEntriesToProcess.Count; 
+        var currentExpectedTotalIsos = initialEntriesToProcess.Count;
         UpdateSummaryStatsUi(currentExpectedTotalIsos, currentExpectedTotalIsos);
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
         LogMessage($"Starting conversion... Total items to process initially: {currentExpectedTotalIsos}. This may increase if archives contain multiple ISOs.");
@@ -425,7 +425,7 @@ public partial class MainWindow : IDisposable
                         break;
                 }
 
-                UpdateSummaryStatsUi(); 
+                UpdateSummaryStatsUi();
                 ProgressBar.Value = actualIsosProcessedForProgress;
             }
             else if (sevenZipAvailable && entryExtension is ".zip" or ".7z" or ".rar")
@@ -449,14 +449,14 @@ public partial class MainWindow : IDisposable
                         if (extractedIsoFiles.Length > 0)
                         {
                             var newIsosFound = extractedIsoFiles.Length;
-                            currentExpectedTotalIsos += (newIsosFound - 1); 
+                            currentExpectedTotalIsos += (newIsosFound - 1);
                             UpdateSummaryStatsUi(currentExpectedTotalIsos, currentExpectedTotalIsos);
                             LogMessage($"Found {newIsosFound} ISO(s) in {entryFileName}. Total expected ISOs now: {currentExpectedTotalIsos}. Processing them now...");
                         }
-                        else if (extractedIsoFiles.Length == 0) 
+                        else if (extractedIsoFiles.Length == 0)
                         {
                             LogMessage($"No ISO files found in archive: {entryFileName}.");
-                            actualIsosProcessedForProgress++; 
+                            actualIsosProcessedForProgress++;
                             ProgressBar.Value = actualIsosProcessedForProgress;
                         }
 
@@ -467,7 +467,7 @@ public partial class MainWindow : IDisposable
                             var extractedIsoName = Path.GetFileName(extractedIsoPath);
                             LogMessage($"  Converting ISO from archive: {extractedIsoName}...");
 
-                            var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false); 
+                            var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false);
                             statusesOfIsosInThisArchive.Add(status);
                             actualIsosProcessedForProgress++;
 
@@ -484,27 +484,27 @@ public partial class MainWindow : IDisposable
                                 case FileProcessingStatus.Failed:
                                     overallIsosFailed++;
                                     _uiFailedCount++;
-                                    failedConversionFilePaths.Add(extractedIsoPath); 
+                                    failedConversionFilePaths.Add(extractedIsoPath);
                                     break;
                             }
 
-                            UpdateSummaryStatsUi(); 
+                            UpdateSummaryStatsUi();
                             ProgressBar.Value = actualIsosProcessedForProgress;
                         }
 
-                        if (extractedIsoFiles.Length == 0) 
+                        if (extractedIsoFiles.Length == 0)
                         {
                             statusesOfIsosInThisArchive.Add(FileProcessingStatus.Skipped);
                         }
                     }
-                    else 
+                    else
                     {
                         LogMessage($"Failed to extract archive: {entryFileName}. It will be skipped.");
                         archivesFailedToExtractOrProcess++;
                         statusesOfIsosInThisArchive.Add(FileProcessingStatus.Failed);
-                        failedConversionFilePaths.Add(currentEntryPath); 
-                        actualIsosProcessedForProgress++; 
-                        _uiFailedCount++; 
+                        failedConversionFilePaths.Add(currentEntryPath);
+                        actualIsosProcessedForProgress++;
+                        _uiFailedCount++;
                         UpdateSummaryStatsUi();
                         ProgressBar.Value = actualIsosProcessedForProgress;
                     }
@@ -518,12 +518,12 @@ public partial class MainWindow : IDisposable
                             LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
                             await TryDeleteFileAsync(currentEntryPath);
                         }
-                        else if (statusesOfIsosInThisArchive.Count > 0) 
+                        else if (statusesOfIsosInThisArchive.Count > 0)
                         {
                             LogMessage($"Not deleting archive {entryFileName} due to processing issues with its contents.");
                         }
                     }
-                    else if (deleteOriginals && !archiveExtractedSuccessfully) 
+                    else if (deleteOriginals && !archiveExtractedSuccessfully)
                     {
                         LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
                     }
@@ -537,10 +537,10 @@ public partial class MainWindow : IDisposable
                     LogMessage($"Error processing archive {entryFileName}: {ex.Message}");
                     _ = ReportBugAsync($"Error during processing of archive {entryFileName}", ex);
                     archivesFailedToExtractOrProcess++;
-                    failedConversionFilePaths.Add(currentEntryPath); 
+                    failedConversionFilePaths.Add(currentEntryPath);
                     if (!archiveExtractedSuccessfully)
                     {
-                        actualIsosProcessedForProgress++; 
+                        actualIsosProcessedForProgress++;
                         _uiFailedCount++;
                         UpdateSummaryStatsUi();
                         ProgressBar.Value = actualIsosProcessedForProgress;
@@ -604,8 +604,8 @@ public partial class MainWindow : IDisposable
         var actualIsosProcessedForProgress = 0;
         var failedIsoOriginalPaths = new List<string>();
 
-        _uiSuccessCount = 0; 
-        _uiFailedCount = 0;  
+        _uiSuccessCount = 0;
+        _uiFailedCount = 0;
         ProgressBar.Value = 0;
 
         LogMessage("Scanning input folder for .iso files to test...");
@@ -671,8 +671,8 @@ public partial class MainWindow : IDisposable
 
                         if (await Task.Run(() => File.Exists(isoFilePath), _cts.Token)) // Check if source still exists
                         {
-                             await Task.Run(() => File.Move(isoFilePath, destinationFailedIsoPath, true), _cts.Token); // Overwrite if already exists in Failed
-                             LogMessage($"  Moved failed ISO '{isoFileName}' to '{failedSubfolderPath}'.");
+                            await Task.Run(() => File.Move(isoFilePath, destinationFailedIsoPath, true), _cts.Token); // Overwrite if already exists in Failed
+                            LogMessage($"  Moved failed ISO '{isoFileName}' to '{failedSubfolderPath}'.");
                         }
                         else
                         {
@@ -691,10 +691,11 @@ public partial class MainWindow : IDisposable
                     }
                 }
             }
+
             UpdateSummaryStatsUi();
             ProgressBar.Value = actualIsosProcessedForProgress;
         }
-        
+
         if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= ProgressBar.Maximum)
         {
             ProgressBar.Value = ProgressBar.Maximum;
@@ -703,7 +704,7 @@ public partial class MainWindow : IDisposable
         LogMessage("\nBatch ISO test summary:");
         LogMessage($"ISOs passed test (extractable): {overallIsosTestPassed}");
         LogMessage($"ISOs failed test (not extractable/moved): {overallIsosTestFailed}");
-        
+
         if (failedIsoOriginalPaths.Count > 0)
         {
             LogMessage("\nList of ISOs that failed the test (original names):");
@@ -711,9 +712,10 @@ public partial class MainWindow : IDisposable
             {
                 LogMessage($"- {Path.GetFileName(originalPath)}");
             }
+
             LogMessage("Note: Failed ISOs were attempted to be moved to a 'Failed' subfolder in their original directory.");
         }
-        
+
         if (overallIsosTestFailed > 0)
         {
             LogMessage("Failed ISOs may be corrupted or not valid Xbox ISO images. Check individual logs for details from extract-xiso.");
@@ -745,14 +747,17 @@ public partial class MainWindow : IDisposable
             try
             {
                 var fileInfo = new FileInfo(isoFilePath);
-                long length = await Task.Run(() => fileInfo.Length, _cts.Token);
+                var length = await Task.Run(() => fileInfo.Length, _cts.Token);
                 if (length == 0)
                 {
                     LogMessage($"  ERROR: ISO file is empty: {isoFileName}");
                     return IsoTestResultStatus.Failed;
                 }
             }
-            catch (OperationCanceledException) { throw; }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 LogMessage($"  ERROR: Cannot open or check ISO file: {ex.Message}");
@@ -773,10 +778,10 @@ public partial class MainWindow : IDisposable
                 return IsoTestResultStatus.Failed;
             }
         }
-        catch (OperationCanceledException) 
+        catch (OperationCanceledException)
         {
             LogMessage($"  Test for '{isoFileName}' was canceled.");
-            throw; 
+            throw;
         }
         catch (Exception ex)
         {
@@ -799,7 +804,7 @@ public partial class MainWindow : IDisposable
             }
         }
     }
-    
+
     private async Task DiagnoseExtractXisoAsync(string extractXisoPath)
     {
         var diagOutputCollector = new StringBuilder();
@@ -809,17 +814,17 @@ public partial class MainWindow : IDisposable
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = extractXisoPath,
-                Arguments = "-h", 
+                Arguments = "-h",
                 RedirectStandardOutput = true,
-                RedirectStandardError = true, 
+                RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WorkingDirectory = Path.GetDirectoryName(extractXisoPath) ?? AppDomain.CurrentDomain.BaseDirectory
             };
 
             process.Start();
-            string output = await process.StandardOutput.ReadToEndAsync(_cts.Token);
-            string errorOutput = await process.StandardError.ReadToEndAsync(_cts.Token);
+            var output = await process.StandardOutput.ReadToEndAsync(_cts.Token);
+            var errorOutput = await process.StandardError.ReadToEndAsync(_cts.Token);
             await process.WaitForExitAsync(_cts.Token);
 
             diagOutputCollector.AppendLine("Extract-xiso Diagnostic Information (STDOUT):");
@@ -830,6 +835,7 @@ public partial class MainWindow : IDisposable
                 diagOutputCollector.AppendLine("Extract-xiso Diagnostic Information (STDERR):");
                 diagOutputCollector.AppendLine(errorOutput);
             }
+
             LogMessage(diagOutputCollector.ToString());
         }
         catch (OperationCanceledException)
@@ -839,146 +845,164 @@ public partial class MainWindow : IDisposable
         catch (Exception ex)
         {
             LogMessage($"Error running extract-xiso diagnostic: {ex.Message}\n{diagOutputCollector}");
-            _ = ReportBugAsync($"Error running extract-xiso diagnostic for -h command.", ex);
+            _ = ReportBugAsync("Error running extract-xiso diagnostic for -h command.", ex);
         }
     }
-    
-private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, string inputFile, string tempExtractionDir)
-{
-    var isoFileName = Path.GetFileName(inputFile);
-    LogMessage($"    Detailed Extraction Attempt for: {isoFileName}");
 
-    var processOutputCollector = new StringBuilder();
-    Process? processRef = null;
-    CancellationTokenRegistration cancellationRegistration = default;
-
-    try
+    private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, string inputFile, string tempExtractionDir)
     {
-        Directory.CreateDirectory(tempExtractionDir); // Synchronous is fine for local temp path creation
+        var isoFileName = Path.GetFileName(inputFile);
+        LogMessage($"    Detailed Extraction Attempt for: {isoFileName}");
 
-        using var process = new Process();
-        processRef = process;
-        process.StartInfo = new ProcessStartInfo
+        var processOutputCollector = new StringBuilder();
+        Process? processRef;
+        CancellationTokenRegistration cancellationRegistration = default;
+
+        try
         {
-            FileName = extractXisoPath,
-            Arguments = $"-x \"{inputFile}\"", 
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WorkingDirectory = tempExtractionDir 
-        };
+            Directory.CreateDirectory(tempExtractionDir); // Synchronous is fine for local temp path creation
 
-        cancellationRegistration = _cts.Token.Register(() =>
-        {
-            try { processRef?.Kill(true); } catch { /* Ignore */ }
-        });
-
-        process.OutputDataReceived += (_, args) =>
-        {
-            if (args.Data != null) lock (processOutputCollector) { processOutputCollector.AppendLine(args.Data); }
-        };
-        process.ErrorDataReceived += (_, args) =>
-        {
-            if (!string.IsNullOrEmpty(args.Data)) lock (processOutputCollector) { processOutputCollector.AppendLine($"STDERR: {args.Data}"); }
-        };
-
-        process.Start();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-
-        await process.WaitForExitAsync(_cts.Token);
-        _cts.Token.ThrowIfCancellationRequested();
-
-        string collectedOutput = processOutputCollector.ToString();
-        LogMessage($"    Process Exit Code for '{isoFileName}': {process.ExitCode}");
-        LogMessage($"    Full Output Log from extract-xiso -x for '{isoFileName}':\n{collectedOutput}");
-        
-        string isoNameWithoutExtension = Path.GetFileNameWithoutExtension(isoFileName);
-        string expectedExtractionSubDir = Path.Combine(tempExtractionDir, isoNameWithoutExtension);
-        
-        bool filesWereExtracted = false;
-        if (await Task.Run(() => Directory.Exists(expectedExtractionSubDir), _cts.Token))
-        {
-            var extractedFiles = await Task.Run(() => Directory.GetFiles(expectedExtractionSubDir, "*", SearchOption.AllDirectories), _cts.Token);
-            filesWereExtracted = extractedFiles.Length > 0;
-            LogMessage($"    Files found by Directory.GetFiles in '{expectedExtractionSubDir}' (recursive): {extractedFiles.Length}. filesWereExtracted: {filesWereExtracted}");
-        }
-        else
-        {
-             LogMessage($"    Expected extraction subdirectory '{expectedExtractionSubDir}' not found.");
-        }
-
-        bool summaryLinePresent = collectedOutput.Contains("files in") && collectedOutput.Contains("total") && collectedOutput.Contains("bytes");
-
-        if (process.ExitCode == 0)
-        {
-            if (!filesWereExtracted)
+            using var process = new Process();
+            processRef = process;
+            process.StartInfo = new ProcessStartInfo
             {
-                LogMessage("    extract-xiso process exited with 0, but no files were extracted. Considered a failure.");
-                return false;
-            }
+                FileName = extractXisoPath,
+                Arguments = $"-x \"{inputFile}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = tempExtractionDir
+            };
 
-            bool criticalErrorInStdErr = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
-                                            .Any(line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase) &&
-                                                         (line.Contains("failed to extract", StringComparison.OrdinalIgnoreCase) ||
-                                                          line.Contains("error extracting", StringComparison.OrdinalIgnoreCase) ||
-                                                          line.Contains("cannot open", StringComparison.OrdinalIgnoreCase) ||
-                                                          line.Contains("not a valid", StringComparison.OrdinalIgnoreCase)));
-            if (criticalErrorInStdErr)
+            cancellationRegistration = _cts.Token.Register(() =>
             {
-                 LogMessage($"    extract-xiso process exited with 0 and files were extracted, but critical error messages were found in STDERR. Considered a failure.");
-                 return false;
-            }
-            LogMessage($"    extract-xiso process completed successfully (ExitCode 0, files extracted, no critical errors in log).");
-            return true;
-        }
-        else if (process.ExitCode == 1)
-        {
-            string[] stdErrLines = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
-                                        .Where(line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase))
-                                        .Select(line => line.Substring("STDERR:".Length).Trim())
-                                        .ToArray();
-            
-            bool onlyKnownBenignErrors = stdErrLines.All(errLine => 
-                errLine.Contains("open error: -d No such file or directory") || // Should be gone, but defensive
-                errLine.Contains("open error: LoadScreen_BlackScreen.nif No such file or directory") ||
-                errLine.Contains("failed to extract xbox iso image") 
-            );
-            
-            if (filesWereExtracted && summaryLinePresent && (stdErrLines.Length == 0 || onlyKnownBenignErrors))
+                try
+                {
+                    processRef?.Kill(true);
+                }
+                catch
+                {
+                    /* Ignore */
+                }
+            });
+
+            process.OutputDataReceived += (_, args) =>
             {
-                LogMessage($"    extract-xiso process exited with 1, but files were extracted, summary line present, and STDERR contained only known benign issues (or was empty). Considered a pass for testing.");
-                return true;
+                if (args.Data == null) return;
+
+                lock (processOutputCollector)
+                {
+                    processOutputCollector.AppendLine(args.Data);
+                }
+            };
+            process.ErrorDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrEmpty(args.Data)) return;
+
+                lock (processOutputCollector)
+                {
+                    processOutputCollector.AppendLine(CultureInfo.InvariantCulture, $"STDERR: {args.Data}");
+                }
+            };
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            await process.WaitForExitAsync(_cts.Token);
+            _cts.Token.ThrowIfCancellationRequested();
+
+            var collectedOutput = processOutputCollector.ToString();
+            LogMessage($"    Process Exit Code for '{isoFileName}': {process.ExitCode}");
+            LogMessage($"    Full Output Log from extract-xiso -x for '{isoFileName}':\n{collectedOutput}");
+
+            var isoNameWithoutExtension = Path.GetFileNameWithoutExtension(isoFileName);
+            var expectedExtractionSubDir = Path.Combine(tempExtractionDir, isoNameWithoutExtension);
+
+            var filesWereExtracted = false;
+            if (await Task.Run(() => Directory.Exists(expectedExtractionSubDir), _cts.Token))
+            {
+                var extractedFiles = await Task.Run(() => Directory.GetFiles(expectedExtractionSubDir, "*", SearchOption.AllDirectories), _cts.Token);
+                filesWereExtracted = extractedFiles.Length > 0;
+                LogMessage($"    Files found by Directory.GetFiles in '{expectedExtractionSubDir}' (recursive): {extractedFiles.Length}. filesWereExtracted: {filesWereExtracted}");
             }
             else
             {
-                LogMessage($"    extract-xiso process finished with exit code 1. Files extracted: {filesWereExtracted}. Summary line: {summaryLinePresent}. STDERR lines: {string.Join("; ", stdErrLines)}. Considered a failure.");
+                LogMessage($"    Expected extraction subdirectory '{expectedExtractionSubDir}' not found.");
+            }
+
+            var summaryLinePresent = collectedOutput.Contains("files in") && collectedOutput.Contains("total") && collectedOutput.Contains("bytes");
+
+            if (process.ExitCode == 0)
+            {
+                if (!filesWereExtracted)
+                {
+                    LogMessage("    extract-xiso process exited with 0, but no files were extracted. Considered a failure.");
+                    return false;
+                }
+
+                var criticalErrorInStdErr = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+                    .Any(line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase) &&
+                                 (line.Contains("failed to extract", StringComparison.OrdinalIgnoreCase) ||
+                                  line.Contains("error extracting", StringComparison.OrdinalIgnoreCase) ||
+                                  line.Contains("cannot open", StringComparison.OrdinalIgnoreCase) ||
+                                  line.Contains("not a valid", StringComparison.OrdinalIgnoreCase)));
+                if (criticalErrorInStdErr)
+                {
+                    LogMessage("    extract-xiso process exited with 0 and files were extracted, but critical error messages were found in STDERR. Considered a failure.");
+                    return false;
+                }
+
+                LogMessage("    extract-xiso process completed successfully (ExitCode 0, files extracted, no critical errors in log).");
+                return true;
+            }
+            else if (process.ExitCode == 1)
+            {
+                var stdErrLines = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(static line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase))
+                    .Select(static line => line.Substring("STDERR:".Length).Trim())
+                    .ToArray();
+
+                var onlyKnownBenignErrors = stdErrLines.All(errLine =>
+                    errLine.Contains("open error: -d No such file or directory") || // Should be gone, but defensive
+                    errLine.Contains("open error: LoadScreen_BlackScreen.nif No such file or directory") ||
+                    errLine.Contains("failed to extract xbox iso image")
+                );
+
+                if (filesWereExtracted && summaryLinePresent && (stdErrLines.Length == 0 || onlyKnownBenignErrors))
+                {
+                    LogMessage("    extract-xiso process exited with 1, but files were extracted, summary line present, and STDERR contained only known benign issues (or was empty). Considered a pass for testing.");
+                    return true;
+                }
+                else
+                {
+                    LogMessage($"    extract-xiso process finished with exit code 1. Files extracted: {filesWereExtracted}. Summary line: {summaryLinePresent}. STDERR lines: {string.Join("; ", stdErrLines)}. Considered a failure.");
+                    return false;
+                }
+            }
+            else
+            {
+                LogMessage($"    extract-xiso process finished with non-zero exit code: {process.ExitCode}. Considered a failure.");
                 return false;
             }
         }
-        else 
+        catch (OperationCanceledException)
         {
-            LogMessage($"    extract-xiso process finished with non-zero exit code: {process.ExitCode}. Considered a failure.");
+            LogMessage($"    Extraction for {isoFileName} was canceled.");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogMessage($"    Critical Error during extraction of {isoFileName}: {ex.Message}");
+            _ = ReportBugAsync($"Critical error during RunIsoExtractionToTempAsync for {isoFileName}", ex);
             return false;
         }
+        finally
+        {
+            await cancellationRegistration.DisposeAsync();
+        }
     }
-    catch (OperationCanceledException)
-    {
-        LogMessage($"    Extraction for {isoFileName} was canceled.");
-        throw; 
-    }
-    catch (Exception ex)
-    {
-        LogMessage($"    Critical Error during extraction of {isoFileName}: {ex.Message}");
-        _ = ReportBugAsync($"Critical error during RunIsoExtractionToTempAsync for {isoFileName}", ex);
-        return false;
-    }
-    finally
-    {
-        await cancellationRegistration.DisposeAsync();
-    }
-}
 
     private async Task<FileProcessingStatus> ConvertFileAsync(string extractXisoPath, string inputFile, string outputFolder, bool deleteOriginalIsoFile)
     {
@@ -1002,21 +1026,22 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
                 LogMessage($"{logPrefix} Already optimized. Copying to output.");
                 await Task.Run(() => File.Copy(inputFile, destinationPath, true), _cts.Token);
 
-                if (deleteOriginalIsoFile && !inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase)) 
-                {
-                    LogMessage($"{logPrefix} Deleting original (skipped) file: {fileName}");
-                    await Task.Run(() => File.Delete(inputFile), _cts.Token);
-                }
+                if (!deleteOriginalIsoFile ||
+                    inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase))
+                    return FileProcessingStatus.Skipped;
+
+                LogMessage($"{logPrefix} Deleting original (skipped) file: {fileName}");
+                await Task.Run(() => File.Delete(inputFile), _cts.Token);
                 return FileProcessingStatus.Skipped;
             }
-            
-            var convertedFilePath = inputFile; 
+
+            var convertedFilePath = inputFile;
             var originalBackupPath = inputFile + ".old";
 
             LogMessage($"{logPrefix} Moving converted file to output folder: {destinationPath}");
             await Task.Run(() => File.Move(convertedFilePath, destinationPath, true), _cts.Token);
 
-            bool isTemporaryFileFromArchive = inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase);
+            var isTemporaryFileFromArchive = inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase);
 
             if (await Task.Run(() => File.Exists(originalBackupPath), _cts.Token))
             {
@@ -1025,20 +1050,21 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
                     LogMessage($"{logPrefix} Deleting original backup file: {Path.GetFileName(originalBackupPath)}");
                     await Task.Run(() => File.Delete(originalBackupPath), _cts.Token);
                 }
-                else if (!isTemporaryFileFromArchive) 
+                else if (!isTemporaryFileFromArchive)
                 {
                     LogMessage($"{logPrefix} Restoring original file from backup: {fileName}");
                     await Task.Run(() => File.Move(originalBackupPath, inputFile, true), _cts.Token);
                 }
-                else 
+                else
                 {
-                     LogMessage($"{logPrefix} Original backup file {Path.GetFileName(originalBackupPath)} for temporary ISO will be cleaned with temp folder.");
+                    LogMessage($"{logPrefix} Original backup file {Path.GetFileName(originalBackupPath)} for temporary ISO will be cleaned with temp folder.");
                 }
             }
             else if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
             {
                 LogMessage($"{logPrefix} Converted file moved. Original (in-place converted) is now at destination. No separate .old file to delete for source path.");
             }
+
             return FileProcessingStatus.Converted;
         }
         catch (OperationCanceledException)
@@ -1058,11 +1084,11 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
     {
         var isoFileName = Path.GetFileName(inputFile);
         LogMessage($"Running extract-xiso -r on: {isoFileName}");
-        
-        var localProcessOutputLines = new List<string>(); 
-        var outputForUiLog = new StringBuilder();      
 
-        Process? processRef = null;
+        var localProcessOutputLines = new List<string>();
+        var outputForUiLog = new StringBuilder();
+
+        Process? processRef;
         CancellationTokenRegistration cancellationRegistration = default;
 
         try
@@ -1082,21 +1108,42 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
 
             cancellationRegistration = _cts.Token.Register(() =>
             {
-                try { processRef?.Kill(true); } catch { /* Ignore */ }
+                try
+                {
+                    processRef?.Kill(true);
+                }
+                catch
+                {
+                    /* Ignore */
+                }
             });
 
             process.OutputDataReceived += (_, args) =>
             {
                 if (args.Data == null) return;
-                lock (localProcessOutputLines) { localProcessOutputLines.Add(args.Data); }
-                lock (outputForUiLog) { outputForUiLog.AppendLine(args.Data); }
+
+                lock (localProcessOutputLines)
+                {
+                    localProcessOutputLines.Add(args.Data);
+                }
+
+                lock (outputForUiLog)
+                {
+                    outputForUiLog.AppendLine(args.Data);
+                }
             };
             process.ErrorDataReceived += (_, args) =>
             {
-                if (!string.IsNullOrEmpty(args.Data)) 
+                if (string.IsNullOrEmpty(args.Data)) return;
+
+                lock (localProcessOutputLines)
                 {
-                    lock (localProcessOutputLines) { localProcessOutputLines.Add($"ERROR: {args.Data}"); }
-                    lock (outputForUiLog) { outputForUiLog.AppendLine($"extract-xiso error: {args.Data}"); }
+                    localProcessOutputLines.Add($"ERROR: {args.Data}");
+                }
+
+                lock (outputForUiLog)
+                {
+                    outputForUiLog.AppendLine(CultureInfo.InvariantCulture, $"extract-xiso error: {args.Data}");
                 }
             };
 
@@ -1105,41 +1152,31 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
             process.BeginErrorReadLine();
 
             await process.WaitForExitAsync(_cts.Token);
-            _cts.Token.ThrowIfCancellationRequested(); 
+            _cts.Token.ThrowIfCancellationRequested();
 
-            string collectedToolOutputForLog = outputForUiLog.ToString();
-            if(!string.IsNullOrWhiteSpace(collectedToolOutputForLog))
+            var collectedToolOutputForLog = outputForUiLog.ToString();
+            if (!string.IsNullOrWhiteSpace(collectedToolOutputForLog))
             {
                 LogMessage($"Output from extract-xiso -r for {isoFileName}:\n{collectedToolOutputForLog}");
             }
-            
-            if (process.ExitCode == 0)
+
+            switch (process.ExitCode)
             {
-                if (localProcessOutputLines.Any(line => line.Contains("is already optimized, skipping...", StringComparison.OrdinalIgnoreCase) ||
-                                              line.Contains("already an XISO image", StringComparison.OrdinalIgnoreCase)))
-                {
+                case 0 when localProcessOutputLines.Any(static line => line.Contains("is already optimized, skipping...", StringComparison.OrdinalIgnoreCase) ||
+                                                                       line.Contains("already an XISO image", StringComparison.OrdinalIgnoreCase)):
                     return ConversionToolResultStatus.Skipped;
-                }
-                return ConversionToolResultStatus.Success;
-            }
-            else if (process.ExitCode == 1) 
-            {
-                if (localProcessOutputLines.Any(line => line.Contains("is already optimized, skipping...", StringComparison.OrdinalIgnoreCase) ||
-                                              line.Contains("already an XISO image", StringComparison.OrdinalIgnoreCase)))
-                {
+                case 0:
+                    return ConversionToolResultStatus.Success;
+                case 1 when localProcessOutputLines.Any(static line => line.Contains("is already optimized, skipping...", StringComparison.OrdinalIgnoreCase) ||
+                                                                       line.Contains("already an XISO image", StringComparison.OrdinalIgnoreCase)):
                     return ConversionToolResultStatus.Skipped;
-                }
-                else
-                {
+                case 1:
                     LogMessage($"extract-xiso -r for {isoFileName} exited with 1 but no 'skipped' message. Treating as failure.");
                     _ = ReportBugAsync($"extract-xiso -r for {isoFileName} exited 1 without skip message. Output: {string.Join(Environment.NewLine, localProcessOutputLines)}");
                     return ConversionToolResultStatus.Failed;
-                }
-            }
-            else 
-            {
-                _ = ReportBugAsync($"extract-xiso -r failed for {isoFileName} with exit code {process.ExitCode}. Output: {string.Join(Environment.NewLine, localProcessOutputLines)}");
-                return ConversionToolResultStatus.Failed;
+                default:
+                    _ = ReportBugAsync($"extract-xiso -r failed for {isoFileName} with exit code {process.ExitCode}. Output: {string.Join(Environment.NewLine, localProcessOutputLines)}");
+                    return ConversionToolResultStatus.Failed;
             }
         }
         catch (OperationCanceledException)
@@ -1159,15 +1196,15 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
         }
     }
 
-    private async Task<bool> ExtractArchiveAsync(string sevenZipPath, string archivePath, string extractionPath) 
+    private async Task<bool> ExtractArchiveAsync(string sevenZipPath, string archivePath, string extractionPath)
     {
         var archiveFileName = Path.GetFileName(archivePath);
         LogMessage($"Extracting: {archiveFileName} using 7z.exe to {extractionPath}");
 
         var processOutputCollector = new StringBuilder();
-        Process? processRef = null;
+        Process? processRef;
         CancellationTokenRegistration cancellationRegistration = default;
-        
+
         try
         {
             using var process = new Process();
@@ -1175,26 +1212,43 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = sevenZipPath,
-                Arguments = $"x \"{archivePath}\" -o\"{extractionPath}\" -y -bso0 -bsp0", 
-                RedirectStandardOutput = true, 
+                Arguments = $"x \"{archivePath}\" -o\"{extractionPath}\" -y -bso0 -bsp0",
+                RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory 
+                WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
             };
-            
+
             cancellationRegistration = _cts.Token.Register(() =>
             {
-                try { processRef?.Kill(true); } catch { /* Ignore */ }
+                try
+                {
+                    processRef?.Kill(true);
+                }
+                catch
+                {
+                    /* Ignore */
+                }
             });
-            
-            process.OutputDataReceived += (_, args) => 
+
+            process.OutputDataReceived += (_, args) =>
             {
-                if(args.Data != null) lock(processOutputCollector) { processOutputCollector.AppendLine(args.Data); }
+                if (args.Data == null) return;
+
+                lock (processOutputCollector)
+                {
+                    processOutputCollector.AppendLine(args.Data);
+                }
             };
             process.ErrorDataReceived += (_, args) =>
             {
-                if (!string.IsNullOrEmpty(args.Data)) lock(processOutputCollector) { processOutputCollector.AppendLine($"7z error: {args.Data}"); }
+                if (string.IsNullOrEmpty(args.Data)) return;
+
+                lock (processOutputCollector)
+                {
+                    processOutputCollector.AppendLine(CultureInfo.InvariantCulture, $"7z error: {args.Data}");
+                }
             };
 
             process.Start();
@@ -1204,12 +1258,12 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
             await process.WaitForExitAsync(_cts.Token);
             _cts.Token.ThrowIfCancellationRequested();
 
-            string collectedOutput = processOutputCollector.ToString();
-            if(!string.IsNullOrWhiteSpace(collectedOutput))
+            var collectedOutput = processOutputCollector.ToString();
+            if (!string.IsNullOrWhiteSpace(collectedOutput))
             {
-                 LogMessage($"Output from 7z.exe for {archiveFileName}:\n{collectedOutput}");
+                LogMessage($"Output from 7z.exe for {archiveFileName}:\n{collectedOutput}");
             }
-            
+
             if (process.ExitCode == 0)
             {
                 LogMessage($"Successfully extracted: {archiveFileName}");
@@ -1244,22 +1298,22 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
         if (tempFolders.Count == 0) return;
 
         LogMessage("Cleaning up remaining temporary extraction folders...");
-        foreach (var folder in tempFolders.ToList()) 
+        foreach (var folder in tempFolders.ToList())
         {
             try
             {
-                if (await Task.Run(() => Directory.Exists(folder), CancellationToken.None))
-                {
-                    await Task.Run(() => Directory.Delete(folder, true), CancellationToken.None);
-                    tempFolders.Remove(folder); 
-                }
+                if (!await Task.Run(() => Directory.Exists(folder), CancellationToken.None)) continue;
+
+                await Task.Run(() => Directory.Delete(folder, true), CancellationToken.None);
+                tempFolders.Remove(folder);
             }
             catch (Exception ex)
             {
                 LogMessage($"Error cleaning temp folder {folder}: {ex.Message}");
             }
         }
-        if(tempFolders.Count == 0) LogMessage("Temporary folder cleanup complete.");
+
+        if (tempFolders.Count == 0) LogMessage("Temporary folder cleanup complete.");
         else LogMessage("Some temporary folders could not be cleaned automatically.");
     }
 
@@ -1272,7 +1326,10 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
             await Task.Run(() => File.Delete(filePath), _cts.Token);
             LogMessage($"Deleted: {Path.GetFileName(filePath)}");
         }
-        catch (OperationCanceledException) { /* Ignore */ }
+        catch (OperationCanceledException)
+        {
+            /* Ignore */
+        }
         catch (Exception ex)
         {
             LogMessage($"Error deleting file {Path.GetFileName(filePath)}: {ex.Message}");
@@ -1307,7 +1364,7 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
             if (exception != null)
             {
                 fullReport.AppendLine("=== Exception Details ===");
-                AppendExceptionDetails(fullReport,exception); 
+                AppendExceptionDetails(fullReport, exception);
             }
 
             if (LogViewer != null)
@@ -1318,7 +1375,7 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
                 {
                     fullReport.AppendLine();
                     fullReport.AppendLine("=== Application Log (last part) ===");
-                    const int maxLogLength = 10000; 
+                    const int maxLogLength = 10000;
                     var start = Math.Max(0, logContent.Length - maxLogLength);
                     fullReport.Append(logContent.AsSpan(start));
                 }
@@ -1328,9 +1385,10 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
         }
         catch
         {
+            // ignored
         }
     }
-    
+
     private static void AppendExceptionDetails(StringBuilder sb, Exception exception, int level = 0)
     {
         while (true)
@@ -1350,17 +1408,17 @@ private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, str
                 level += 1;
                 continue;
             }
+
             break;
         }
     }
-
 
     public void Dispose()
     {
         _processingTimer.Tick -= ProcessingTimer_Tick;
         _processingTimer.Stop();
-        _cts?.Cancel(); 
-        _cts?.Dispose(); 
+        _cts?.Cancel();
+        _cts?.Dispose();
         _bugReportService?.Dispose();
         GC.SuppressFinalize(this);
     }
