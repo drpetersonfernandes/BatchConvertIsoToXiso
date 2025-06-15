@@ -26,10 +26,10 @@ public partial class MainWindow : IDisposable
     private int _uiSuccessCount;
     private int _uiFailedCount;
 
-    // Performance Counter for Disk Write Speed
+    // Performance Counter for Disk Write Speed - MODIFIED
     private PerformanceCounter? _diskWriteSpeedCounter;
     private string? _activeMonitoringDriveLetter;
-
+    private string? _currentOperationDrive; // NEW: Track which drive is currently being written to
 
     private enum ConversionToolResultStatus
     {
@@ -140,6 +140,20 @@ public partial class MainWindow : IDisposable
             return $"{bytesPerSecond / kilobyte:F1} KB/s";
 
         return $"{bytesPerSecond / megabyte:F1} MB/s";
+    }
+
+    // NEW METHOD: Set the current operation drive and switch monitoring if needed
+    private void SetCurrentOperationDrive(string? driveLetter)
+    {
+        if (_currentOperationDrive == driveLetter) return; // No change needed
+
+        _currentOperationDrive = driveLetter;
+
+        // Switch performance counter to the new drive
+        if (!string.IsNullOrEmpty(driveLetter) && _processingTimer.IsEnabled)
+        {
+            InitializePerformanceCounter(driveLetter);
+        }
     }
 
     private void InitializePerformanceCounter(string? driveLetter)
@@ -304,7 +318,9 @@ public partial class MainWindow : IDisposable
 
             ResetSummaryStats();
 
+            // MODIFIED: Start with output drive but allow dynamic switching
             var outputDrive = GetDriveLetter(outputFolder);
+            _currentOperationDrive = outputDrive;
             InitializePerformanceCounter(outputDrive);
 
             _conversionStartTime = DateTime.Now;
@@ -330,6 +346,7 @@ public partial class MainWindow : IDisposable
             {
                 _processingTimer.Stop();
                 StopPerformanceCounter();
+                _currentOperationDrive = null; // Reset
                 var finalElapsedTime = DateTime.Now - _conversionStartTime;
                 ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                 SetControlsState(true);
@@ -380,6 +397,7 @@ public partial class MainWindow : IDisposable
 
             // For testing, writes occur in the system's temporary directory
             var tempDrive = GetDriveLetter(Path.GetTempPath());
+            _currentOperationDrive = tempDrive;
             InitializePerformanceCounter(tempDrive);
 
             _conversionStartTime = DateTime.Now;
@@ -405,6 +423,7 @@ public partial class MainWindow : IDisposable
             {
                 _processingTimer.Stop();
                 StopPerformanceCounter();
+                _currentOperationDrive = null; // Reset
                 var finalElapsedTime = DateTime.Now - _conversionStartTime;
                 ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                 SetControlsState(true);
@@ -417,7 +436,6 @@ public partial class MainWindow : IDisposable
             StopPerformanceCounter();
         }
     }
-
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
@@ -486,7 +504,6 @@ public partial class MainWindow : IDisposable
             }
         });
     }
-
 
     private void ProcessingTimer_Tick(object? sender, EventArgs e)
     {
@@ -580,7 +597,6 @@ public partial class MainWindow : IDisposable
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
         LogMessage($"Starting conversion... Total items to process initially: {currentExpectedTotalIsos}. This may increase if archives contain multiple ISOs.");
 
-
         foreach (var currentEntryPath in initialEntriesToProcess)
         {
             _cts.Token.ThrowIfCancellationRequested();
@@ -591,6 +607,9 @@ public partial class MainWindow : IDisposable
             if (entryExtension == ".iso")
             {
                 LogMessage($"Processing standalone ISO: {entryFileName}...");
+
+                // MODIFIED: Set operation drive to output folder for direct ISO conversion
+                SetCurrentOperationDrive(GetDriveLetter(outputFolder));
 
                 var status = await ConvertFileAsync(extractXisoPath, currentEntryPath, outputFolder, deleteOriginals);
                 actualIsosProcessedForProgress++;
@@ -627,6 +646,9 @@ public partial class MainWindow : IDisposable
                     await Task.Run(() => Directory.CreateDirectory(currentArchiveTempExtractionDir), _cts.Token);
                     tempFoldersToCleanUpAtEnd.Add(currentArchiveTempExtractionDir);
 
+                    // MODIFIED: Set operation drive to temp folder for archive extraction
+                    SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath()));
+
                     archiveExtractedSuccessfully = await ExtractArchiveAsync(sevenZipPath, currentEntryPath, currentArchiveTempExtractionDir);
                     if (archiveExtractedSuccessfully)
                     {
@@ -646,12 +668,14 @@ public partial class MainWindow : IDisposable
                             ProgressBar.Value = actualIsosProcessedForProgress;
                         }
 
-
                         foreach (var extractedIsoPath in extractedIsoFiles)
                         {
                             _cts.Token.ThrowIfCancellationRequested();
                             var extractedIsoName = Path.GetFileName(extractedIsoPath);
                             LogMessage($"  Converting ISO from archive: {extractedIsoName}...");
+
+                            // MODIFIED: Set operation drive to output folder for ISO conversion
+                            SetCurrentOperationDrive(GetDriveLetter(outputFolder));
 
                             var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false);
                             statusesOfIsosInThisArchive.Add(status);
@@ -756,7 +780,6 @@ public partial class MainWindow : IDisposable
             ProgressBar.Value = ProgressBar.Maximum;
         }
 
-
         LogMessage("\nBatch conversion summary:");
         LogMessage($"Successfully converted: {overallIsosSuccessfullyConverted} ISO files");
         LogMessage($"Skipped (already optimized): {overallIsosSkipped} ISO files");
@@ -829,6 +852,10 @@ public partial class MainWindow : IDisposable
             var isoFileName = Path.GetFileName(isoFilePath);
 
             LogMessage($"Testing ISO: {isoFileName}...");
+
+            // MODIFIED: Set operation drive to temp folder for ISO testing
+            SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath()));
+
             var testStatus = await TestSingleIsoAsync(extractXisoPath, isoFilePath);
             actualIsosProcessedForProgress++;
 
@@ -990,6 +1017,9 @@ public partial class MainWindow : IDisposable
             }
         }
     }
+
+    // Rest of the methods remain the same...
+    // (DiagnoseExtractXisoAsync, RunIsoExtractionToTempAsync, ConvertFileAsync, RunConversionToolAsync, ExtractArchiveAsync, etc.)
 
     private async Task DiagnoseExtractXisoAsync(string extractXisoPath)
     {
