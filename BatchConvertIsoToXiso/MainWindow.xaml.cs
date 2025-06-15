@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using Microsoft.Win32;
-using System.Windows.Threading; 
+using System.Windows.Threading;
 
 namespace BatchConvertIsoToXiso;
 
@@ -25,6 +25,11 @@ public partial class MainWindow : IDisposable
     private int _uiTotalFiles;
     private int _uiSuccessCount;
     private int _uiFailedCount;
+
+    // Performance Counter for Disk Write Speed
+    private PerformanceCounter? _diskWriteSpeedCounter;
+    private string? _activeMonitoringDriveLetter;
+
 
     private enum ConversionToolResultStatus
     {
@@ -55,7 +60,7 @@ public partial class MainWindow : IDisposable
 
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _processingTimer.Tick += ProcessingTimer_Tick;
-        ResetSummaryStats();
+        ResetSummaryStats(); // This will also initialize WriteSpeedValue to N/A via StopPerformanceCounter
 
         LogMessage("Welcome to the Batch Convert ISO to XISO.");
         LogMessage("This program will convert ISO/XISO files (and ISOs within ZIP/7Z/RAR archives) to Xbox XISO format using extract-xiso.");
@@ -92,15 +97,145 @@ public partial class MainWindow : IDisposable
         }
     }
 
+    private string? GetDriveLetter(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            // Ensure the path is absolute to get a root.
+            var fullPath = Path.GetFullPath(path);
+            var pathRoot = Path.GetPathRoot(fullPath);
+
+            if (string.IsNullOrEmpty(pathRoot)) return null;
+
+            var driveInfo = new DriveInfo(pathRoot);
+            // driveInfo.Name will be like "C:\\" for local drives.
+            // We need "C:" for the performance counter instance name.
+            return driveInfo.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch (ArgumentException) // Handles invalid paths, UNC paths for which DriveInfo might fail
+        {
+            LogMessage($"Could not determine drive letter for path: {path}. It might be a network path or invalid.");
+            return null;
+        }
+        catch (Exception ex) // Catch other potential exceptions
+        {
+            LogMessage($"Error getting drive letter for path {path}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string FormatBytesPerSecond(float bytesPerSecond)
+    {
+        const int kilobyte = 1024;
+        const int megabyte = kilobyte * 1024;
+
+        if (bytesPerSecond < kilobyte)
+            return $"{bytesPerSecond:F1} B/s";
+        if (bytesPerSecond < megabyte)
+            return $"{bytesPerSecond / kilobyte:F1} KB/s";
+
+        return $"{bytesPerSecond / megabyte:F1} MB/s";
+    }
+
+    private void InitializePerformanceCounter(string? driveLetter)
+    {
+        StopPerformanceCounter(); // Stop any existing counter
+
+        if (string.IsNullOrEmpty(driveLetter))
+        {
+            LogMessage("Cannot monitor write speed: Drive letter is invalid or not determined (e.g., network path).");
+            Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A");
+            return;
+        }
+
+        // Performance counter instance name is typically "C:", "D:", etc.
+        var perfCounterInstanceName = driveLetter.EndsWith(':') ? driveLetter : driveLetter + ":";
+
+        try
+        {
+            if (!PerformanceCounterCategory.InstanceExists(perfCounterInstanceName, "LogicalDisk"))
+            {
+                LogMessage($"Performance counter instance '{perfCounterInstanceName}' not found for 'LogicalDisk'. Cannot monitor write speed for this drive.");
+                try
+                {
+                    var category = new PerformanceCounterCategory("LogicalDisk");
+                    var availableInstances = category.GetInstanceNames();
+                    if (availableInstances.Length > 0)
+                    {
+                        LogMessage($"Available LogicalDisk instances: {string.Join(", ", availableInstances)}");
+                    }
+                    else
+                    {
+                        LogMessage("No LogicalDisk instances found or accessible.");
+                    }
+                }
+                catch (Exception diagEx)
+                {
+                    LogMessage($"Error getting available LogicalDisk instances: {diagEx.Message}");
+                }
+
+                Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A (No Instance)");
+                _activeMonitoringDriveLetter = null;
+                return;
+            }
+
+            _diskWriteSpeedCounter = new PerformanceCounter("LogicalDisk", "Disk Write Bytes/sec", perfCounterInstanceName, true); // true for read-only
+            _diskWriteSpeedCounter.NextValue(); // Initial call to prime the counter
+            _activeMonitoringDriveLetter = driveLetter;
+            LogMessage($"Monitoring write speed for drive: {perfCounterInstanceName}");
+            Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "Calculating...");
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogMessage($"Error initializing performance counter for drive {perfCounterInstanceName}: {ex.Message}. Write speed monitoring disabled.");
+            _ = ReportBugAsync($"PerfCounter Init InvalidOpExc for {perfCounterInstanceName}", ex);
+            _diskWriteSpeedCounter?.Dispose();
+            _diskWriteSpeedCounter = null;
+            _activeMonitoringDriveLetter = null;
+            Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A (Error)");
+        }
+        catch (Exception ex)
+        {
+            LogMessage($"Unexpected error initializing performance counter for drive {perfCounterInstanceName}: {ex.Message}. Write speed monitoring disabled.");
+            _ = ReportBugAsync($"PerfCounter Init GenericExc for {perfCounterInstanceName}", ex);
+            _diskWriteSpeedCounter?.Dispose();
+            _diskWriteSpeedCounter = null;
+            _activeMonitoringDriveLetter = null;
+            Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A (Error)");
+        }
+    }
+
+    private void StopPerformanceCounter()
+    {
+        _diskWriteSpeedCounter?.Dispose();
+        _diskWriteSpeedCounter = null;
+        _activeMonitoringDriveLetter = null;
+        // Ensure UI update happens on the UI thread
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            if (WriteSpeedValue != null)
+            {
+                WriteSpeedValue.Text = "N/A";
+            }
+        });
+    }
+
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         _cts.Cancel();
+        // StopPerformanceCounter(); // Dispose will handle this
     }
 
     protected override void OnClosing(CancelEventArgs e)
     {
         _cts.Cancel();
         base.OnClosing(e);
+        // StopPerformanceCounter(); // Dispose will handle this
     }
 
     private void LogMessage(string message)
@@ -146,6 +281,7 @@ public partial class MainWindow : IDisposable
                 LogMessage("Error: extract-xiso.exe not found.");
                 ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
                 _ = ReportBugAsync("extract-xiso.exe not found at start of conversion.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
+                StopPerformanceCounter();
                 return;
             }
 
@@ -156,6 +292,7 @@ public partial class MainWindow : IDisposable
             if (string.IsNullOrEmpty(inputFolder) || string.IsNullOrEmpty(outputFolder))
             {
                 ShowError("Please select both input and output folders.");
+                StopPerformanceCounter();
                 return;
             }
 
@@ -166,6 +303,10 @@ public partial class MainWindow : IDisposable
             }
 
             ResetSummaryStats();
+
+            var outputDrive = GetDriveLetter(outputFolder);
+            InitializePerformanceCounter(outputDrive);
+
             _conversionStartTime = DateTime.Now;
             _processingTimer.Start();
 
@@ -188,6 +329,7 @@ public partial class MainWindow : IDisposable
             finally
             {
                 _processingTimer.Stop();
+                StopPerformanceCounter();
                 var finalElapsedTime = DateTime.Now - _conversionStartTime;
                 ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                 SetControlsState(true);
@@ -197,6 +339,7 @@ public partial class MainWindow : IDisposable
         {
             _ = ReportBugAsync($"Error during batch conversion process: {ex.Message}", ex);
             LogMessage($"Error during batch conversion process: {ex.Message}");
+            StopPerformanceCounter();
         }
     }
 
@@ -214,6 +357,7 @@ public partial class MainWindow : IDisposable
                 LogMessage("Error: extract-xiso.exe not found.");
                 ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
                 _ = ReportBugAsync("extract-xiso.exe not found at start of ISO test.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
+                StopPerformanceCounter();
                 return;
             }
 
@@ -222,6 +366,7 @@ public partial class MainWindow : IDisposable
             if (string.IsNullOrEmpty(inputFolder))
             {
                 ShowError("Please select the input folder.");
+                StopPerformanceCounter();
                 return;
             }
 
@@ -232,6 +377,11 @@ public partial class MainWindow : IDisposable
             }
 
             ResetSummaryStats();
+
+            // For testing, writes occur in the system's temporary directory
+            var tempDrive = GetDriveLetter(Path.GetTempPath());
+            InitializePerformanceCounter(tempDrive);
+
             _conversionStartTime = DateTime.Now;
             _processingTimer.Start();
 
@@ -254,6 +404,7 @@ public partial class MainWindow : IDisposable
             finally
             {
                 _processingTimer.Stop();
+                StopPerformanceCounter();
                 var finalElapsedTime = DateTime.Now - _conversionStartTime;
                 ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                 SetControlsState(true);
@@ -263,6 +414,7 @@ public partial class MainWindow : IDisposable
         {
             _ = ReportBugAsync($"Error during batch ISO test process: {ex.Message}", ex);
             LogMessage($"Error during batch ISO test process: {ex.Message}");
+            StopPerformanceCounter();
         }
     }
 
@@ -271,6 +423,7 @@ public partial class MainWindow : IDisposable
     {
         _cts.Cancel();
         LogMessage("Cancellation requested. Finishing current file/archive...");
+        // Performance counter will be stopped in the finally block of the active operation.
     }
 
     private void SetControlsState(bool enabled)
@@ -308,6 +461,11 @@ public partial class MainWindow : IDisposable
             ProgressBar.Maximum = 1;
         });
         ProcessingTimeValue.Text = "00:00:00";
+        // If no operation is active, ensure write speed is N/A
+        if (!_processingTimer.IsEnabled)
+        {
+            StopPerformanceCounter();
+        }
     }
 
     private void UpdateSummaryStatsUi(int? newTotalFiles = null, int? newProgressMax = null)
@@ -334,6 +492,34 @@ public partial class MainWindow : IDisposable
     {
         var elapsedTime = DateTime.Now - _conversionStartTime;
         ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+
+        if (_diskWriteSpeedCounter == null || string.IsNullOrEmpty(_activeMonitoringDriveLetter)) return;
+
+        try
+        {
+            var writeSpeedBytes = _diskWriteSpeedCounter.NextValue();
+            Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                if (WriteSpeedValue != null)
+                {
+                    WriteSpeedValue.Text = FormatBytesPerSecond(writeSpeedBytes);
+                }
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogMessage($"Error reading write speed for drive {_activeMonitoringDriveLetter}: {ex.Message}. Stopping monitoring.");
+            _ = ReportBugAsync($"PerfCounter Read InvalidOpExc for {_activeMonitoringDriveLetter}", ex);
+            StopPerformanceCounter();
+        }
+        catch (Exception ex)
+        {
+            LogMessage($"Unexpected error reading write speed for drive {_activeMonitoringDriveLetter}: {ex.Message}. Stopping monitoring.");
+            _ = ReportBugAsync($"PerfCounter Read GenericExc for {_activeMonitoringDriveLetter}", ex);
+            StopPerformanceCounter();
+        }
+        // No need for an else here to set to N/A, as StopPerformanceCounter handles that
+        // when the counter is not supposed to be active.
     }
 
     private async Task PerformBatchConversionAsync(string extractXisoPath, string sevenZipPath, string inputFolder, string outputFolder, bool deleteOriginals)
@@ -1417,6 +1603,7 @@ public partial class MainWindow : IDisposable
     {
         _processingTimer.Tick -= ProcessingTimer_Tick;
         _processingTimer.Stop();
+        StopPerformanceCounter(); // Clean up performance counter
         _cts?.Cancel();
         _cts?.Dispose();
         _bugReportService?.Dispose();
