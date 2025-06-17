@@ -8,8 +8,8 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>icon\icon.ico</ApplicationIcon>
     <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
-    <AssemblyVersion>1.3</AssemblyVersion>
-    <FileVersion>1.3</FileVersion>
+    <AssemblyVersion>1.4</AssemblyVersion>
+    <FileVersion>1.4</FileVersion>
     <IsPackable>false</IsPackable>
     <NeutralLanguage>en-US</NeutralLanguage>
   </PropertyGroup>
@@ -17,6 +17,12 @@
   <ItemGroup>
     <Resource Include="icon\icon.ico" />
     <Resource Include="icon\icon.png" />
+    <None Remove="images\about.png" />
+    <Resource Include="images\about.png" />
+    <None Remove="images\exit.png" />
+    <Resource Include="images\exit.png" />
+    <None Remove="images\logo.png" />
+    <Resource Include="images\logo.png" />
   </ItemGroup>
 
   <ItemGroup>

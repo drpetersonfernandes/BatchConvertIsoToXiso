@@ -6,17 +6,36 @@
         Closing="Window_Closing">
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" /> <!-- 0: Input -->
-            <RowDefinition Height="Auto" /> <!-- 1: Output -->
-            <RowDefinition Height="Auto" /> <!-- 2: Checkbox -->
-            <RowDefinition Height="Auto" /> <!-- 3: Action Buttons -->
-            <RowDefinition Height="*" />    <!-- 4: LogViewer -->
-            <RowDefinition Height="Auto" /> <!-- 5: Summary Stats -->
-            <RowDefinition Height="Auto" /> <!-- 6: Progress Bar Grid -->
+            <RowDefinition Height="Auto" /> <!-- 0: Menu -->
+            <RowDefinition Height="Auto" /> <!-- 1: Input -->
+            <RowDefinition Height="Auto" /> <!-- 2: Output -->
+            <RowDefinition Height="Auto" /> <!-- 3: Checkbox -->
+            <RowDefinition Height="Auto" /> <!-- 4: Action Buttons -->
+            <RowDefinition Height="*" />    <!-- 5: LogViewer -->
+            <RowDefinition Height="Auto" /> <!-- 6: Summary Stats -->
+            <RowDefinition Height="Auto" /> <!-- 7: Progress Bar Grid -->
         </Grid.RowDefinitions>
 
+        <!-- Menu Bar -->
+        <Menu Grid.Row="0">
+            <MenuItem Header="File">
+                <MenuItem Header="Exit" Click="ExitMenuItem_Click">
+                    <MenuItem.Icon>
+                        <Image Source="pack://application:,,,/images/exit.png" Width="16" Height="16" />
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="Help">
+                <MenuItem Header="About" Click="AboutMenuItem_Click">
+                    <MenuItem.Icon>
+                        <Image Source="pack://application:,,,/images/about.png" Width="16" Height="16" />
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+        </Menu>
+
         <!-- Input Folder Selection -->
-        <Grid Grid.Row="0" Margin="10,10,10,5">
+        <Grid Grid.Row="1" Margin="10,10,10,5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="90" />
                 <ColumnDefinition Width="*" />
@@ -29,7 +48,7 @@
         </Grid>
 
         <!-- Output Folder Selection -->
-        <Grid Grid.Row="1" Margin="10,5,10,5">
+        <Grid Grid.Row="2" Margin="10,5,10,5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="90" />
                 <ColumnDefinition Width="*" />
@@ -43,13 +62,13 @@
 
         <!-- Delete Files Checkbox -->
         <CheckBox x:Name="DeleteFilesCheckBox"
-                  Grid.Row="2"
+                  Grid.Row="3"
                   Content="Delete original files after conversion"
                   Margin="10,5,10,5"
                   HorizontalAlignment="Left" />
 
         <!-- Action Buttons -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="10,10,10,15">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Margin="10,10,10,15">
             <Button x:Name="StartButton"
                     Content="Start Conversion"
                     Click="StartButton_Click"
@@ -65,7 +84,7 @@
 
         <!-- Log TextBox -->
         <TextBox x:Name="LogViewer"
-                 Grid.Row="4"
+                 Grid.Row="5"
                  AcceptsReturn="True"
                  VerticalScrollBarVisibility="Visible"
                  IsReadOnly="True"
@@ -73,13 +92,13 @@
                  FontFamily="Consolas" />
 
         <!-- Summary Stats -->
-        <Grid Grid.Row="5" Margin="10,5,10,5">
+        <Grid Grid.Row="6" Margin="10,5,10,5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" /> <!-- New Column for Write Speed -->
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" BorderBrush="LightGray" BorderThickness="1" Margin="2" Padding="5">
@@ -120,7 +139,7 @@
         </Grid>
 
         <!-- Progress Bar and Cancel Button -->
-        <Grid Grid.Row="6" Margin="10,5,10,10">
+        <Grid Grid.Row="7" Margin="10,5,10,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

@@ -78,7 +78,6 @@ public partial class MainWindow : IDisposable
         if (File.Exists(extractXisoPath))
         {
             LogMessage("extract-xiso.exe found in the application directory.");
-            _ = DiagnoseExtractXisoAsync(extractXisoPath);
         }
         else
         {
@@ -1012,50 +1011,6 @@ public partial class MainWindow : IDisposable
         }
     }
 
-    private async Task DiagnoseExtractXisoAsync(string extractXisoPath)
-    {
-        var diagOutputCollector = new StringBuilder();
-        try
-        {
-            using var process = new Process();
-            process.StartInfo = new ProcessStartInfo
-            {
-                FileName = extractXisoPath,
-                Arguments = "-h",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = Path.GetDirectoryName(extractXisoPath) ?? AppDomain.CurrentDomain.BaseDirectory
-            };
-
-            process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync(_cts.Token);
-            var errorOutput = await process.StandardError.ReadToEndAsync(_cts.Token);
-            await process.WaitForExitAsync(_cts.Token);
-
-            diagOutputCollector.AppendLine("Extract-xiso Diagnostic Information (STDOUT):");
-            diagOutputCollector.AppendLine(string.IsNullOrWhiteSpace(output) ? "(No STDOUT)" : output);
-
-            if (!string.IsNullOrWhiteSpace(errorOutput))
-            {
-                diagOutputCollector.AppendLine("Extract-xiso Diagnostic Information (STDERR):");
-                diagOutputCollector.AppendLine(errorOutput);
-            }
-
-            LogMessage(diagOutputCollector.ToString());
-        }
-        catch (OperationCanceledException)
-        {
-            LogMessage("extract-xiso diagnostic was canceled.");
-        }
-        catch (Exception ex)
-        {
-            LogMessage($"Error running extract-xiso diagnostic: {ex.Message}\n{diagOutputCollector}");
-            _ = ReportBugAsync("Error running extract-xiso diagnostic for -h command.", ex);
-        }
-    }
-
     private async Task<bool> RunIsoExtractionToTempAsync(string extractXisoPath, string inputFile, string tempExtractionDir)
     {
         var isoFileName = Path.GetFileName(inputFile);
@@ -1629,5 +1584,25 @@ public partial class MainWindow : IDisposable
         _cts?.Dispose();
         _bugReportService?.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        Close(); // This will trigger the Window_Closing event
+    }
+
+    private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Create and show the About window
+            new AboutWindow { Owner = this }.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            LogMessage($"Error opening About window: {ex.Message}");
+            // Report the error using the existing service instance
+            _ = ReportBugAsync("Error opening About window", ex);
+        }
     }
 }
