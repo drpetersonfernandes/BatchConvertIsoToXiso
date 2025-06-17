@@ -26,10 +26,10 @@ public partial class MainWindow : IDisposable
     private int _uiSuccessCount;
     private int _uiFailedCount;
 
-    // Performance Counter for Disk Write Speed - MODIFIED
+    // Performance Counter for Disk Write Speed
     private PerformanceCounter? _diskWriteSpeedCounter;
     private string? _activeMonitoringDriveLetter;
-    private string? _currentOperationDrive; // NEW: Track which drive is currently being written to
+    private string? _currentOperationDrive;
 
     private enum ConversionToolResultStatus
     {
@@ -60,7 +60,7 @@ public partial class MainWindow : IDisposable
 
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _processingTimer.Tick += ProcessingTimer_Tick;
-        ResetSummaryStats(); // This will also initialize WriteSpeedValue to N/A via StopPerformanceCounter
+        ResetSummaryStats();
 
         LogMessage("Welcome to the Batch Convert ISO to XISO.");
         LogMessage("This program will convert ISO/XISO files (and ISOs within ZIP/7Z/RAR archives) to Xbox XISO format using extract-xiso.");
@@ -142,10 +142,9 @@ public partial class MainWindow : IDisposable
         return $"{bytesPerSecond / megabyte:F1} MB/s";
     }
 
-    // NEW METHOD: Set the current operation drive and switch monitoring if needed
     private void SetCurrentOperationDrive(string? driveLetter)
     {
-        if (_currentOperationDrive == driveLetter) return; // No change needed
+        if (_currentOperationDrive == driveLetter) return;
 
         _currentOperationDrive = driveLetter;
 
@@ -242,14 +241,12 @@ public partial class MainWindow : IDisposable
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         _cts.Cancel();
-        // StopPerformanceCounter(); // Dispose will handle this
     }
 
     protected override void OnClosing(CancelEventArgs e)
     {
         _cts.Cancel();
         base.OnClosing(e);
-        // StopPerformanceCounter(); // Dispose will handle this
     }
 
     private void LogMessage(string message)
@@ -318,7 +315,7 @@ public partial class MainWindow : IDisposable
 
             ResetSummaryStats();
 
-            // MODIFIED: Start with output drive but allow dynamic switching
+            // Start with output drive but allow dynamic switching
             var outputDrive = GetDriveLetter(outputFolder);
             _currentOperationDrive = outputDrive;
             InitializePerformanceCounter(outputDrive);
@@ -395,7 +392,7 @@ public partial class MainWindow : IDisposable
 
             ResetSummaryStats();
 
-            // For testing, writes occur in the system's temporary directory
+            // Writes occur in the system's temporary directory
             var tempDrive = GetDriveLetter(Path.GetTempPath());
             _currentOperationDrive = tempDrive;
             InitializePerformanceCounter(tempDrive);
@@ -441,7 +438,6 @@ public partial class MainWindow : IDisposable
     {
         _cts.Cancel();
         LogMessage("Cancellation requested. Finishing current file/archive...");
-        // Performance counter will be stopped in the finally block of the active operation.
     }
 
     private void SetControlsState(bool enabled)
@@ -535,8 +531,6 @@ public partial class MainWindow : IDisposable
             _ = ReportBugAsync($"PerfCounter Read GenericExc for {_activeMonitoringDriveLetter}", ex);
             StopPerformanceCounter();
         }
-        // No need for an else here to set to N/A, as StopPerformanceCounter handles that
-        // when the counter is not supposed to be active.
     }
 
     private async Task PerformBatchConversionAsync(string extractXisoPath, string sevenZipPath, string inputFolder, string outputFolder, bool deleteOriginals)
@@ -646,7 +640,7 @@ public partial class MainWindow : IDisposable
                     await Task.Run(() => Directory.CreateDirectory(currentArchiveTempExtractionDir), _cts.Token);
                     tempFoldersToCleanUpAtEnd.Add(currentArchiveTempExtractionDir);
 
-                    // MODIFIED: Set operation drive to temp folder for archive extraction
+                    // Set operation drive to temp folder for archive extraction
                     SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath()));
 
                     archiveExtractedSuccessfully = await ExtractArchiveAsync(sevenZipPath, currentEntryPath, currentArchiveTempExtractionDir);
@@ -674,7 +668,7 @@ public partial class MainWindow : IDisposable
                             var extractedIsoName = Path.GetFileName(extractedIsoPath);
                             LogMessage($"  Converting ISO from archive: {extractedIsoName}...");
 
-                            // MODIFIED: Set operation drive to output folder for ISO conversion
+                            // Set operation drive to output folder for ISO conversion
                             SetCurrentOperationDrive(GetDriveLetter(outputFolder));
 
                             var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false);
@@ -853,7 +847,7 @@ public partial class MainWindow : IDisposable
 
             LogMessage($"Testing ISO: {isoFileName}...");
 
-            // MODIFIED: Set operation drive to temp folder for ISO testing
+            // Set operation drive to temp folder for ISO testing
             SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath()));
 
             var testStatus = await TestSingleIsoAsync(extractXisoPath, isoFilePath);
@@ -868,7 +862,7 @@ public partial class MainWindow : IDisposable
             {
                 overallIsosTestFailed++;
                 _uiFailedCount++;
-                failedIsoOriginalPaths.Add(isoFilePath); // Add original path for summary
+                failedIsoOriginalPaths.Add(isoFilePath);
 
                 // Attempt to move the failed ISO
                 var originalDirectory = Path.GetDirectoryName(isoFilePath);
@@ -1017,9 +1011,6 @@ public partial class MainWindow : IDisposable
             }
         }
     }
-
-    // Rest of the methods remain the same...
-    // (DiagnoseExtractXisoAsync, RunIsoExtractionToTempAsync, ConvertFileAsync, RunConversionToolAsync, ExtractArchiveAsync, etc.)
 
     private async Task DiagnoseExtractXisoAsync(string extractXisoPath)
     {
