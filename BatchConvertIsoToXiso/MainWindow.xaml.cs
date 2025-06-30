@@ -67,7 +67,7 @@ public partial class MainWindow : IDisposable
         MoveFailedTestCheckBox.IsChecked = true; // Default to true to maintain previous behavior for failed files
 
         LogMessage("Welcome to the Batch Convert ISO to XISO.");
-        LogMessage("This program will convert ISO/XISO files (and ISOs within ZIP/7Z/RAR archives) to Xbox XISO format using extract-xiso.");
+        LogMessage("This program will convert original Redump ISO files (or within ZIP/7Z/RAR archives) to optimized Xbox XISO format using the extract-xiso tool.");
         LogMessage("It can also test the integrity of ISO files by attempting a full extraction to a temporary location.");
         LogMessage("Please follow these steps:");
         LogMessage("1. Select the input folder containing ISO files");
@@ -90,15 +90,7 @@ public partial class MainWindow : IDisposable
             Task.Run(() => Task.FromResult(_ = ReportBugAsync("extract-xiso.exe not found.")));
         }
 
-        var sevenZipPath = Path.Combine(appDirectory, "7z.exe");
-        if (File.Exists(sevenZipPath))
-        {
-            LogMessage("7z.exe found in the application directory. Archive extraction is available for CONVERSION.");
-        }
-        else
-        {
-            LogMessage("WARNING: 7z.exe not found. Archive extraction (ZIP, 7Z, RAR) will not be available for CONVERSION.");
-        }
+        LogMessage("Archive extraction (ZIP, 7Z, RAR) is available for CONVERSION using SevenZipExtractor library.");
     }
 
     private string? GetDriveLetter(string? path)
@@ -289,7 +281,6 @@ public partial class MainWindow : IDisposable
 
             var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
-            var sevenZipPath = Path.Combine(appDirectory, "7z.exe");
 
             if (!await Task.Run(() => File.Exists(extractXisoPath), _cts.Token))
             {
@@ -332,7 +323,7 @@ public partial class MainWindow : IDisposable
 
             try
             {
-                await PerformBatchConversionAsync(extractXisoPath, sevenZipPath, inputFolder, outputFolder, deleteFiles);
+                await PerformBatchConversionAsync(extractXisoPath, inputFolder, outputFolder, deleteFiles);
             }
             catch (OperationCanceledException)
             {
@@ -558,11 +549,10 @@ public partial class MainWindow : IDisposable
         return $"iso_{fileIndex:D6}.iso";
     }
 
-    private async Task PerformBatchConversionAsync(string extractXisoPath, string sevenZipPath, string inputFolder, string outputFolder, bool deleteOriginals)
+    private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals)
     {
         var tempFoldersToCleanUpAtEnd = new List<string>();
         var archivesFailedToExtractOrProcess = 0;
-        var sevenZipAvailable = await Task.Run(() => File.Exists(sevenZipPath), _cts.Token);
 
         var overallIsosSuccessfullyConverted = 0;
         var overallIsosSkipped = 0;
@@ -575,11 +565,6 @@ public partial class MainWindow : IDisposable
         _uiSkippedCount = 0;
         ProgressBar.Value = 0;
 
-        if (!sevenZipAvailable)
-        {
-            LogMessage("WARNING: 7z.exe not found. Archive processing will be skipped for conversion.");
-        }
-
         LogMessage("Scanning input folder for items to convert...");
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = true);
 
@@ -591,7 +576,7 @@ public partial class MainWindow : IDisposable
                         .Where(f =>
                         {
                             var ext = Path.GetExtension(f).ToLowerInvariant();
-                            return ext == ".iso" || (sevenZipAvailable && ext is ".zip" or ".7z" or ".rar");
+                            return ext is ".iso" or ".zip" or ".7z" or ".rar";
                         }).ToList(),
                 _cts.Token);
         }
@@ -653,7 +638,7 @@ public partial class MainWindow : IDisposable
                 UpdateSummaryStatsUi();
                 ProgressBar.Value = actualIsosProcessedForProgress;
             }
-            else if (sevenZipAvailable && entryExtension is ".zip" or ".7z" or ".rar")
+            else if (entryExtension is ".zip" or ".7z" or ".rar")
             {
                 LogMessage($"Processing archive: {entryFileName}...");
                 var statusesOfIsosInThisArchive = new List<FileProcessingStatus>();
@@ -666,7 +651,7 @@ public partial class MainWindow : IDisposable
                     await Task.Run(() => Directory.CreateDirectory(currentArchiveTempExtractionDir), _cts.Token);
                     tempFoldersToCleanUpAtEnd.Add(currentArchiveTempExtractionDir);
                     SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath()));
-                    archiveExtractedSuccessfully = await ExtractArchiveAsync(sevenZipPath, currentEntryPath, currentArchiveTempExtractionDir);
+                    archiveExtractedSuccessfully = await ExtractArchiveAsync(currentEntryPath, currentArchiveTempExtractionDir);
                     if (archiveExtractedSuccessfully)
                     {
                         var extractedIsoFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.iso", SearchOption.AllDirectories), _cts.Token);
@@ -735,7 +720,7 @@ public partial class MainWindow : IDisposable
                     if (deleteOriginals && archiveExtractedSuccessfully)
                     {
                         var allIsosFromArchiveOk = statusesOfIsosInThisArchive.Count > 0 &&
-                                                   statusesOfIsosInThisArchive.All(s => s is FileProcessingStatus.Converted or FileProcessingStatus.Skipped);
+                                                   statusesOfIsosInThisArchive.All(static s => s is FileProcessingStatus.Converted or FileProcessingStatus.Skipped);
                         if (allIsosFromArchiveOk)
                         {
                             LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
@@ -1515,85 +1500,21 @@ public partial class MainWindow : IDisposable
         }
     }
 
-    private async Task<bool> ExtractArchiveAsync(string sevenZipPath, string archivePath, string extractionPath)
+    private async Task<bool> ExtractArchiveAsync(string archivePath, string extractionPath)
     {
         var archiveFileName = Path.GetFileName(archivePath);
-        LogMessage($"Extracting: {archiveFileName} using 7z.exe to {extractionPath}");
-
-        var processOutputCollector = new StringBuilder();
-        Process? processRef;
-        CancellationTokenRegistration cancellationRegistration = default;
+        LogMessage($"Extracting: {archiveFileName} using SevenZipExtractor to {extractionPath}");
 
         try
         {
-            using var process = new Process();
-            processRef = process;
-            process.StartInfo = new ProcessStartInfo
+            await Task.Run(() =>
             {
-                FileName = sevenZipPath,
-                Arguments = $"x \"{archivePath}\" -o\"{extractionPath}\" -y -bso0 -bsp0",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
-            };
+                using var archiveFile = new SevenZipExtractor.ArchiveFile(archivePath);
+                archiveFile.Extract(extractionPath); // Extract all files
+            }, _cts.Token);
 
-            cancellationRegistration = _cts.Token.Register(() =>
-            {
-                try
-                {
-                    processRef?.Kill(true);
-                }
-                catch
-                {
-                    /* Ignore */
-                }
-            });
-
-            process.OutputDataReceived += (_, args) =>
-            {
-                if (args.Data == null) return;
-
-                lock (processOutputCollector)
-                {
-                    processOutputCollector.AppendLine(args.Data);
-                }
-            };
-            process.ErrorDataReceived += (_, args) =>
-            {
-                if (string.IsNullOrEmpty(args.Data)) return;
-
-                lock (processOutputCollector)
-                {
-                    processOutputCollector.AppendLine(CultureInfo.InvariantCulture, $"7z error: {args.Data}");
-                }
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            await process.WaitForExitAsync(_cts.Token);
-            _cts.Token.ThrowIfCancellationRequested();
-
-            var collectedOutput = processOutputCollector.ToString();
-            if (!string.IsNullOrWhiteSpace(collectedOutput))
-            {
-                LogMessage($"Output from 7z.exe for {archiveFileName}:\n{collectedOutput}");
-            }
-
-            if (process.ExitCode == 0)
-            {
-                LogMessage($"Successfully extracted: {archiveFileName}");
-                return true;
-            }
-            else
-            {
-                LogMessage($"7z.exe failed to extract {archiveFileName}. Exit Code: {process.ExitCode}.");
-                _ = ReportBugAsync($"7z.exe failed for {archiveFileName}. Exit: {process.ExitCode}", new Exception($"7z Output: {collectedOutput}"));
-                return false;
-            }
+            LogMessage($"Successfully extracted: {archiveFileName}");
+            return true;
         }
         catch (OperationCanceledException)
         {
@@ -1602,13 +1523,9 @@ public partial class MainWindow : IDisposable
         }
         catch (Exception ex)
         {
-            LogMessage($"Exception during extraction of {archiveFileName}: {ex.Message}");
-            _ = ReportBugAsync($"Exception extracting {archiveFileName}", ex);
+            LogMessage($"Error extracting {archiveFileName}: {ex.Message}");
+            _ = ReportBugAsync($"Error extracting {archiveFileName}", ex);
             return false;
-        }
-        finally
-        {
-            await cancellationRegistration.DisposeAsync();
         }
     }
 

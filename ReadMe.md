@@ -1,6 +1,6 @@
 # Batch Convert ISO to XISO
 
-A GUI application for **extract-xiso** that provides a simple Windows WPF interface for batch converting Xbox ISO files to the optimized XISO format and testing their integrity. This application supports both **Xbox 360 ISOs** and **original Xbox ISOs**. It also supports extracting and converting ISO files contained within ZIP, 7Z, and RAR archives using `7z.exe`.
+A GUI application for **extract-xiso** that provides a simple Windows WPF interface for batch converting Xbox ISO files to the optimized XISO format and testing their integrity. This application supports both **Xbox 360 ISOs** and **original Xbox ISOs**. It also supports extracting and converting ISO files contained within ZIP, 7Z, and RAR archives using the SevenZipExtractor library.
 
 ⭐ **If you find this tool useful, please give us a Star on GitHub!** ⭐
 
@@ -12,7 +12,11 @@ Batch Convert ISO to XISO is a Windows application that provides a user-friendly
 1.  Converting multiple Xbox ISO files to the XISO format.
 2.  Testing the integrity of Xbox ISO files.
 
-It leverages the functionality of the `extract-xiso` command-line tool for both conversion and testing. For conversions, it also integrates `7z.exe` to handle ISOs packaged within common archive formats (ZIP, 7Z, RAR), providing a streamlined batch processing experience. The application features real-time progress tracking, detailed summary statistics, and disk write speed monitoring.
+It leverages the functionality of the `extract-xiso` command-line tool for both conversion and testing.
+For conversions,
+it uses the SevenZipExtractor library to handle ISOs packaged within common archive formats (ZIP, 7Z, RAR),
+providing a streamlined batch processing experience.
+The application features real-time progress tracking, detailed summary statistics, and disk write speed monitoring.
 
 ## Features
 
@@ -23,8 +27,7 @@ It leverages the functionality of the `extract-xiso` command-line tool for both 
     *   Converts standard Xbox ISO images to the optimized XISO format using `extract-xiso -r`.
     *   Tests ISO integrity by attempting a full extraction using `extract-xiso -x`.
     *   Can also process existing XISO files (which `extract-xiso -r` will typically skip if already optimized during conversion).
-*   **Archive Support (for Conversion only)**: Automatically extracts ISO files from `.zip`, `.7z`, and `.rar` archives found in the input folder for conversion.
-*   **7-Zip Integration**: Uses `7z.exe` for `.7z`, `.zip`, and `.rar` extraction during the conversion process. `7z.exe` (and `7z.dll` if required) are included with the application release.
+*   **Archive Support (for Conversion only)**: Automatically extracts ISO files from `.zip`, `.7z`, and `.rar` archives found in the input folder for conversion using the SevenZipExtractor library.
 *   **Progress Tracking & Summary**:
     *   Real-time log messages detailing the status of each file.
     *   Overall progress bar.
@@ -96,9 +99,8 @@ XISO is the native disk image format used by Xbox consoles. It is essentially an
 
 ## Troubleshooting
 
-*   Ensure `extract-xiso.exe` and `7z.exe` (and `7z.dll` if needed) are present in the same directory as the application. `extract-xiso.exe` is crucial for both conversion and testing. `7z.exe` is needed for archive handling during conversion.
+*   Ensure `extract-xiso.exe` are present in the same directory as the application. `extract-xiso.exe` is crucial for both conversion and testing.
 *   Make sure you have appropriate read permissions for the input folder and write permissions for the output folder and temporary extraction folders.
-*   If `.zip`, `.7z`, or `.rar` extraction is failing during conversion, verify that `7z.exe` is not missing or corrupted.
 *   If ISO testing fails, the ISO might be corrupted or not a valid Xbox/Xbox 360 ISO image. Review the application log for detailed error messages from `extract-xiso`.
 *   Review the application log window for detailed error messages during any operation.
 *   Automatic error reports will be sent to the developer if unexpected issues occur.
@@ -107,7 +109,6 @@ XISO is the native disk image format used by Xbox consoles. It is essentially an
 
 *   This application is a **GUI wrapper for extract-xiso**. We extend our heartfelt thanks and acknowledgment to the **XboxDev team** for creating and maintaining the powerful `extract-xiso` command-line tool that makes this application possible. Without their excellent work, this GUI interface would not exist.
 *   Uses **extract-xiso** for the core ISO to XISO conversion and ISO integrity testing. [Find more information or source here (on GitHub)](https://github.com/XboxDev/extract-xiso).
-*   Uses **7-Zip** (`7z.exe`) for extracting `.zip`, `.7z`, and `.rar` archives during conversion. [Official 7-Zip website](https://www.7-zip.org/).
 *   Developed by [Pure Logic Code](https://www.purelogiccode.com).
 
 ---
