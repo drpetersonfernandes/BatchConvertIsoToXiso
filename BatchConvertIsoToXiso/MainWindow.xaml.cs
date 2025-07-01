@@ -6,6 +6,8 @@ using System.Text;
 using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Threading;
+using System.Windows.Controls;
+using SevenZipExtractor;
 
 namespace BatchConvertIsoToXiso;
 
@@ -20,7 +22,7 @@ public partial class MainWindow : IDisposable
     private const string ApplicationName = "BatchConvertIsoToXiso";
 
     // Summary Stats
-    private DateTime _conversionStartTime;
+    private DateTime _operationStartTime;
     private readonly DispatcherTimer _processingTimer;
     private int _uiTotalFiles;
     private int _uiSuccessCount;
@@ -63,26 +65,29 @@ public partial class MainWindow : IDisposable
         _processingTimer.Tick += ProcessingTimer_Tick;
         ResetSummaryStats();
 
-        // Set default for new checkbox
-        MoveFailedTestCheckBox.IsChecked = true; // Default to true to maintain previous behavior for failed files
+        DisplayInitialInstructions();
+    }
 
-        LogMessage("Welcome to the Batch Convert ISO to XISO.");
-        LogMessage("This program will convert original Redump ISO files (or within ZIP/7Z/RAR archives) to optimized Xbox XISO format using the extract-xiso tool.");
-        LogMessage("It can also test the integrity of ISO files by attempting a full extraction to a temporary location.");
-        LogMessage("Please follow these steps:");
-        LogMessage("1. Select the input folder containing ISO files");
-        LogMessage("2. For conversion (or moving successful tests), select the output folder");
-        LogMessage("3. For conversion, choose whether to delete original files after conversion");
-        LogMessage("4. For testing, choose options for moving tested files.");
-        LogMessage("5. Click 'Start Conversion' or 'Test ISOs'");
+    private void DisplayInitialInstructions()
+    {
+        LogMessage("Welcome to the Batch Convert ISO to XISO & Test Tool.");
+        LogMessage("");
+        LogMessage("This application provides two main functions, available in the tabs above:");
+        LogMessage("1. Convert to XISO: Converts standard Xbox ISO files to the optimized XISO format. It can also process ISOs found within .zip, .7z, and .rar archives.");
+        LogMessage("2. Test ISO Integrity: Verifies the integrity of your .iso files by attempting a full extraction to a temporary location.");
+        LogMessage("");
+        LogMessage("General Steps:");
+        LogMessage("- Select the appropriate tab for the operation you want to perform.");
+        LogMessage("- Use the 'Browse' buttons to select your source and destination folders.");
+        LogMessage("- Configure the options for your chosen operation.");
+        LogMessage("- Click the 'Start' button to begin.");
         LogMessage("");
 
         var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-
         var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
         if (File.Exists(extractXisoPath))
         {
-            LogMessage("extract-xiso.exe found in the application directory.");
+            LogMessage("INFO: extract-xiso.exe found in the application directory.");
         }
         else
         {
@@ -90,7 +95,14 @@ public partial class MainWindow : IDisposable
             Task.Run(() => Task.FromResult(_ = ReportBugAsync("extract-xiso.exe not found.")));
         }
 
-        LogMessage("Archive extraction (ZIP, 7Z, RAR) is available for CONVERSION using SevenZipExtractor library.");
+        LogMessage("INFO: Archive extraction uses the SevenZipExtractor library.");
+        LogMessage("--- Ready ---");
+    }
+
+    private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // The log is no longer cleared or updated when switching tabs to preserve the initial instructions.
+        if (e.Source is not TabControl) return;
     }
 
     private string? GetDriveLetter(string? path)
@@ -255,25 +267,52 @@ public partial class MainWindow : IDisposable
         });
     }
 
-    private void BrowseInputButton_Click(object sender, RoutedEventArgs e)
+    private void BrowseConversionInputButton_Click(object sender, RoutedEventArgs e)
     {
         var inputFolder = SelectFolder("Select the folder containing ISO or archive files");
         if (string.IsNullOrEmpty(inputFolder)) return;
 
-        InputFolderTextBox.Text = inputFolder;
-        LogMessage($"Input folder selected: {inputFolder}");
+        ConversionInputFolderTextBox.Text = inputFolder;
+        LogMessage($"Conversion input folder selected: {inputFolder}");
     }
 
-    private void BrowseOutputButton_Click(object sender, RoutedEventArgs e)
+    private void BrowseConversionOutputButton_Click(object sender, RoutedEventArgs e)
     {
         var outputFolder = SelectFolder("Select the output folder for converted XISO files");
         if (string.IsNullOrEmpty(outputFolder)) return;
 
-        OutputFolderTextBox.Text = outputFolder;
-        LogMessage($"Output folder selected: {outputFolder}");
+        ConversionOutputFolderTextBox.Text = outputFolder;
+        LogMessage($"Conversion output folder selected: {outputFolder}");
     }
 
-    private async void StartButton_Click(object sender, RoutedEventArgs e)
+    private void BrowseTestInputButton_Click(object sender, RoutedEventArgs e)
+    {
+        var inputFolder = SelectFolder("Select the folder containing ISO files to test");
+        if (string.IsNullOrEmpty(inputFolder)) return;
+
+        TestInputFolderTextBox.Text = inputFolder;
+        LogMessage($"Test input folder selected: {inputFolder}");
+    }
+
+    private void BrowseSuccessFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        var folder = SelectFolder("Select folder for successfully tested ISO files");
+        if (!string.IsNullOrEmpty(folder))
+        {
+            SuccessFolderTextBox.Text = folder;
+        }
+    }
+
+    private void BrowseFailedFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        var folder = SelectFolder("Select folder for failed ISO files");
+        if (!string.IsNullOrEmpty(folder))
+        {
+            FailedFolderTextBox.Text = folder;
+        }
+    }
+
+    private async void StartConversionButton_Click(object sender, RoutedEventArgs e)
     {
         try
         {
@@ -291,13 +330,20 @@ public partial class MainWindow : IDisposable
                 return;
             }
 
-            var inputFolder = InputFolderTextBox.Text;
-            var outputFolder = OutputFolderTextBox.Text;
-            var deleteFiles = DeleteFilesCheckBox.IsChecked ?? false;
+            var inputFolder = ConversionInputFolderTextBox.Text;
+            var outputFolder = ConversionOutputFolderTextBox.Text;
+            var deleteFiles = DeleteOriginalsCheckBox.IsChecked ?? false;
 
             if (string.IsNullOrEmpty(inputFolder) || string.IsNullOrEmpty(outputFolder))
             {
-                ShowError("Please select both input and output folders.");
+                ShowError("Please select both input and output folders for conversion.");
+                StopPerformanceCounter();
+                return;
+            }
+
+            if (inputFolder.Equals(outputFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                ShowError("Input and output folders must be different for conversion.");
                 StopPerformanceCounter();
                 return;
             }
@@ -315,11 +361,14 @@ public partial class MainWindow : IDisposable
             _currentOperationDrive = outputDrive;
             InitializePerformanceCounter(outputDrive);
 
-            _conversionStartTime = DateTime.Now;
+            _operationStartTime = DateTime.Now;
             _processingTimer.Start();
 
             SetControlsState(false);
-            LogMessage("Starting batch conversion process...");
+            LogMessage("--- Starting batch conversion process... ---");
+            LogMessage($"Input folder: {inputFolder}");
+            LogMessage($"Output folder: {outputFolder}");
+            LogMessage($"Delete original files: {deleteFiles}");
 
             try
             {
@@ -339,9 +388,10 @@ public partial class MainWindow : IDisposable
                 _processingTimer.Stop();
                 StopPerformanceCounter();
                 _currentOperationDrive = null; // Reset
-                var finalElapsedTime = DateTime.Now - _conversionStartTime;
+                var finalElapsedTime = DateTime.Now - _operationStartTime;
                 ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                 SetControlsState(true);
+                LogOperationSummary("Conversion");
             }
         }
         catch (Exception ex)
@@ -352,7 +402,7 @@ public partial class MainWindow : IDisposable
         }
     }
 
-    private async void TestIsosButton_Click(object sender, RoutedEventArgs e)
+    private async void StartTestButton_Click(object sender, RoutedEventArgs e)
     {
         try
         {
@@ -370,25 +420,47 @@ public partial class MainWindow : IDisposable
                 return;
             }
 
-            var inputFolder = InputFolderTextBox.Text;
-            var outputFolderForSuccessful = OutputFolderTextBox.Text; // Used if moving successful tests
-            var moveSuccessful = MoveSuccessfulTestCheckBox.IsChecked ?? false;
-            var moveFailed = MoveFailedTestCheckBox.IsChecked ?? false;
+            var inputFolder = TestInputFolderTextBox.Text;
+            var moveSuccessful = MoveSuccessFilesCheckBox.IsChecked == true;
+            var successFolder = SuccessFolderTextBox.Text;
+            var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
+            var failedFolder = FailedFolderTextBox.Text;
 
             if (string.IsNullOrEmpty(inputFolder))
             {
-                ShowError("Please select the input folder.");
+                ShowError("Please select the input folder for testing.");
                 StopPerformanceCounter();
                 return;
             }
 
-            if (moveSuccessful && string.IsNullOrEmpty(outputFolderForSuccessful))
+            if (moveSuccessful && string.IsNullOrEmpty(successFolder))
             {
-                ShowError("Output folder must be selected to move successfully tested files.");
+                ShowError("Please select a Success Folder or uncheck the option to move successful files.");
                 StopPerformanceCounter();
                 return;
             }
 
+            if (moveFailed && string.IsNullOrEmpty(failedFolder))
+            {
+                ShowError("Please select a Failed Folder or uncheck the option to move failed files.");
+                StopPerformanceCounter();
+                return;
+            }
+
+            if (moveSuccessful && moveFailed && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(failedFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                ShowError("Success Folder and Failed Folder cannot be the same.");
+                StopPerformanceCounter();
+                return;
+            }
+
+            if ((moveSuccessful && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(inputFolder, StringComparison.OrdinalIgnoreCase)) ||
+                (moveFailed && !string.IsNullOrEmpty(failedFolder) && failedFolder.Equals(inputFolder, StringComparison.OrdinalIgnoreCase)))
+            {
+                ShowError("Success/Failed folder cannot be the same as the Input folder.");
+                StopPerformanceCounter();
+                return;
+            }
 
             if (_cts.IsCancellationRequested)
             {
@@ -399,20 +471,22 @@ public partial class MainWindow : IDisposable
             ResetSummaryStats();
 
             // Writes occur in the system's temporary directory for testing, or output for successful moves
-            var initialDriveForMonitoring = moveSuccessful ? GetDriveLetter(outputFolderForSuccessful) : GetDriveLetter(Path.GetTempPath());
+            var initialDriveForMonitoring = moveSuccessful ? GetDriveLetter(successFolder) : GetDriveLetter(Path.GetTempPath());
             _currentOperationDrive = initialDriveForMonitoring; // Initial drive
             InitializePerformanceCounter(initialDriveForMonitoring);
 
-
-            _conversionStartTime = DateTime.Now;
+            _operationStartTime = DateTime.Now;
             _processingTimer.Start();
 
             SetControlsState(false);
-            LogMessage("Starting batch ISO test process (only direct .iso files)...");
+            LogMessage("--- Starting batch ISO test process... ---");
+            LogMessage($"Input folder: {inputFolder}");
+            if (moveSuccessful) LogMessage($"Moving successful files to: {successFolder}");
+            if (moveFailed) LogMessage($"Moving failed files to: {failedFolder}");
 
             try
             {
-                await PerformBatchIsoTestAsync(extractXisoPath, inputFolder, moveSuccessful, moveFailed, outputFolderForSuccessful);
+                await PerformBatchIsoTestAsync(extractXisoPath, inputFolder, moveSuccessful, successFolder, moveFailed, failedFolder);
             }
             catch (OperationCanceledException)
             {
@@ -428,9 +502,10 @@ public partial class MainWindow : IDisposable
                 _processingTimer.Stop();
                 StopPerformanceCounter();
                 _currentOperationDrive = null; // Reset
-                var finalElapsedTime = DateTime.Now - _conversionStartTime;
+                var finalElapsedTime = DateTime.Now - _operationStartTime;
                 ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                 SetControlsState(true);
+                LogOperationSummary("Test");
             }
         }
         catch (Exception ex)
@@ -449,21 +524,59 @@ public partial class MainWindow : IDisposable
 
     private void SetControlsState(bool enabled)
     {
-        InputFolderTextBox.IsEnabled = enabled;
-        OutputFolderTextBox.IsEnabled = enabled;
-        BrowseInputButton.IsEnabled = enabled;
-        BrowseOutputButton.IsEnabled = enabled;
-        DeleteFilesCheckBox.IsEnabled = enabled;
-        MoveSuccessfulTestCheckBox.IsEnabled = enabled;
-        MoveFailedTestCheckBox.IsEnabled = enabled;
-        StartButton.IsEnabled = enabled;
-        TestIsosButton.IsEnabled = enabled;
+        // Conversion Tab
+        ConversionInputFolderTextBox.IsEnabled = enabled;
+        BrowseConversionInputButton.IsEnabled = enabled;
+        ConversionOutputFolderTextBox.IsEnabled = enabled;
+        BrowseConversionOutputButton.IsEnabled = enabled;
+        DeleteOriginalsCheckBox.IsEnabled = enabled;
+        StartConversionButton.IsEnabled = enabled;
+
+        // Test Tab
+        TestInputFolderTextBox.IsEnabled = enabled;
+        BrowseTestInputButton.IsEnabled = enabled;
+        MoveSuccessFilesCheckBox.IsEnabled = enabled;
+        SuccessFolderTextBox.IsEnabled = enabled && (MoveSuccessFilesCheckBox.IsChecked == true);
+        BrowseSuccessFolderButton.IsEnabled = enabled && (MoveSuccessFilesCheckBox.IsChecked == true);
+        MoveFailedFilesCheckBox.IsEnabled = enabled;
+        FailedFolderTextBox.IsEnabled = enabled && (MoveFailedFilesCheckBox.IsChecked == true);
+        BrowseFailedFolderButton.IsEnabled = enabled && (MoveFailedFilesCheckBox.IsChecked == true);
+        StartTestButton.IsEnabled = enabled;
+
+        SuccessFolderPanel.IsEnabled = enabled;
+        FailedFolderPanel.IsEnabled = enabled;
+
+        // Main Window Controls
+        MainTabControl.IsEnabled = enabled;
         ProgressBar.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         CancelButton.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
-        if (enabled)
+
+        if (!enabled) return;
+
+        ProgressBar.IsIndeterminate = false;
+        ProgressBar.Value = 0;
+    }
+
+    private void MoveSuccessFilesCheckBox_CheckedUnchecked(object sender, RoutedEventArgs e)
+    {
+        if (SuccessFolderPanel == null)
         {
-            ProgressBar.IsIndeterminate = false;
+            return; // Control is not yet initialized, do nothing.
         }
+
+        SuccessFolderPanel.Visibility = MoveSuccessFilesCheckBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        SetControlsState(StartConversionButton.IsEnabled);
+    }
+
+    private void MoveFailedFilesCheckBox_CheckedUnchecked(object sender, RoutedEventArgs e)
+    {
+        if (FailedFolderPanel == null)
+        {
+            return; // Control is not yet initialized, do nothing.
+        }
+
+        FailedFolderPanel.Visibility = MoveFailedFilesCheckBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        SetControlsState(StartConversionButton.IsEnabled);
     }
 
     private static string? SelectFolder(string description)
@@ -513,7 +626,7 @@ public partial class MainWindow : IDisposable
 
     private void ProcessingTimer_Tick(object? sender, EventArgs e)
     {
-        var elapsedTime = DateTime.Now - _conversionStartTime;
+        var elapsedTime = DateTime.Now - _operationStartTime;
         ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
 
         if (_diskWriteSpeedCounter == null || string.IsNullOrEmpty(_activeMonitoringDriveLetter)) return;
@@ -553,10 +666,6 @@ public partial class MainWindow : IDisposable
     {
         var tempFoldersToCleanUpAtEnd = new List<string>();
         var archivesFailedToExtractOrProcess = 0;
-
-        var overallIsosSuccessfullyConverted = 0;
-        var overallIsosSkipped = 0;
-        var overallIsosFailed = 0;
         var actualIsosProcessedForProgress = 0;
         var failedConversionFilePaths = new List<string>();
 
@@ -591,7 +700,6 @@ public partial class MainWindow : IDisposable
         if (initialEntriesToProcess.Count == 0)
         {
             LogMessage("No ISO files or supported archives found in the input folder for conversion.");
-            ShowMessageBox("No ISO files or supported archives found for conversion.", "Process Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
             return;
         }
@@ -621,15 +729,12 @@ public partial class MainWindow : IDisposable
                 switch (status)
                 {
                     case FileProcessingStatus.Converted:
-                        overallIsosSuccessfullyConverted++;
                         _uiSuccessCount++;
                         break;
                     case FileProcessingStatus.Skipped:
-                        overallIsosSkipped++;
                         _uiSkippedCount++;
                         break;
                     case FileProcessingStatus.Failed:
-                        overallIsosFailed++;
                         _uiFailedCount++;
                         failedConversionFilePaths.Add(currentEntryPath);
                         break;
@@ -682,15 +787,12 @@ public partial class MainWindow : IDisposable
                             switch (status)
                             {
                                 case FileProcessingStatus.Converted:
-                                    overallIsosSuccessfullyConverted++;
                                     _uiSuccessCount++;
                                     break;
                                 case FileProcessingStatus.Skipped:
-                                    overallIsosSkipped++;
                                     _uiSkippedCount++;
                                     break;
                                 case FileProcessingStatus.Failed:
-                                    overallIsosFailed++;
                                     _uiFailedCount++;
                                     failedConversionFilePaths.Add(extractedIsoPath);
                                     break;
@@ -778,11 +880,10 @@ public partial class MainWindow : IDisposable
             ProgressBar.Value = ProgressBar.Maximum;
         }
 
-        LogMessage("\nBatch conversion summary:");
-        LogMessage($"Successfully converted: {overallIsosSuccessfullyConverted} ISO files");
-        LogMessage($"Skipped (already optimized): {overallIsosSkipped} ISO files");
-        LogMessage($"Failed to process: {overallIsosFailed} ISO files");
-        if (archivesFailedToExtractOrProcess > 0) LogMessage($"Archives failed to extract or had processing errors: {archivesFailedToExtractOrProcess}");
+        if (archivesFailedToExtractOrProcess > 0)
+        {
+            LogMessage($"Note: {archivesFailedToExtractOrProcess} archive(s) failed to extract or had processing errors.");
+        }
 
         if (failedConversionFilePaths.Count > 0)
         {
@@ -793,21 +894,11 @@ public partial class MainWindow : IDisposable
             }
         }
 
-        ShowMessageBox($"Batch conversion completed.\n\n" +
-                       $"Successfully converted: {overallIsosSuccessfullyConverted} ISO files\n" +
-                       $"Skipped (already optimized): {overallIsosSkipped} ISO files\n" +
-                       $"Failed to process: {overallIsosFailed} ISO files\n" +
-                       (archivesFailedToExtractOrProcess > 0 ? $"Archives failed to extract/process: {archivesFailedToExtractOrProcess}\n" : ""),
-            "Conversion Complete", MessageBoxButton.OK,
-            (overallIsosFailed > 0 || archivesFailedToExtractOrProcess > 0) ? MessageBoxImage.Warning : MessageBoxImage.Information);
-
         await CleanupTempFoldersAsync(tempFoldersToCleanUpAtEnd);
     }
 
-    private async Task PerformBatchIsoTestAsync(string extractXisoPath, string inputFolder, bool moveSuccessful, bool moveFailed, string? outputFolderForSuccessful)
+    private async Task PerformBatchIsoTestAsync(string extractXisoPath, string inputFolder, bool moveSuccessful, string? successFolder, bool moveFailed, string? failedFolder)
     {
-        var overallIsosTestPassed = 0;
-        var overallIsosTestFailed = 0;
         var actualIsosProcessedForProgress = 0;
         var failedIsoOriginalPaths = new List<string>(); // Keep track of original paths for logging
 
@@ -835,7 +926,6 @@ public partial class MainWindow : IDisposable
         if (isoFilesToTest.Count == 0)
         {
             LogMessage("No .iso files found in the input folder for testing.");
-            ShowMessageBox("No .iso files found for testing.", "Test Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
             return;
         }
@@ -863,92 +953,25 @@ public partial class MainWindow : IDisposable
 
             if (testStatus == IsoTestResultStatus.Passed)
             {
-                overallIsosTestPassed++;
                 _uiSuccessCount++;
                 LogMessage($"  SUCCESS: '{isoFileName}' passed test.");
 
-                if (moveSuccessful && !string.IsNullOrEmpty(outputFolderForSuccessful))
+                if (moveSuccessful && !string.IsNullOrEmpty(successFolder))
                 {
-                    SetCurrentOperationDrive(GetDriveLetter(outputFolderForSuccessful)); // Switch drive for move operation
-                    var destinationSuccessIsoPath = Path.Combine(outputFolderForSuccessful, isoFileName);
-                    try
-                    {
-                        await Task.Run(() => Directory.CreateDirectory(outputFolderForSuccessful), _cts.Token);
-                        _cts.Token.ThrowIfCancellationRequested();
-
-                        if (await Task.Run(() => File.Exists(isoFilePath), _cts.Token))
-                        {
-                            await Task.Run(() => File.Move(isoFilePath, destinationSuccessIsoPath, true), _cts.Token);
-                            LogMessage($"  Moved successfully tested ISO '{isoFileName}' to '{outputFolderForSuccessful}'.");
-                        }
-                        else
-                        {
-                            LogMessage($"  Source ISO '{isoFileName}' no longer found at original path. Cannot move.");
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        LogMessage($"  Move operation for successfully tested ISO '{isoFileName}' was canceled.");
-                        // No rethrow, main loop handles cancellation
-                    }
-                    catch (Exception ex)
-                    {
-                        LogMessage($"  Error moving successfully tested ISO '{isoFileName}' to '{outputFolderForSuccessful}': {ex.Message}");
-                        _ = ReportBugAsync($"Error moving successful ISO {isoFileName} to output", ex);
-                    }
-                }
-                else if (moveSuccessful) // Output folder was not provided
-                {
-                    LogMessage($"  Output folder not specified, successfully tested ISO '{isoFileName}' not moved.");
+                    SetCurrentOperationDrive(GetDriveLetter(successFolder)); // Switch drive for move operation
+                    await MoveTestedFileAsync(isoFilePath, successFolder, "successfully tested", _cts.Token);
                 }
             }
             else // IsoTestResultStatus.Failed
             {
-                overallIsosTestFailed++;
                 _uiFailedCount++;
                 failedIsoOriginalPaths.Add(isoFilePath); // Add original path before potential move
                 LogMessage($"  FAILURE: '{isoFileName}' failed test.");
 
-
-                if (moveFailed)
+                if (moveFailed && !string.IsNullOrEmpty(failedFolder))
                 {
-                    var originalDirectory = Path.GetDirectoryName(isoFilePath);
-                    if (originalDirectory != null)
-                    {
-                        SetCurrentOperationDrive(GetDriveLetter(originalDirectory)); // Switch drive for move operation
-                        var failedSubfolderPath = Path.Combine(originalDirectory, "Failed");
-                        var destinationFailedIsoPath = Path.Combine(failedSubfolderPath, isoFileName);
-
-                        try
-                        {
-                            await Task.Run(() => Directory.CreateDirectory(failedSubfolderPath), _cts.Token);
-                            _cts.Token.ThrowIfCancellationRequested();
-
-                            if (await Task.Run(() => File.Exists(isoFilePath), _cts.Token))
-                            {
-                                await Task.Run(() => File.Move(isoFilePath, destinationFailedIsoPath, true), _cts.Token);
-                                LogMessage($"  Moved failed ISO '{isoFileName}' to '{failedSubfolderPath}'.");
-                            }
-                            else
-                            {
-                                LogMessage($"  Source ISO '{isoFileName}' no longer found at original path. Cannot move to Failed folder.");
-                            }
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            LogMessage($"  Move operation for failed ISO '{isoFileName}' was canceled.");
-                            // No rethrow
-                        }
-                        catch (Exception ex)
-                        {
-                            LogMessage($"  Error moving failed ISO '{isoFileName}' to '{failedSubfolderPath}': {ex.Message}");
-                            _ = ReportBugAsync($"Error moving failed ISO {isoFileName} to Failed folder", ex);
-                        }
-                    }
-                }
-                else
-                {
-                    LogMessage($"  Failed ISO '{isoFileName}' not moved as per setting.");
+                    SetCurrentOperationDrive(GetDriveLetter(failedFolder)); // Switch drive for move operation
+                    await MoveTestedFileAsync(isoFilePath, failedFolder, "failed test", _cts.Token);
                 }
             }
 
@@ -961,52 +984,71 @@ public partial class MainWindow : IDisposable
             ProgressBar.Value = ProgressBar.Maximum;
         }
 
-        LogMessage("\nBatch ISO test summary:");
-        LogMessage($"ISOs passed test: {overallIsosTestPassed}");
-        LogMessage($"ISOs failed test: {overallIsosTestFailed}");
-
-        if (failedIsoOriginalPaths.Count > 0 && overallIsosTestFailed > 0) // Only log if there were actual failures
+        if (failedIsoOriginalPaths.Count > 0 && _uiFailedCount > 0)
         {
             LogMessage("\nList of ISOs that failed the test (original names):");
             foreach (var originalPath in failedIsoOriginalPaths)
             {
                 LogMessage($"- {Path.GetFileName(originalPath)}");
             }
-
-            if (moveFailed)
-            {
-                LogMessage("Note: Failed ISOs were attempted to be moved to a 'Failed' subfolder in their original directory if the option was selected.");
-            }
         }
 
-        if (moveSuccessful && overallIsosTestPassed > 0)
-        {
-            LogMessage("Note: Successfully tested ISOs were attempted to be moved to the output folder if the option was selected.");
-        }
-
-
-        if (overallIsosTestFailed > 0)
+        if (_uiFailedCount > 0)
         {
             LogMessage("Failed ISOs may be corrupted or not valid Xbox ISO images. Check individual logs for details from extract-xiso.");
         }
+    }
 
-        var summaryMessage = new StringBuilder();
-        summaryMessage.AppendLine("Batch ISO test completed.");
-        summaryMessage.AppendLine();
-        summaryMessage.AppendLine($"Passed: {overallIsosTestPassed} ISO files" + (moveSuccessful && overallIsosTestPassed > 0 ? " (attempted move to output)" : ""));
-        summaryMessage.AppendLine($"Failed: {overallIsosTestFailed} ISO files" + (moveFailed && overallIsosTestFailed > 0 ? " (attempted move to 'Failed' subfolder)" : ""));
+    private async Task MoveTestedFileAsync(string sourceFile, string destinationFolder, string moveReason, CancellationToken token)
+    {
+        var fileName = Path.GetFileName(sourceFile);
+        var destinationFile = Path.Combine(destinationFolder, fileName);
 
+        try
+        {
+            token.ThrowIfCancellationRequested();
 
-        ShowMessageBox(summaryMessage.ToString(),
-            "Test Complete", MessageBoxButton.OK,
-            overallIsosTestFailed > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            if (!await Task.Run(() => Directory.Exists(destinationFolder), token))
+            {
+                await Task.Run(() => Directory.CreateDirectory(destinationFolder), token);
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            if (await Task.Run(() => File.Exists(destinationFile), token))
+            {
+                LogMessage($"  Cannot move {fileName}: Destination file already exists at {destinationFile}. Skipping move.");
+                return;
+            }
+
+            if (!await Task.Run(() => File.Exists(sourceFile), token))
+            {
+                LogMessage($"  Cannot move {fileName}: Source file no longer exists. It may have already been moved.");
+                return;
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            await Task.Run(() => File.Move(sourceFile, destinationFile), token);
+            LogMessage($"  Moved {fileName} ({moveReason}) to {destinationFolder}");
+        }
+        catch (OperationCanceledException)
+        {
+            LogMessage($"  Move operation for {fileName} cancelled.");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogMessage($"  Error moving {fileName} to {destinationFolder}: {ex.Message}");
+            await ReportBugAsync($"Error moving tested file {fileName}", ex);
+        }
     }
 
     private async Task<IsoTestResultStatus> TestSingleIsoAsync(string extractXisoPath, string isoFilePath, int fileIndex)
     {
         var isoFileName = Path.GetFileName(isoFilePath);
         var tempExtractionDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_TestExtract", Guid.NewGuid().ToString());
-        string? simpleFilePath = null;
+        string? simpleFilePath;
 
         try
         {
@@ -1044,19 +1086,12 @@ public partial class MainWindow : IDisposable
             var simpleFilename = GenerateSimpleFilename(fileIndex);
             simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
 
-            LogMessage($"  Renaming '{isoFileName}' to simple filename '{simpleFilename}' for testing");
+            LogMessage($"  Copying '{isoFileName}' to simple filename '{simpleFilename}' for testing");
             await Task.Run(() => File.Copy(isoFilePath, simpleFilePath, true), _cts.Token);
 
             var extractionSuccess = await RunIsoExtractionToTempAsync(extractXisoPath, simpleFilePath, tempExtractionDir);
 
-            if (extractionSuccess)
-            {
-                return IsoTestResultStatus.Passed;
-            }
-            else
-            {
-                return IsoTestResultStatus.Failed;
-            }
+            return extractionSuccess ? IsoTestResultStatus.Passed : IsoTestResultStatus.Failed;
         }
         catch (OperationCanceledException)
         {
@@ -1071,23 +1106,7 @@ public partial class MainWindow : IDisposable
         }
         finally
         {
-            // Clean up simple filename copy
-            if (!string.IsNullOrEmpty(simpleFilePath))
-            {
-                try
-                {
-                    if (await Task.Run(() => File.Exists(simpleFilePath), CancellationToken.None))
-                    {
-                        await Task.Run(() => File.Delete(simpleFilePath), CancellationToken.None);
-                        LogMessage($"  Cleaned up simple filename copy: {Path.GetFileName(simpleFilePath)}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogMessage($"  Error cleaning up simple filename copy: {ex.Message}");
-                }
-            }
-
+            // Clean up temp dir which contains the simple file copy and any extracted contents
             try
             {
                 if (await Task.Run(() => Directory.Exists(tempExtractionDir), CancellationToken.None))
@@ -1509,7 +1528,7 @@ public partial class MainWindow : IDisposable
         {
             await Task.Run(() =>
             {
-                using var archiveFile = new SevenZipExtractor.ArchiveFile(archivePath);
+                using var archiveFile = new ArchiveFile(archivePath);
                 archiveFile.Extract(extractionPath); // Extract all files
             }, _cts.Token);
 
@@ -1570,6 +1589,35 @@ public partial class MainWindow : IDisposable
         {
             LogMessage($"Error deleting file {Path.GetFileName(filePath)}: {ex.Message}");
         }
+    }
+
+    private void LogOperationSummary(string operationType)
+    {
+        LogMessage("");
+        LogMessage($"--- Batch {operationType.ToLowerInvariant()} completed. ---");
+        LogMessage($"Total files processed: {_uiTotalFiles}");
+        LogMessage($"Successfully {GetPastTense(operationType)}: {_uiSuccessCount} files");
+        LogMessage($"Skipped: {_uiSkippedCount} files");
+        if (_uiFailedCount > 0) LogMessage($"Failed to {operationType.ToLowerInvariant()}: {_uiFailedCount} files");
+
+        Application.Current.Dispatcher.InvokeAsync(() =>
+            ShowMessageBox($"Batch {operationType.ToLowerInvariant()} completed.\n\n" +
+                           $"Total files processed: {_uiTotalFiles}\n" +
+                           $"Successfully {GetPastTense(operationType)}: {_uiSuccessCount} files\n" +
+                           $"Skipped: {_uiSkippedCount} files\n" +
+                           $"Failed: {_uiFailedCount} files",
+                $"{operationType} Complete", MessageBoxButton.OK,
+                _uiFailedCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information));
+    }
+
+    private string GetPastTense(string verb)
+    {
+        return verb.ToLowerInvariant() switch
+        {
+            "conversion" => "converted",
+            "test" => "tested",
+            _ => verb.ToLowerInvariant() + "ed"
+        };
     }
 
     private void ShowMessageBox(string message, string title, MessageBoxButton buttons, MessageBoxImage icon)
