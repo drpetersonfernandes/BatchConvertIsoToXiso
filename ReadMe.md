@@ -50,7 +50,7 @@ The application features real-time progress tracking, detailed summary statistic
 ## Requirements
 
 *   Windows 7 or later
-*   [.NET 9.0 Runtime](https://dotnet.microsoft.com/download/dotnet/9.0) (or the .NET version the release was built with, check release notes)
+*   [.NET 9.0 Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
 
 ## Installation
 
