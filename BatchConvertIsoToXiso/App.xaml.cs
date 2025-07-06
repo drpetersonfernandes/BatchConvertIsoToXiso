@@ -1,6 +1,9 @@
 ﻿using System.Text;
 using System.Windows.Threading;
 using System.Globalization;
+using System.IO;
+using System.Windows;
+using SevenZip;
 
 namespace BatchConvertIsoToXiso;
 
@@ -8,7 +11,7 @@ namespace BatchConvertIsoToXiso;
 /// <summary>
 /// Interaction logic for App.xaml
 /// </summary>
-public partial class App : IDisposable
+public partial class App
 {
     // Bug Report API configuration
     private const string BugReportApiUrl = "https://www.purelogiccode.com/bugreport/api/send-bug-report";
@@ -26,6 +29,9 @@ public partial class App : IDisposable
         AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
         DispatcherUnhandledException += App_DispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+
+        // Initialize SevenZipSharp library path
+        InitializeSevenZipSharp();
     }
 
     private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
@@ -48,7 +54,7 @@ public partial class App : IDisposable
         e.SetObserved();
     }
 
-    private async void ReportException(Exception exception, string source)
+    private void ReportException(Exception exception, string source)
     {
         try
         {
@@ -57,7 +63,7 @@ public partial class App : IDisposable
             // Silently report the exception to our API
             if (_bugReportService != null)
             {
-                await _bugReportService.SendBugReportAsync(message);
+                _ = _bugReportService.SendBugReportAsync(message);
             }
         }
         catch
@@ -107,7 +113,41 @@ public partial class App : IDisposable
         }
     }
 
-    public void Dispose()
+    private void InitializeSevenZipSharp()
+    {
+        try
+        {
+            // Determine the path to the 7z.dll based on the process architecture.
+            var dllName = Environment.Is64BitProcess ? "7z_x64.dll" : "7z_x86.dll";
+            var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
+
+            if (File.Exists(dllPath))
+            {
+                SevenZipBase.SetLibraryPath(dllPath);
+            }
+            else
+            {
+                // Notify developer
+                // If the specific DLL is not found, log an error. Extraction will likely fail.
+                var errorMessage = $"Could not find the required 7-Zip library: {dllName} in {AppDomain.CurrentDomain.BaseDirectory}";
+
+                if (_bugReportService != null)
+                {
+                    _ = _bugReportService.SendBugReportAsync(errorMessage);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Notify developer
+            if (_bugReportService != null)
+            {
+                _ = _bugReportService.SendBugReportAsync(ex.Message);
+            }
+        }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
     {
         // Clean up event handlers
         AppDomain.CurrentDomain.UnhandledException -= CurrentDomain_UnhandledException;
@@ -117,7 +157,6 @@ public partial class App : IDisposable
         // Dispose the bug report service
         _bugReportService?.Dispose();
 
-        // Suppress finalization
-        GC.SuppressFinalize(this);
+        base.OnExit(e);
     }
 }

@@ -7,7 +7,7 @@ using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Threading;
 using System.Windows.Controls;
-using SevenZipExtractor;
+using SevenZip;
 
 namespace BatchConvertIsoToXiso;
 
@@ -15,6 +15,7 @@ public partial class MainWindow : IDisposable
 {
     private CancellationTokenSource _cts;
     private readonly BugReportService _bugReportService;
+    private readonly UpdateChecker _updateChecker;
 
     // Bug Report API configuration
     private const string BugReportApiUrl = "https://www.purelogiccode.com/bugreport/api/send-bug-report";
@@ -60,12 +61,15 @@ public partial class MainWindow : IDisposable
 
         _cts = new CancellationTokenSource();
         _bugReportService = new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName);
+        _updateChecker = new UpdateChecker();
 
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _processingTimer.Tick += ProcessingTimer_Tick;
         ResetSummaryStats();
 
         DisplayInitialInstructions();
+
+        Loaded += async (s, e) => await CheckForUpdatesAsync();
     }
 
     private void DisplayInitialInstructions()
@@ -294,24 +298,6 @@ public partial class MainWindow : IDisposable
         LogMessage($"Test input folder selected: {inputFolder}");
     }
 
-    private void BrowseSuccessFolderButton_Click(object sender, RoutedEventArgs e)
-    {
-        var folder = SelectFolder("Select folder for successfully tested ISO files");
-        if (!string.IsNullOrEmpty(folder))
-        {
-            SuccessFolderTextBox.Text = folder;
-        }
-    }
-
-    private void BrowseFailedFolderButton_Click(object sender, RoutedEventArgs e)
-    {
-        var folder = SelectFolder("Select folder for failed ISO files");
-        if (!string.IsNullOrEmpty(folder))
-        {
-            FailedFolderTextBox.Text = folder;
-        }
-    }
-
     private async void StartConversionButton_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -365,6 +351,7 @@ public partial class MainWindow : IDisposable
             _processingTimer.Start();
 
             SetControlsState(false);
+            UpdateStatus("Starting batch conversion...");
             LogMessage("--- Starting batch conversion process... ---");
             LogMessage($"Input folder: {inputFolder}");
             LogMessage($"Output folder: {outputFolder}");
@@ -377,10 +364,12 @@ public partial class MainWindow : IDisposable
             catch (OperationCanceledException)
             {
                 LogMessage("Operation was canceled by user.");
+                UpdateStatus("Operation cancelled. Ready.");
             }
             catch (Exception ex)
             {
                 LogMessage($"Critical Error: {ex.Message}");
+                UpdateStatus("An error occurred. Ready.");
                 _ = ReportBugAsync("Critical error during batch conversion process", ex);
             }
             finally
@@ -392,6 +381,7 @@ public partial class MainWindow : IDisposable
                 ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                 SetControlsState(true);
                 LogOperationSummary("Conversion");
+                UpdateStatus("Conversion complete. Ready.");
             }
         }
         catch (Exception ex)
@@ -422,9 +412,9 @@ public partial class MainWindow : IDisposable
 
             var inputFolder = TestInputFolderTextBox.Text;
             var moveSuccessful = MoveSuccessFilesCheckBox.IsChecked == true;
-            var successFolder = SuccessFolderTextBox.Text;
+            var successFolder = Path.Combine(inputFolder, "_success");
             var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
-            var failedFolder = FailedFolderTextBox.Text;
+            var failedFolder = Path.Combine(inputFolder, "_failed");
 
             if (string.IsNullOrEmpty(inputFolder))
             {
@@ -479,6 +469,7 @@ public partial class MainWindow : IDisposable
             _processingTimer.Start();
 
             SetControlsState(false);
+            UpdateStatus("Starting batch ISO test...");
             LogMessage("--- Starting batch ISO test process... ---");
             LogMessage($"Input folder: {inputFolder}");
             if (moveSuccessful) LogMessage($"Moving successful files to: {successFolder}");
@@ -491,10 +482,12 @@ public partial class MainWindow : IDisposable
             catch (OperationCanceledException)
             {
                 LogMessage("Operation was canceled by user.");
+                UpdateStatus("Operation cancelled. Ready.");
             }
             catch (Exception ex)
             {
                 LogMessage($"Critical Error during ISO test: {ex.Message}");
+                UpdateStatus("An error occurred. Ready.");
                 _ = ReportBugAsync("Critical error during batch ISO test process", ex);
             }
             finally
@@ -506,6 +499,7 @@ public partial class MainWindow : IDisposable
                 ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
                 SetControlsState(true);
                 LogOperationSummary("Test");
+                UpdateStatus("Test complete. Ready.");
             }
         }
         catch (Exception ex)
@@ -536,11 +530,7 @@ public partial class MainWindow : IDisposable
         TestInputFolderTextBox.IsEnabled = enabled;
         BrowseTestInputButton.IsEnabled = enabled;
         MoveSuccessFilesCheckBox.IsEnabled = enabled;
-        SuccessFolderTextBox.IsEnabled = enabled && (MoveSuccessFilesCheckBox.IsChecked == true);
-        BrowseSuccessFolderButton.IsEnabled = enabled && (MoveSuccessFilesCheckBox.IsChecked == true);
         MoveFailedFilesCheckBox.IsEnabled = enabled;
-        FailedFolderTextBox.IsEnabled = enabled && (MoveFailedFilesCheckBox.IsChecked == true);
-        BrowseFailedFolderButton.IsEnabled = enabled && (MoveFailedFilesCheckBox.IsChecked == true);
         StartTestButton.IsEnabled = enabled;
 
         SuccessFolderPanel.IsEnabled = enabled;
@@ -555,6 +545,10 @@ public partial class MainWindow : IDisposable
 
         ProgressBar.IsIndeterminate = false;
         ProgressBar.Value = 0;
+        if (ProgressTextBlock != null)
+        {
+            ProgressTextBlock.Text = "";
+        }
     }
 
     private void MoveSuccessFilesCheckBox_CheckedUnchecked(object sender, RoutedEventArgs e)
@@ -592,11 +586,7 @@ public partial class MainWindow : IDisposable
         _uiFailedCount = 0;
         _uiSkippedCount = 0;
         UpdateSummaryStatsUi();
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            ProgressBar.Value = 0;
-            ProgressBar.Maximum = 1;
-        });
+        UpdateProgressUi(0, 0);
         ProcessingTimeValue.Text = "00:00:00";
         if (!_processingTimer.IsEnabled)
         {
@@ -604,7 +594,7 @@ public partial class MainWindow : IDisposable
         }
     }
 
-    private void UpdateSummaryStatsUi(int? newTotalFiles = null, int? newProgressMax = null)
+    private void UpdateSummaryStatsUi(int? newTotalFiles = null)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -617,10 +607,6 @@ public partial class MainWindow : IDisposable
             SuccessValue.Text = _uiSuccessCount.ToString(CultureInfo.InvariantCulture);
             FailedValue.Text = _uiFailedCount.ToString(CultureInfo.InvariantCulture);
             SkippedValue.Text = _uiSkippedCount.ToString(CultureInfo.InvariantCulture);
-            if (newProgressMax.HasValue)
-            {
-                ProgressBar.Maximum = newProgressMax.Value > 0 ? newProgressMax.Value : 1;
-            }
         });
     }
 
@@ -656,6 +642,38 @@ public partial class MainWindow : IDisposable
         }
     }
 
+    private void UpdateStatus(string message)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (StatusTextBlock != null)
+            {
+                StatusTextBlock.Text = message;
+            }
+        });
+    }
+
+    private void UpdateProgressUi(int current, int total)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (ProgressBar == null || ProgressTextBlock == null) return;
+
+            ProgressBar.Maximum = total > 0 ? total : 1;
+            ProgressBar.Value = current;
+
+            if (total > 0 && ProgressBar.Visibility == Visibility.Visible)
+            {
+                var percentage = ((double)current / total) * 100;
+                ProgressTextBlock.Text = $"{current} of {total} ({percentage:F0}%)";
+            }
+            else
+            {
+                ProgressTextBlock.Text = "";
+            }
+        });
+    }
+
     // Helper method to generate a simple filename for extract-xiso processing
     private static string GenerateSimpleFilename(int fileIndex)
     {
@@ -672,7 +690,6 @@ public partial class MainWindow : IDisposable
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
         _uiSkippedCount = 0;
-        ProgressBar.Value = 0;
 
         LogMessage("Scanning input folder for items to convert...");
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = true);
@@ -706,7 +723,8 @@ public partial class MainWindow : IDisposable
 
         LogMessage($"Found {initialEntriesToProcess.Count} top-level items (ISOs or archives) for conversion.");
         var currentExpectedTotalIsos = initialEntriesToProcess.Count;
-        UpdateSummaryStatsUi(currentExpectedTotalIsos, currentExpectedTotalIsos);
+        UpdateSummaryStatsUi(currentExpectedTotalIsos);
+        UpdateProgressUi(0, currentExpectedTotalIsos);
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
         LogMessage($"Starting conversion... Total items to process initially: {currentExpectedTotalIsos}. This may increase if archives contain multiple ISOs.");
 
@@ -717,6 +735,7 @@ public partial class MainWindow : IDisposable
             _cts.Token.ThrowIfCancellationRequested();
 
             var entryFileName = Path.GetFileName(currentEntryPath);
+            UpdateStatus($"Processing: {entryFileName}");
             var entryExtension = Path.GetExtension(currentEntryPath).ToLowerInvariant();
 
             if (entryExtension == ".iso")
@@ -741,7 +760,7 @@ public partial class MainWindow : IDisposable
                 }
 
                 UpdateSummaryStatsUi();
-                ProgressBar.Value = actualIsosProcessedForProgress;
+                UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
             }
             else if (entryExtension is ".zip" or ".7z" or ".rar")
             {
@@ -764,14 +783,15 @@ public partial class MainWindow : IDisposable
                         {
                             var newIsosFound = extractedIsoFiles.Length;
                             currentExpectedTotalIsos += (newIsosFound - 1);
-                            UpdateSummaryStatsUi(currentExpectedTotalIsos, currentExpectedTotalIsos);
+                            UpdateSummaryStatsUi(currentExpectedTotalIsos);
+                            UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                             LogMessage($"Found {newIsosFound} ISO(s) in {entryFileName}. Total expected ISOs now: {currentExpectedTotalIsos}. Processing them now...");
                         }
                         else if (extractedIsoFiles.Length == 0)
                         {
                             LogMessage($"No ISO files found in archive: {entryFileName}.");
                             actualIsosProcessedForProgress++;
-                            ProgressBar.Value = actualIsosProcessedForProgress;
+                            UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                         }
 
                         foreach (var extractedIsoPath in extractedIsoFiles)
@@ -799,7 +819,7 @@ public partial class MainWindow : IDisposable
                             }
 
                             UpdateSummaryStatsUi();
-                            ProgressBar.Value = actualIsosProcessedForProgress;
+                            UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                         }
 
                         if (extractedIsoFiles.Length == 0)
@@ -816,7 +836,7 @@ public partial class MainWindow : IDisposable
                         actualIsosProcessedForProgress++;
                         _uiFailedCount++;
                         UpdateSummaryStatsUi();
-                        ProgressBar.Value = actualIsosProcessedForProgress;
+                        UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                     }
 
                     if (deleteOriginals && archiveExtractedSuccessfully)
@@ -853,7 +873,7 @@ public partial class MainWindow : IDisposable
                         actualIsosProcessedForProgress++;
                         _uiFailedCount++;
                         UpdateSummaryStatsUi();
-                        ProgressBar.Value = actualIsosProcessedForProgress;
+                        UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                     }
                 }
                 finally
@@ -875,9 +895,9 @@ public partial class MainWindow : IDisposable
             }
         }
 
-        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= ProgressBar.Maximum)
+        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= currentExpectedTotalIsos)
         {
-            ProgressBar.Value = ProgressBar.Maximum;
+            UpdateProgressUi(currentExpectedTotalIsos, currentExpectedTotalIsos);
         }
 
         if (archivesFailedToExtractOrProcess > 0)
@@ -905,7 +925,6 @@ public partial class MainWindow : IDisposable
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
         _uiSkippedCount = 0; // Not used by test, but reset for consistency
-        ProgressBar.Value = 0;
 
         LogMessage("Scanning input folder for .iso files to test...");
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = true);
@@ -931,7 +950,8 @@ public partial class MainWindow : IDisposable
         }
 
         LogMessage($"Found {isoFilesToTest.Count} .iso files for testing.");
-        UpdateSummaryStatsUi(isoFilesToTest.Count, isoFilesToTest.Count);
+        UpdateSummaryStatsUi(isoFilesToTest.Count);
+        UpdateProgressUi(0, isoFilesToTest.Count);
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
         LogMessage($"Starting test... Total .iso files to test: {isoFilesToTest.Count}.");
 
@@ -942,6 +962,7 @@ public partial class MainWindow : IDisposable
             _cts.Token.ThrowIfCancellationRequested();
             var isoFileName = Path.GetFileName(isoFilePath);
 
+            UpdateStatus($"Testing: {isoFileName}");
             LogMessage($"Testing ISO: {isoFileName}...");
 
             // Drive for testing (temp) vs. moving successful (output)
@@ -976,12 +997,12 @@ public partial class MainWindow : IDisposable
             }
 
             UpdateSummaryStatsUi();
-            ProgressBar.Value = actualIsosProcessedForProgress;
+            UpdateProgressUi(actualIsosProcessedForProgress, isoFilesToTest.Count);
         }
 
-        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= ProgressBar.Maximum)
+        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= isoFilesToTest.Count)
         {
-            ProgressBar.Value = ProgressBar.Maximum;
+            UpdateProgressUi(isoFilesToTest.Count, isoFilesToTest.Count);
         }
 
         if (failedIsoOriginalPaths.Count > 0 && _uiFailedCount > 0)
@@ -1311,25 +1332,27 @@ public partial class MainWindow : IDisposable
 
             await Task.Run(() => Directory.CreateDirectory(outputFolder), _cts.Token);
             var destinationPath = Path.Combine(outputFolder, originalFileName); // Use original filename for destination
+            var isTemporaryFileFromArchive = inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase);
 
             if (toolResult == ConversionToolResultStatus.Skipped)
             {
                 LogMessage($"{logPrefix} Already optimized. Copying to output with original filename.");
+                await Task.Run(() => Directory.CreateDirectory(outputFolder), _cts.Token);
 
-                // Copy the simple filename file to destination with original name
+                // Copy the file to the destination
                 await Task.Run(() => File.Copy(simpleFilePath, destinationPath, true), _cts.Token);
 
-                // Clean up simple filename file
-                await Task.Run(() => File.Delete(simpleFilePath), _cts.Token);
-
-                if (!deleteOriginalIsoFile ||
-                    inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase))
+                // Now, handle the original file (which is currently at simpleFilePath)
+                if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
                 {
-                    // Don't delete original for temp files or when deletion is disabled
+                    LogMessage($"{logPrefix} Deleting original file as requested.");
+                    await Task.Run(() => File.Delete(simpleFilePath), _cts.Token);
                 }
                 else
                 {
-                    LogMessage($"{logPrefix} Original file was processed successfully (skipped).");
+                    // If we're not deleting, we must restore the original file by moving the simple-named file back.
+                    LogMessage($"{logPrefix} Restoring original filename.");
+                    await Task.Run(() => File.Move(simpleFilePath, inputFile, true), _cts.Token);
                 }
 
                 return FileProcessingStatus.Skipped;
@@ -1341,8 +1364,6 @@ public partial class MainWindow : IDisposable
 
             LogMessage($"{logPrefix} Moving converted file to output with original filename: {destinationPath}");
             await Task.Run(() => File.Move(convertedFilePath, destinationPath, true), _cts.Token);
-
-            var isTemporaryFileFromArchive = inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase);
 
             // Handle backup file cleanup
             if (await Task.Run(() => File.Exists(originalBackupPath), _cts.Token))
@@ -1528,8 +1549,8 @@ public partial class MainWindow : IDisposable
         {
             await Task.Run(() =>
             {
-                using var archiveFile = new ArchiveFile(archivePath);
-                archiveFile.Extract(extractionPath); // Extract all files
+                using var extractor = new SevenZipExtractor(archivePath);
+                extractor.ExtractArchive(extractionPath); // Extract all files
             }, _cts.Token);
 
             LogMessage($"Successfully extracted: {archiveFileName}");
@@ -1692,6 +1713,54 @@ public partial class MainWindow : IDisposable
             }
 
             break;
+        }
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        try
+        {
+            var (isNewVersionAvailable, latestVersion, downloadUrl) = await _updateChecker.CheckForUpdateAsync();
+
+            if (isNewVersionAvailable && !string.IsNullOrEmpty(downloadUrl) && !string.IsNullOrEmpty(latestVersion))
+            {
+                var result = MessageBox.Show(
+                    this,
+                    $"A new version ({latestVersion}) is available. Would you like to go to the download page?",
+                    "Update Available",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    OpenUrl(downloadUrl);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log and report the error, but don't bother the user.
+            LogMessage($"Error checking for updates: {ex.Message}");
+            _ = ReportBugAsync("Error during update check", ex);
+        }
+    }
+
+    private void OpenUrl(string url)
+    {
+        try
+        {
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+            process?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            LogMessage($"Error opening URL: {url}. Exception: {ex.Message}");
+            _ = ReportBugAsync($"Error opening URL: {url}", ex);
+            ShowError($"Unable to open link: {ex.Message}");
         }
     }
 

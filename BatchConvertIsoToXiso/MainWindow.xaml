@@ -12,6 +12,7 @@
             <RowDefinition Height="*" />    <!-- 2: LogViewer -->
             <RowDefinition Height="Auto" /> <!-- 3: Summary Stats -->
             <RowDefinition Height="Auto" /> <!-- 4: Progress Bar Grid -->
+            <RowDefinition Height="Auto" /> <!-- 5: StatusBar -->
         </Grid.RowDefinitions>
 
         <!-- Menu Bar -->
@@ -83,16 +84,13 @@
                     </Grid>
 
                     <!-- Test Options -->
-                    <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to Success Folder" Margin="0,10,0,0" HorizontalAlignment="Left" Checked="MoveSuccessFilesCheckBox_CheckedUnchecked" Unchecked="MoveSuccessFilesCheckBox_CheckedUnchecked"/>
+                    <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to Success Folder" Margin="0,10,0,0" HorizontalAlignment="Left" Checked="MoveSuccessFilesCheckBox_CheckedUnchecked" Unchecked="MoveSuccessFilesCheckBox_CheckedUnchecked" IsChecked="True"/>
                     <Grid x:Name="SuccessFolderPanel" Margin="20,0,0,5" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="100"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Label Grid.Column="0" Content="Success Folder:" VerticalAlignment="Center"/>
-                        <TextBox x:Name="SuccessFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True"/>
-                        <Button x:Name="BrowseSuccessFolderButton" Grid.Column="2" Content="Browse" Click="BrowseSuccessFolderButton_Click" Padding="10,5"/>
                     </Grid>
 
                     <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to Failed Folder" Margin="0,10,0,0" HorizontalAlignment="Left" Checked="MoveFailedFilesCheckBox_CheckedUnchecked" Unchecked="MoveFailedFilesCheckBox_CheckedUnchecked" IsChecked="True"/>
@@ -102,9 +100,6 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Label Grid.Column="0" Content="Failed Folder:" VerticalAlignment="Center"/>
-                        <TextBox x:Name="FailedFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True"/>
-                        <Button x:Name="BrowseFailedFolderButton" Grid.Column="2" Content="Browse" Click="BrowseFailedFolderButton_Click" Padding="10,5"/>
                     </Grid>
                     
                     <!-- Test Action Button -->
@@ -195,5 +190,25 @@
                     Visibility="Collapsed"
                     Click="CancelButton_Click" />
         </Grid>
+
+        <!-- StatusBar -->
+        <StatusBar Grid.Row="5">
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+            <StatusBarItem Grid.Column="0">
+                <TextBlock x:Name="StatusTextBlock" Text="Ready" Margin="2,0"/>
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="1">
+                <TextBlock x:Name="ProgressTextBlock" Margin="2,0"/>
+            </StatusBarItem>
+        </StatusBar>
     </Grid>
 </Window>
