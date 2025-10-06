@@ -178,38 +178,28 @@ public partial class MainWindow : IDisposable
             return;
         }
 
-        // Performance counter instance name is typically "C:", "D:", etc.
         var perfCounterInstanceName = driveLetter.EndsWith(':') ? driveLetter : driveLetter + ":";
 
         try
         {
-            if (!PerformanceCounterCategory.InstanceExists(perfCounterInstanceName, "LogicalDisk"))
+            // First, check if the category exists. If not, we can't proceed.
+            if (!PerformanceCounterCategory.Exists("LogicalDisk"))
             {
-                LogMessage($"Performance counter instance '{perfCounterInstanceName}' not found for 'LogicalDisk'. Cannot monitor write speed for this drive.");
-                try
-                {
-                    var category = new PerformanceCounterCategory("LogicalDisk");
-                    var availableInstances = category.GetInstanceNames();
-                    if (availableInstances.Length > 0)
-                    {
-                        LogMessage($"Available LogicalDisk instances: {string.Join(", ", availableInstances)}");
-                    }
-                    else
-                    {
-                        LogMessage("No LogicalDisk instances found or accessible.");
-                    }
-                }
-                catch (Exception diagEx)
-                {
-                    LogMessage($"Error getting available LogicalDisk instances: {diagEx.Message}");
-                }
-
-                Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A (No Instance)");
-                _activeMonitoringDriveLetter = null;
+                LogMessage($"Performance counter category 'LogicalDisk' does not exist. Cannot monitor write speed for drive {perfCounterInstanceName}.");
+                Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A (Category Missing)");
                 return;
             }
 
-            _diskWriteSpeedCounter = new PerformanceCounter("LogicalDisk", "Disk Write Bytes/sec", perfCounterInstanceName, true); // true for read-only
+            // Now, check if the specific instance exists for the given drive letter.
+            if (!PerformanceCounterCategory.InstanceExists(perfCounterInstanceName, "LogicalDisk"))
+            {
+                LogMessage($"Performance counter instance '{perfCounterInstanceName}' not found for 'LogicalDisk'. Cannot monitor write speed for this drive.");
+                Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A (Instance Missing)");
+                return;
+            }
+
+            // If both category and instance exist, proceed with creating the counter.
+            _diskWriteSpeedCounter = new PerformanceCounter("LogicalDisk", "Disk Write Bytes/sec", perfCounterInstanceName, true);
             _diskWriteSpeedCounter.NextValue(); // Initial call to prime the counter
             _activeMonitoringDriveLetter = driveLetter;
             LogMessage($"Monitoring write speed for drive: {perfCounterInstanceName}");
@@ -217,6 +207,7 @@ public partial class MainWindow : IDisposable
         }
         catch (InvalidOperationException ex)
         {
+            // This catch block should now primarily handle issues during counter creation/access after existence checks.
             LogMessage($"Error initializing performance counter for drive {perfCounterInstanceName}: {ex.Message}. Write speed monitoring disabled.");
             _ = ReportBugAsync($"PerfCounter Init InvalidOpExc for {perfCounterInstanceName}", ex);
             _diskWriteSpeedCounter?.Dispose();
@@ -226,6 +217,7 @@ public partial class MainWindow : IDisposable
         }
         catch (Exception ex)
         {
+            // Catch any other unexpected exceptions during initialization.
             LogMessage($"Unexpected error initializing performance counter for drive {perfCounterInstanceName}: {ex.Message}. Write speed monitoring disabled.");
             _ = ReportBugAsync($"PerfCounter Init GenericExc for {perfCounterInstanceName}", ex);
             _diskWriteSpeedCounter?.Dispose();
