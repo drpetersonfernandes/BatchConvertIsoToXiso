@@ -3,10 +3,6 @@ using System.Net.Http.Json;
 
 namespace BatchConvertIsoToXiso;
 
-/// <inheritdoc />
-/// <summary>
-/// Service responsible for silently sending bug reports to the BugReport API
-/// </summary>
 public class BugReportService(string apiUrl, string apiKey, string applicationName) : IDisposable
 {
     private readonly HttpClient _httpClient = new();

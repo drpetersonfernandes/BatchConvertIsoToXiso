@@ -40,32 +40,32 @@
                     <!-- Input Folder for Conversion -->
                     <Grid Margin="0,0,0,5">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Label Grid.Column="0" Content="Source Files Folder:" VerticalAlignment="Center"/>
-                        <TextBox x:Name="ConversionInputFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True"/>
-                        <Button x:Name="BrowseConversionInputButton" Grid.Column="2" Content="Browse" Click="BrowseConversionInputButton_Click" Padding="10,5"/>
+                        <Label Grid.Column="0" Content="Source Files Folder:" VerticalAlignment="Center" />
+                        <TextBox x:Name="ConversionInputFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True" />
+                        <Button x:Name="BrowseConversionInputButton" Grid.Column="2" Content="Browse" Click="BrowseConversionInputButton_Click" Padding="10,5" />
                     </Grid>
-                    
+
                     <!-- Output Folder for Conversion -->
                     <Grid Margin="0,0,0,5">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Label Grid.Column="0" Content="Output XISO Folder:" VerticalAlignment="Center"/>
-                        <TextBox x:Name="ConversionOutputFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True"/>
-                        <Button x:Name="BrowseConversionOutputButton" Grid.Column="2" Content="Browse" Click="BrowseConversionOutputButton_Click" Padding="10,5"/>
+                        <Label Grid.Column="0" Content="Output XISO Folder:" VerticalAlignment="Center" />
+                        <TextBox x:Name="ConversionOutputFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True" />
+                        <Button x:Name="BrowseConversionOutputButton" Grid.Column="2" Content="Browse" Click="BrowseConversionOutputButton_Click" Padding="10,5" />
                     </Grid>
-                    
+
                     <!-- Conversion Options -->
-                    <CheckBox x:Name="DeleteOriginalsCheckBox" Content="Delete original files after successful conversion" Margin="0,5,0,10" HorizontalAlignment="Left"/>
-                    
+                    <CheckBox x:Name="DeleteOriginalsCheckBox" Content="Delete original files after successful conversion" Margin="0,5,0,10" HorizontalAlignment="Left" />
+
                     <!-- Conversion Action Button -->
-                    <Button x:Name="StartConversionButton" Content="Start Conversion" Click="StartConversionButton_Click" Margin="0,10,0,0" Padding="15,8" HorizontalAlignment="Center" FontWeight="Bold"/>
+                    <Button x:Name="StartConversionButton" Content="Start Conversion" Click="StartConversionButton_Click" Margin="0,10,0,0" Padding="15,8" HorizontalAlignment="Center" FontWeight="Bold" />
                 </StackPanel>
             </TabItem>
 
@@ -74,36 +74,37 @@
                     <!-- Input Folder for Testing -->
                     <Grid Margin="0,0,0,5">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Label Grid.Column="0" Content="ISO Files Folder:" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TestInputFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True"/>
-                        <Button x:Name="BrowseTestInputButton" Grid.Column="2" Content="Browse" Click="BrowseTestInputButton_Click" Padding="10,5"/>
+                        <Label Grid.Column="0" Content="ISO Files Folder:" VerticalAlignment="Center" />
+                        <TextBox x:Name="TestInputFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True" />
+                        <Button x:Name="BrowseTestInputButton" Grid.Column="2" Content="Browse" Click="BrowseTestInputButton_Click" Padding="10,5" />
                     </Grid>
 
                     <!-- Test Options -->
-                    <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to Success Folder" Margin="0,10,0,0" HorizontalAlignment="Left" Checked="MoveSuccessFilesCheckBox_CheckedUnchecked" Unchecked="MoveSuccessFilesCheckBox_CheckedUnchecked" IsChecked="True"/>
+                    <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to Success Folder" Margin="0,10,0,0" HorizontalAlignment="Left" Checked="MoveSuccessFilesCheckBox_CheckedUnchecked" Unchecked="MoveSuccessFilesCheckBox_CheckedUnchecked"
+                              IsChecked="True" />
                     <Grid x:Name="SuccessFolderPanel" Margin="20,0,0,5" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="100"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="100" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                     </Grid>
 
-                    <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to Failed Folder" Margin="0,10,0,0" HorizontalAlignment="Left" Checked="MoveFailedFilesCheckBox_CheckedUnchecked" Unchecked="MoveFailedFilesCheckBox_CheckedUnchecked" IsChecked="True"/>
+                    <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to Failed Folder" Margin="0,10,0,0" HorizontalAlignment="Left" Checked="MoveFailedFilesCheckBox_CheckedUnchecked" Unchecked="MoveFailedFilesCheckBox_CheckedUnchecked" IsChecked="True" />
                     <Grid x:Name="FailedFolderPanel" Margin="20,0,0,10" Visibility="Visible">
-                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="100"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="100" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                     </Grid>
-                    
+
                     <!-- Test Action Button -->
-                    <Button x:Name="StartTestButton" Content="Start Test" Click="StartTestButton_Click" Margin="0,10,0,0" Padding="15,8" HorizontalAlignment="Center" FontWeight="Bold"/>
+                    <Button x:Name="StartTestButton" Content="Start Test" Click="StartTestButton_Click" Margin="0,10,0,0" Padding="15,8" HorizontalAlignment="Center" FontWeight="Bold" />
                 </StackPanel>
             </TabItem>
         </TabControl>
@@ -197,17 +198,17 @@
                 <ItemsPanelTemplate>
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                     </Grid>
                 </ItemsPanelTemplate>
             </StatusBar.ItemsPanel>
             <StatusBarItem Grid.Column="0">
-                <TextBlock x:Name="StatusTextBlock" Text="Ready" Margin="2,0"/>
+                <TextBlock x:Name="StatusTextBlock" Text="Ready" Margin="2,0" />
             </StatusBarItem>
             <StatusBarItem Grid.Column="1">
-                <TextBlock x:Name="ProgressTextBlock" Margin="2,0"/>
+                <TextBlock x:Name="ProgressTextBlock" Margin="2,0" />
             </StatusBarItem>
         </StatusBar>
     </Grid>

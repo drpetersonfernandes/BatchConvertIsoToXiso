@@ -7,6 +7,7 @@ using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Threading;
 using System.Windows.Controls;
+using BatchConvertIsoToXiso.Models;
 using SevenZip;
 
 namespace BatchConvertIsoToXiso;
@@ -16,11 +17,6 @@ public partial class MainWindow : IDisposable
     private CancellationTokenSource _cts;
     private readonly BugReportService _bugReportService;
     private readonly UpdateChecker _updateChecker;
-
-    // Bug Report API configuration
-    private const string BugReportApiUrl = "https://www.purelogiccode.com/bugreport/api/send-bug-report";
-    private const string BugReportApiKey = "hjh7yu6t56tyr540o9u8767676r5674534453235264c75b6t7ggghgg76trf564e";
-    private const string ApplicationName = "BatchConvertIsoToXiso";
 
     // Summary Stats
     private DateTime _operationStartTime;
@@ -35,32 +31,12 @@ public partial class MainWindow : IDisposable
     private string? _activeMonitoringDriveLetter;
     private string? _currentOperationDrive;
 
-    private enum ConversionToolResultStatus
-    {
-        Success,
-        Skipped,
-        Failed
-    }
-
-    private enum FileProcessingStatus
-    {
-        Converted,
-        Skipped,
-        Failed
-    }
-
-    private enum IsoTestResultStatus
-    {
-        Passed,
-        Failed
-    }
-
     public MainWindow()
     {
         InitializeComponent();
 
         _cts = new CancellationTokenSource();
-        _bugReportService = new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName);
+        _bugReportService = new BugReportService(App.BugReportApiUrl, App.BugReportApiKey, App.ApplicationName);
         _updateChecker = new UpdateChecker();
 
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -105,7 +81,6 @@ public partial class MainWindow : IDisposable
 
     private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // The log is no longer cleared or updated when switching tabs to preserve the initial instructions.
         if (e.Source is not TabControl) return;
     }
 
@@ -134,7 +109,7 @@ public partial class MainWindow : IDisposable
             LogMessage($"Could not determine drive letter for path: {path}. It might be a network path or invalid.");
             return null;
         }
-        catch (Exception ex) // Catch other potential exceptions
+        catch (Exception ex)
         {
             LogMessage($"Error getting drive letter for path {path}: {ex.Message}");
             return null;
@@ -771,19 +746,22 @@ public partial class MainWindow : IDisposable
                     if (archiveExtractedSuccessfully)
                     {
                         var extractedIsoFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.iso", SearchOption.AllDirectories), _cts.Token);
-                        if (extractedIsoFiles.Length > 0)
+                        switch (extractedIsoFiles.Length)
                         {
-                            var newIsosFound = extractedIsoFiles.Length;
-                            currentExpectedTotalIsos += (newIsosFound - 1);
-                            UpdateSummaryStatsUi(currentExpectedTotalIsos);
-                            UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
-                            LogMessage($"Found {newIsosFound} ISO(s) in {entryFileName}. Total expected ISOs now: {currentExpectedTotalIsos}. Processing them now...");
-                        }
-                        else if (extractedIsoFiles.Length == 0)
-                        {
-                            LogMessage($"No ISO files found in archive: {entryFileName}.");
-                            actualIsosProcessedForProgress++;
-                            UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                            case > 0:
+                            {
+                                var newIsosFound = extractedIsoFiles.Length;
+                                currentExpectedTotalIsos += (newIsosFound - 1);
+                                UpdateSummaryStatsUi(currentExpectedTotalIsos);
+                                UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                                LogMessage($"Found {newIsosFound} ISO(s) in {entryFileName}. Total expected ISOs now: {currentExpectedTotalIsos}. Processing them now...");
+                                break;
+                            }
+                            case 0:
+                                LogMessage($"No ISO files found in archive: {entryFileName}.");
+                                actualIsosProcessedForProgress++;
+                                UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                                break;
                         }
 
                         foreach (var extractedIsoPath in extractedIsoFiles)
@@ -831,23 +809,27 @@ public partial class MainWindow : IDisposable
                         UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                     }
 
-                    if (deleteOriginals && archiveExtractedSuccessfully)
+                    switch (deleteOriginals)
                     {
-                        var allIsosFromArchiveOk = statusesOfIsosInThisArchive.Count > 0 &&
-                                                   statusesOfIsosInThisArchive.All(static s => s is FileProcessingStatus.Converted or FileProcessingStatus.Skipped);
-                        if (allIsosFromArchiveOk)
+                        case true when archiveExtractedSuccessfully:
                         {
-                            LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
-                            await TryDeleteFileAsync(currentEntryPath);
+                            var allIsosFromArchiveOk = statusesOfIsosInThisArchive.Count > 0 &&
+                                                       statusesOfIsosInThisArchive.All(static s => s is FileProcessingStatus.Converted or FileProcessingStatus.Skipped);
+                            if (allIsosFromArchiveOk)
+                            {
+                                LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
+                                await TryDeleteFileAsync(currentEntryPath);
+                            }
+                            else if (statusesOfIsosInThisArchive.Count > 0)
+                            {
+                                LogMessage($"Not deleting archive {entryFileName} due to processing issues with its contents.");
+                            }
+
+                            break;
                         }
-                        else if (statusesOfIsosInThisArchive.Count > 0)
-                        {
-                            LogMessage($"Not deleting archive {entryFileName} due to processing issues with its contents.");
-                        }
-                    }
-                    else if (deleteOriginals && !archiveExtractedSuccessfully)
-                    {
-                        LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
+                        case true when !archiveExtractedSuccessfully:
+                            LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
+                            break;
                     }
                 }
                 catch (OperationCanceledException)
@@ -1168,7 +1150,7 @@ public partial class MainWindow : IDisposable
                 }
                 catch
                 {
-                    /* Ignore */
+                    // Ignore
                 }
             });
 
@@ -1219,57 +1201,55 @@ public partial class MainWindow : IDisposable
 
             var summaryLinePresent = collectedOutput.Contains("files in") && collectedOutput.Contains("total") && collectedOutput.Contains("bytes");
 
-            if (process.ExitCode == 0)
+            switch (process.ExitCode)
             {
-                if (!filesWereExtracted)
-                {
+                case 0 when !filesWereExtracted:
                     LogMessage("    extract-xiso process exited with 0, but no files were extracted. Considered a failure.");
                     return false;
-                }
-
-                var criticalErrorInStdErr = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
-                    .Any(line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase) &&
-                                 (line.Contains("failed to extract", StringComparison.OrdinalIgnoreCase) ||
-                                  line.Contains("error extracting", StringComparison.OrdinalIgnoreCase) ||
-                                  line.Contains("cannot open", StringComparison.OrdinalIgnoreCase) ||
-                                  line.Contains("not a valid", StringComparison.OrdinalIgnoreCase)));
-                if (criticalErrorInStdErr)
+                case 0:
                 {
-                    LogMessage("    extract-xiso process exited with 0 and files were extracted, but critical error messages were found in STDERR. Considered a failure.");
-                    return false;
-                }
+                    var criticalErrorInStdErr = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+                        .Any(static line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase) &&
+                                            (line.Contains("failed to extract", StringComparison.OrdinalIgnoreCase) ||
+                                             line.Contains("error extracting", StringComparison.OrdinalIgnoreCase) ||
+                                             line.Contains("cannot open", StringComparison.OrdinalIgnoreCase) ||
+                                             line.Contains("not a valid", StringComparison.OrdinalIgnoreCase)));
+                    if (criticalErrorInStdErr)
+                    {
+                        LogMessage("    extract-xiso process exited with 0 and files were extracted, but critical error messages were found in STDERR. Considered a failure.");
+                        return false;
+                    }
 
-                LogMessage("    extract-xiso process completed successfully (ExitCode 0, files extracted, no critical errors in log).");
-                return true;
-            }
-            else if (process.ExitCode == 1)
-            {
-                var stdErrLines = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
-                    .Where(static line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase))
-                    .Select(static line => line.Substring("STDERR:".Length).Trim())
-                    .ToArray();
-
-                var onlyKnownBenignErrors = stdErrLines.All(errLine =>
-                    errLine.Contains("open error: -d No such file or directory") ||
-                    errLine.Contains("open error: LoadScreen_BlackScreen.nif No such file or directory") ||
-                    errLine.Contains("failed to extract xbox iso image")
-                );
-
-                if (filesWereExtracted && summaryLinePresent && (stdErrLines.Length == 0 || onlyKnownBenignErrors))
-                {
-                    LogMessage("    extract-xiso process exited with 1, but files were extracted, summary line present, and STDERR contained only known benign issues (or was empty). Considered a pass for testing.");
+                    LogMessage("    extract-xiso process completed successfully (ExitCode 0, files extracted, no critical errors in log).");
                     return true;
                 }
-                else
+                case 1:
                 {
-                    LogMessage($"    extract-xiso process finished with exit code 1. Files extracted: {filesWereExtracted}. Summary line: {summaryLinePresent}. STDERR lines: {string.Join("; ", stdErrLines)}. Considered a failure.");
-                    return false;
+                    var stdErrLines = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+                        .Where(static line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase))
+                        .Select(static line => line.Substring("STDERR:".Length).Trim())
+                        .ToArray();
+
+                    var onlyKnownBenignErrors = stdErrLines.All(errLine =>
+                        errLine.Contains("open error: -d No such file or directory") ||
+                        errLine.Contains("open error: LoadScreen_BlackScreen.nif No such file or directory") ||
+                        errLine.Contains("failed to extract xbox iso image")
+                    );
+
+                    if (filesWereExtracted && summaryLinePresent && (stdErrLines.Length == 0 || onlyKnownBenignErrors))
+                    {
+                        LogMessage("    extract-xiso process exited with 1, but files were extracted, summary line present, and STDERR contained only known benign issues (or was empty). Considered a pass for testing.");
+                        return true;
+                    }
+                    else
+                    {
+                        LogMessage($"    extract-xiso process finished with exit code 1. Files extracted: {filesWereExtracted}. Summary line: {summaryLinePresent}. STDERR lines: {string.Join("; ", stdErrLines)}. Considered a failure.");
+                        return false;
+                    }
                 }
-            }
-            else
-            {
-                LogMessage($"    extract-xiso process finished with non-zero exit code: {process.ExitCode}. Considered a failure.");
-                return false;
+                default:
+                    LogMessage($"    extract-xiso process finished with non-zero exit code: {process.ExitCode}. Considered a failure.");
+                    return false;
             }
         }
         catch (OperationCanceledException)
@@ -1450,7 +1430,7 @@ public partial class MainWindow : IDisposable
                 }
                 catch
                 {
-                    /* Ignore */
+                    // Ignore
                 }
             });
 
@@ -1596,7 +1576,7 @@ public partial class MainWindow : IDisposable
         }
         catch (OperationCanceledException)
         {
-            /* Ignore */
+            // Ignore
         }
         catch (Exception ex)
         {
@@ -1623,7 +1603,7 @@ public partial class MainWindow : IDisposable
                 _uiFailedCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information));
     }
 
-    private string GetPastTense(string verb)
+    private static string GetPastTense(string verb)
     {
         return verb.ToLowerInvariant() switch
         {
@@ -1649,7 +1629,7 @@ public partial class MainWindow : IDisposable
         {
             var fullReport = new StringBuilder();
             fullReport.AppendLine("=== Bug Report ===");
-            fullReport.AppendLine($"Application: {ApplicationName}");
+            fullReport.AppendLine($"Application: {App.ApplicationName}");
             fullReport.AppendLine(CultureInfo.InvariantCulture, $"Version: {GetType().Assembly.GetName().Version}");
             fullReport.AppendLine(CultureInfo.InvariantCulture, $"OS: {Environment.OSVersion}");
             fullReport.AppendLine(CultureInfo.InvariantCulture, $".NET Version: {Environment.Version}");
@@ -1682,7 +1662,7 @@ public partial class MainWindow : IDisposable
         }
         catch
         {
-            /* ignored */
+            // ignored
         }
     }
 

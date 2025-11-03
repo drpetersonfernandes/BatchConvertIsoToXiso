@@ -7,22 +7,15 @@ using SevenZip;
 
 namespace BatchConvertIsoToXiso;
 
-/// <inheritdoc cref="System.Windows.Application" />
-/// <summary>
-/// Interaction logic for App.xaml
-/// </summary>
 public partial class App
 {
-    // Bug Report API configuration
-    private const string BugReportApiUrl = "https://www.purelogiccode.com/bugreport/api/send-bug-report";
-    private const string BugReportApiKey = "hjh7yu6t56tyr540o9u8767676r5674534453235264c75b6t7ggghgg76trf564e";
-    private const string ApplicationName = "BatchConvertIsoToXiso";
-
+    public const string BugReportApiUrl = "https://www.purelogiccode.com/bugreport/api/send-bug-report";
+    public const string BugReportApiKey = "hjh7yu6t56tyr540o9u8767676r5674534453235264c75b6t7ggghgg76trf564e";
+    public const string ApplicationName = "BatchConvertIsoToXiso";
     private readonly BugReportService? _bugReportService;
 
     public App()
     {
-        // Initialize the bug report service
         _bugReportService = new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName);
 
         // Set up global exception handling
@@ -30,7 +23,6 @@ public partial class App
         DispatcherUnhandledException += App_DispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
 
-        // Initialize SevenZipSharp library path
         InitializeSevenZipSharp();
     }
 
@@ -60,7 +52,6 @@ public partial class App
         {
             var message = BuildExceptionReport(exception, source);
 
-            // Silently report the exception to our API
             if (_bugReportService != null)
             {
                 _ = _bugReportService.SendBugReportAsync(message);
@@ -68,7 +59,7 @@ public partial class App
         }
         catch
         {
-            // Silently ignore any errors in the reporting process
+            // Ignore
         }
     }
 
@@ -127,8 +118,6 @@ public partial class App
             }
             else
             {
-                // Notify developer
-                // If the specific DLL is not found, log an error. Extraction will likely fail.
                 var errorMessage = $"Could not find the required 7-Zip library: {dllName} in {AppDomain.CurrentDomain.BaseDirectory}";
 
                 if (_bugReportService != null)
@@ -139,7 +128,6 @@ public partial class App
         }
         catch (Exception ex)
         {
-            // Notify developer
             if (_bugReportService != null)
             {
                 _ = _bugReportService.SendBugReportAsync(ex.Message);

@@ -2,7 +2,7 @@
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso;
 
@@ -60,13 +60,4 @@ public class UpdateChecker : IDisposable
     {
         GC.SuppressFinalize(this);
     }
-}
-
-internal class GitHubReleaseInfo
-{
-    [JsonPropertyName("tag_name")]
-    public string? TagName { get; set; }
-
-    [JsonPropertyName("html_url")]
-    public string? HtmlUrl { get; set; }
 }
