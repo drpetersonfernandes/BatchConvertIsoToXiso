@@ -1,8 +1,10 @@
-﻿using System.Text;
-using System.Windows.Threading;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Windows;
+using System.Windows.Threading;
+using BatchConvertIsoToXiso.Services;
+using Microsoft.Extensions.DependencyInjection;
 using SevenZip;
 
 namespace BatchConvertIsoToXiso;
@@ -12,18 +14,46 @@ public partial class App
     public const string BugReportApiUrl = "https://www.purelogiccode.com/bugreport/api/send-bug-report";
     public const string BugReportApiKey = "hjh7yu6t56tyr540o9u8767676r5674534453235264c75b6t7ggghgg76trf564e";
     public const string ApplicationName = "BatchConvertIsoToXiso";
-    private readonly BugReportService? _bugReportService;
+
+    private IBugReportService? _bugReportService;
+    public static IServiceProvider? ServiceProvider { get; private set; }
 
     public App()
     {
-        _bugReportService = new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName);
-
         // Set up global exception handling
         AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
         DispatcherUnhandledException += App_DispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+    }
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        var serviceCollection = new ServiceCollection();
+        ConfigureServices(serviceCollection);
+        ServiceProvider = serviceCollection.BuildServiceProvider();
+
+        _bugReportService = ServiceProvider.GetRequiredService<IBugReportService>();
 
         InitializeSevenZipSharp();
+
+        var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
+        mainWindow.Show();
+    }
+
+    private static void ConfigureServices(IServiceCollection services)
+    {
+        services.AddSingleton<IBugReportService>(new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
+        services.AddSingleton<IUpdateChecker, UpdateChecker>();
+        services.AddSingleton<ILogger, LoggerService>();
+        services.AddSingleton<IMessageBoxService, MessageBoxService>();
+        services.AddSingleton<IUrlOpener, UrlOpenerService>();
+        services.AddTransient<IFileExtractor, FileExtractorService>();
+        services.AddTransient<IFileMover, FileMoverService>();
+
+        services.AddTransient<AboutWindow>();
+        services.AddSingleton<MainWindow>();
     }
 
     private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
@@ -108,7 +138,6 @@ public partial class App
     {
         try
         {
-            // Determine the path to the 7z.dll based on the process architecture.
             var dllName = Environment.Is64BitProcess ? "7z_x64.dll" : "7z_x86.dll";
             var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
 
@@ -135,25 +164,6 @@ public partial class App
         }
     }
 
-    /// <summary>
-    /// Public method to send a bug report from any part of the application using the singleton service.
-    /// </summary>
-    /// <param name="message">The error message or bug report.</param>
-    public async Task SendBugReportFromAnywhereAsync(string message)
-    {
-        try
-        {
-            if (_bugReportService != null)
-            {
-                await _bugReportService.SendBugReportAsync(message);
-            }
-        }
-        catch
-        {
-            /* Ignore any errors during bug reporting itself */
-        }
-    }
-
     protected override void OnExit(ExitEventArgs e)
     {
         // Clean up event handlers
@@ -161,8 +171,10 @@ public partial class App
         DispatcherUnhandledException -= App_DispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException -= TaskScheduler_UnobservedTaskException;
 
-        // Dispose the bug report service
-        _bugReportService?.Dispose();
+        if (ServiceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
 
         base.OnExit(e);
     }

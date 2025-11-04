@@ -32,7 +32,9 @@
             <TextBlock Margin="0,10,0,0">
                 <Hyperlink NavigateUri="https://www.purelogiccode.com" RequestNavigate="Hyperlink_RequestNavigate">https://www.purelogiccode.com</Hyperlink>
             </TextBlock>
-            <TextBlock Margin="0,10,0,0" Text="© 2025 Pure Logic Code. All rights reserved." />
+            <TextBlock Margin="0,10,0,0">
+                <Hyperlink NavigateUri="https://github.com/drpetersonfernandes/BatchConvertIsoToXiso" RequestNavigate="Hyperlink_RequestNavigate">https://github.com/drpetersonfernandes/BatchConvertIsoToXiso</Hyperlink>
+            </TextBlock>
         </StackPanel>
 
         <StackPanel

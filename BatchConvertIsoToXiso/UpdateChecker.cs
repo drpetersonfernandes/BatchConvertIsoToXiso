@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
@@ -7,7 +7,12 @@ using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso;
 
-public class UpdateChecker : IDisposable
+public interface IUpdateChecker
+{
+    Task<(bool IsNewVersionAvailable, string? LatestVersion, string? DownloadUrl)> CheckForUpdateAsync();
+}
+
+public class UpdateChecker : IUpdateChecker, IDisposable
 {
     private const string GitHubApiUrl = "https://api.github.com/repos/drpetersonfernandes/BatchConvertIsoToXiso/releases/latest";
     private readonly HttpClient _httpClient;

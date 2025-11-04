@@ -3,13 +3,25 @@ using System.Net.Http.Json;
 
 namespace BatchConvertIsoToXiso;
 
-public class BugReportService(string apiUrl, string apiKey, string applicationName) : IDisposable
+public interface IBugReportService
+{
+    Task<bool> SendBugReportAsync(string message);
+}
+
+public class BugReportService : IBugReportService, IDisposable
 {
     private readonly HttpClient _httpClient = new();
     private bool _disposed;
-    private readonly string _apiUrl = apiUrl;
-    private readonly string _apiKey = apiKey;
-    private readonly string _applicationName = applicationName;
+    private readonly string _apiUrl;
+    private readonly string _apiKey;
+    private readonly string _applicationName;
+
+    public BugReportService(string apiUrl, string apiKey, string applicationName)
+    {
+        _apiUrl = apiUrl;
+        _apiKey = apiKey;
+        _applicationName = applicationName;
+    }
 
     /// <summary>
     /// Silently sends a bug report to the API
