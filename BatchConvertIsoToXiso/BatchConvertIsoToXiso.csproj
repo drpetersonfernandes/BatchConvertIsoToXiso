@@ -22,12 +22,6 @@
         <Resource Include="images\about.png" />
         <Resource Include="images\exit.png" />
         <Resource Include="images\logo.png" />
-        <None Update="7z_x64.dll" Condition="'$(Platform)' == 'x64'">
-            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
-        <None Update="7z_x86.dll" Condition="'$(Platform)' == 'x86'">
-            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
     </ItemGroup>
 
     <ItemGroup>
