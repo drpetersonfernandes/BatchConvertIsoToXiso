@@ -1,8 +1,8 @@
-﻿<Window x:Class="BatchConvertIsoToXiso.AboutWindow"
+<Window x:Class="BatchConvertIsoToXiso.AboutWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="About Batch Convert ISO to XISO"
-        Width="450"
+        Width="480"
         Height="440"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner">

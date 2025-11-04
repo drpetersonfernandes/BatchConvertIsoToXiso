@@ -1,4 +1,4 @@
-﻿<Window x:Class="BatchConvertIsoToXiso.MainWindow"
+<Window x:Class="BatchConvertIsoToXiso.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Batch Convert ISO to XISO"
@@ -152,7 +152,10 @@
             <Border Grid.Column="5" BorderBrush="LightGray" BorderThickness="1" Margin="2" Padding="5">
                 <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock Text="Write Speed:" FontWeight="Bold" HorizontalAlignment="Center" />
-                    <TextBlock x:Name="WriteSpeedValue" Text="N/A" HorizontalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock x:Name="WriteSpeedValue" Text="N/A" />
+                        <TextBlock x:Name="WriteSpeedDriveIndicator" Text="" Margin="5,0,0,0" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>

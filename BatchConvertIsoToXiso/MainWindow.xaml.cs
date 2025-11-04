@@ -32,6 +32,7 @@ public partial class MainWindow : IDisposable
     private int _uiSuccessCount;
     private int _uiFailedCount;
     private int _uiSkippedCount;
+    private bool _isOperationRunning;
 
     // Performance Counter for Disk Write Speed
     private PerformanceCounter? _diskWriteSpeedCounter;
@@ -62,8 +63,6 @@ public partial class MainWindow : IDisposable
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _processingTimer.Tick += ProcessingTimer_Tick;
         ResetSummaryStats();
-
-        DisplayInitialInstructions();
 
         Loaded += async (s, e) => await CheckForUpdatesAsync();
     }
@@ -182,7 +181,9 @@ public partial class MainWindow : IDisposable
 
             // If both category and instance exist, proceed with creating the counter.
             _diskWriteSpeedCounter = new PerformanceCounter("LogicalDisk", "Disk Write Bytes/sec", perfCounterInstanceName, true);
-            _diskWriteSpeedCounter.NextValue(); // Initial call to prime the counter
+            _diskWriteSpeedCounter.NextValue(); // Initial call to prime the counter, ignore first value
+            // Second call to get a valid initial value, though it might still be 0
+            _diskWriteSpeedCounter.NextValue();
             _activeMonitoringDriveLetter = driveLetter;
             _logger.LogMessage($"Monitoring write speed for drive: {perfCounterInstanceName}");
             Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "Calculating...");
@@ -206,6 +207,10 @@ public partial class MainWindow : IDisposable
             _activeMonitoringDriveLetter = null;
             Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A (Error)");
         }
+        finally
+        {
+            Application.Current.Dispatcher.Invoke(() => WriteSpeedDriveIndicator.Text = _activeMonitoringDriveLetter != null ? $"({_activeMonitoringDriveLetter})" : "");
+        }
     }
 
     private void StopPerformanceCounter()
@@ -216,6 +221,28 @@ public partial class MainWindow : IDisposable
 
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (WriteSpeedValue != null)
+            {
+                WriteSpeedValue.Text = "N/A";
+            }
+
+            if (WriteSpeedDriveIndicator != null)
+            {
+                WriteSpeedDriveIndicator.Text = "";
+            }
+        });
+    }
+
+    private void ResetPerformanceCounterState()
+    {
+        _activeMonitoringDriveLetter = null;
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            if (WriteSpeedDriveIndicator != null)
+            {
+                WriteSpeedDriveIndicator.Text = "";
+            }
+
             if (WriteSpeedValue != null)
             {
                 WriteSpeedValue.Text = "N/A";
@@ -265,124 +292,172 @@ public partial class MainWindow : IDisposable
     {
         try
         {
-            Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
+            if (_isOperationRunning) return;
 
-            _cts?.Dispose();
-            _cts = new CancellationTokenSource();
-
-            var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
-
-            if (!await Task.Run(() => File.Exists(extractXisoPath), _cts.Token))
-            {
-                _logger.LogMessage("Error: extract-xiso.exe not found.");
-                _messageBoxService.ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
-                _ = ReportBugAsync("extract-xiso.exe not found at start of conversion.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
-                StopPerformanceCounter();
-                return;
-            }
-
-            var inputFolder = ConversionInputFolderTextBox.Text;
-            var outputFolder = ConversionOutputFolderTextBox.Text;
-            var deleteFiles = DeleteOriginalsCheckBox.IsChecked ?? false;
-            var skipSystemUpdate = SkipSystemUpdateCheckBox.IsChecked ?? false; // Get state of new checkbox
-
-            if (string.IsNullOrEmpty(inputFolder) || string.IsNullOrEmpty(outputFolder))
-            {
-                _messageBoxService.ShowError("Please select both input and output folders for conversion.");
-                StopPerformanceCounter();
-                return;
-            }
-
-            if (inputFolder.Equals(outputFolder, StringComparison.OrdinalIgnoreCase))
-            {
-                _messageBoxService.ShowError("Input and output folders must be different for conversion.");
-                StopPerformanceCounter();
-                return;
-            }
-
-            // Check for sufficient temporary disk space
-            var tempPath = Path.GetTempPath();
-            var tempDriveLetter = GetDriveLetter(tempPath);
-            if (string.IsNullOrEmpty(tempDriveLetter))
-            {
-                _messageBoxService.ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with conversion.");
-                StopPerformanceCounter();
-                _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of conversion.");
-                return;
-            }
-
-            var tempDriveInfo = new DriveInfo(tempDriveLetter);
-            if (!tempDriveInfo.IsReady)
-            {
-                _messageBoxService.ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with conversion.");
-                StopPerformanceCounter();
-                _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of conversion.");
-                return;
-            }
-
-            if (tempDriveInfo.AvailableFreeSpace < MinimumRequiredConversionTempSpaceBytes)
-            {
-                _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
-                                             $"Required: {Formatter.FormatBytes(MinimumRequiredConversionTempSpaceBytes)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
-                                             "Please free up space or choose a different temporary drive if possible (via system settings).");
-                StopPerformanceCounter();
-                _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for conversion. Available: {tempDriveInfo.AvailableFreeSpace}");
-                return;
-            }
-
-            _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(MinimumRequiredConversionTempSpaceBytes)}).");
-
-            ResetSummaryStats();
-
-            // Start with output drive but allow dynamic switching
-            var outputDrive = GetDriveLetter(outputFolder);
-            _currentOperationDrive = outputDrive;
-            InitializePerformanceCounter(outputDrive);
-
-            _operationStartTime = DateTime.Now;
-            _processingTimer.Start();
-
-            SetControlsState(false);
-            UpdateStatus("Starting batch conversion...");
-            _logger.LogMessage("--- Starting batch conversion process... ---");
-            _logger.LogMessage($"Input folder: {inputFolder}");
-            _logger.LogMessage($"Output folder: {outputFolder}");
-            _logger.LogMessage($"Delete original files: {deleteFiles}");
-            _logger.LogMessage($"Skip $SystemUpdate folder: {skipSystemUpdate}"); // Log new option
+            _isOperationRunning = true;
 
             try
             {
-                await PerformBatchConversionAsync(extractXisoPath, inputFolder, outputFolder, deleteFiles, skipSystemUpdate);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogMessage("Operation was canceled by user.");
-                UpdateStatus("Operation cancelled. Ready.");
+                Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
+
+                _cts?.Dispose();
+                _cts = new CancellationTokenSource();
+
+                var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
+
+                if (!File.Exists(extractXisoPath))
+                {
+                    _logger.LogMessage("Error: extract-xiso.exe not found.");
+                    _messageBoxService.ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
+                    _ = ReportBugAsync("extract-xiso.exe not found at start of conversion.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                var inputFolder = ConversionInputFolderTextBox.Text;
+                var outputFolder = ConversionOutputFolderTextBox.Text;
+                var deleteFiles = DeleteOriginalsCheckBox.IsChecked ?? false;
+                var skipSystemUpdate = SkipSystemUpdateCheckBox.IsChecked ?? false; // Get state of new checkbox
+
+                if (string.IsNullOrEmpty(inputFolder) || string.IsNullOrEmpty(outputFolder))
+                {
+                    _messageBoxService.ShowError("Please select both input and output folders for conversion.");
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                if (inputFolder.Equals(outputFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    _messageBoxService.ShowError("Input and output folders must be different for conversion.");
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                // Check for sufficient temporary disk space
+                var tempPath = Path.GetTempPath();
+                var tempDriveLetter = GetDriveLetter(tempPath);
+                if (string.IsNullOrEmpty(tempDriveLetter))
+                {
+                    _messageBoxService.ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with conversion.");
+                    StopPerformanceCounter();
+                    _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of conversion.");
+                    return;
+                }
+
+                var tempDriveInfo = new DriveInfo(tempDriveLetter);
+                if (!tempDriveInfo.IsReady)
+                {
+                    _messageBoxService.ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with conversion.");
+                    StopPerformanceCounter();
+                    _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of conversion.");
+                    return;
+                }
+
+                if (tempDriveInfo.AvailableFreeSpace < MinimumRequiredConversionTempSpaceBytes)
+                {
+                    _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
+                                                 $"Required: {Formatter.FormatBytes(MinimumRequiredConversionTempSpaceBytes)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
+                                                 "Please free up space or choose a different temporary drive if possible (via system settings).");
+                    StopPerformanceCounter();
+                    _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for conversion. Available: {tempDriveInfo.AvailableFreeSpace}");
+                    return;
+                }
+
+                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(MinimumRequiredConversionTempSpaceBytes)}).");
+
+                // Scan input folder to get initial entries for size calculation and count
+                List<string> initialEntriesToProcess;
+                try
+                {
+                    initialEntriesToProcess = await Task.Run(() =>
+                            Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
+                                .Where(static f =>
+                                {
+                                    var ext = Path.GetExtension(f).ToLowerInvariant();
+                                    return ext is ".iso" or ".zip" or ".7z" or ".rar";
+                                }).ToList(),
+                        _cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogMessage($"Error scanning input folder for conversion: {ex.Message}");
+                    _ = ReportBugAsync("Error scanning input folder", ex);
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                if (initialEntriesToProcess.Count == 0)
+                {
+                    _logger.LogMessage("No ISO files or supported archives found in the input folder for conversion.");
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                // Calculate total size of input files for output drive space check
+                var totalInputSize = await CalculateTotalInputFileSizeAsync(initialEntriesToProcess);
+                var requiredOutputSpace = (long)(totalInputSize * 1.1); // 10% buffer for potential slight size increase or temporary files
+                if (!CheckDriveSpace(outputFolder, requiredOutputSpace, "output"))
+                {
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                ResetSummaryStats();
+
+                // Start with output drive but allow dynamic switching
+                var outputDrive = GetDriveLetter(outputFolder);
+                _currentOperationDrive = outputDrive;
+                InitializePerformanceCounter(outputDrive);
+
+                _operationStartTime = DateTime.Now;
+                _processingTimer.Start();
+
+                SetControlsState(false);
+                UpdateStatus("Starting batch conversion...");
+                _logger.LogMessage("--- Starting batch conversion process... ---");
+                _logger.LogMessage($"Input folder: {inputFolder}");
+                _logger.LogMessage($"Output folder: {outputFolder} (Estimated required space: {Formatter.FormatBytes(requiredOutputSpace)})");
+                _logger.LogMessage($"Skip $SystemUpdate folder: {skipSystemUpdate}"); // Log new option
+
+                try
+                {
+                    await PerformBatchConversionAsync(extractXisoPath, inputFolder, outputFolder, deleteFiles, skipSystemUpdate, initialEntriesToProcess);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogMessage("Operation was canceled by user during initial setup.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogMessage($"Critical Error: {ex.Message}");
+                    UpdateStatus("An error occurred. Ready.");
+                    _ = ReportBugAsync("Critical error during batch conversion process", ex);
+                }
+                finally
+                {
+                    _processingTimer.Stop();
+                    StopPerformanceCounter();
+                    _currentOperationDrive = null;
+                    var finalElapsedTime = DateTime.Now - _operationStartTime;
+                    Application.Current.Dispatcher.Invoke(() => ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
+                    SetControlsState(true);
+                    LogOperationSummary("Conversion");
+                    UpdateStatus("Conversion complete. Ready.");
+                    _isOperationRunning = false;
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogMessage($"Critical Error: {ex.Message}");
-                UpdateStatus("An error occurred. Ready.");
-                _ = ReportBugAsync("Critical error during batch conversion process", ex);
-            }
-            finally
-            {
-                _processingTimer.Stop();
+                _ = ReportBugAsync($"Error during batch conversion process: {ex.Message}", ex);
+                _logger.LogMessage($"Error during batch conversion process: {ex.Message}");
                 StopPerformanceCounter();
-                _currentOperationDrive = null;
-                var finalElapsedTime = DateTime.Now - _operationStartTime;
-                ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
-                SetControlsState(true);
-                LogOperationSummary("Conversion");
-                UpdateStatus("Conversion complete. Ready.");
+                _isOperationRunning = false;
             }
         }
         catch (Exception ex)
         {
             _ = ReportBugAsync($"Error during batch conversion process: {ex.Message}", ex);
-            _logger.LogMessage($"Error during batch conversion process: {ex.Message}");
-            StopPerformanceCounter();
         }
     }
 
@@ -390,131 +465,203 @@ public partial class MainWindow : IDisposable
     {
         try
         {
-            Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
+            if (_isOperationRunning) return;
 
-            _cts?.Dispose();
-            _cts = new CancellationTokenSource();
-
-            var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
-
-            if (!await Task.Run(() => File.Exists(extractXisoPath), _cts.Token))
-            {
-                _logger.LogMessage("Error: extract-xiso.exe not found.");
-                _messageBoxService.ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
-                _ = ReportBugAsync("extract-xiso.exe not found at start of ISO test.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
-                StopPerformanceCounter();
-                return;
-            }
-
-            var inputFolder = TestInputFolderTextBox.Text;
-            var moveSuccessful = MoveSuccessFilesCheckBox.IsChecked == true;
-            var successFolder = Path.Combine(inputFolder, "_success");
-            var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
-            var failedFolder = Path.Combine(inputFolder, "_failed");
-
-            if (string.IsNullOrEmpty(inputFolder))
-            {
-                _messageBoxService.ShowError("Please select the input folder for testing.");
-                StopPerformanceCounter();
-                return;
-            }
-
-            if (moveSuccessful && moveFailed && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(failedFolder, StringComparison.OrdinalIgnoreCase))
-            {
-                _messageBoxService.ShowError("Success Folder and Failed Folder cannot be the same.");
-                StopPerformanceCounter();
-                return;
-            }
-
-            if ((moveSuccessful && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(inputFolder, StringComparison.OrdinalIgnoreCase)) ||
-                (moveFailed && !string.IsNullOrEmpty(failedFolder) && failedFolder.Equals(inputFolder, StringComparison.OrdinalIgnoreCase)))
-            {
-                _messageBoxService.ShowError("Success/Failed folder cannot be the same as the Input folder.");
-                StopPerformanceCounter();
-                return;
-            }
-
-            // Check for sufficient temporary disk space
-            var tempPath = Path.GetTempPath();
-            var tempDriveLetter = GetDriveLetter(tempPath);
-            if (string.IsNullOrEmpty(tempDriveLetter))
-            {
-                _messageBoxService.ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with ISO test.");
-                StopPerformanceCounter();
-                _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of ISO test.");
-                return;
-            }
-
-            var tempDriveInfo = new DriveInfo(tempDriveLetter);
-            if (!tempDriveInfo.IsReady)
-            {
-                _messageBoxService.ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with ISO test.");
-                StopPerformanceCounter();
-                _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of ISO test.");
-                return;
-            }
-
-            if (tempDriveInfo.AvailableFreeSpace < MinimumRequiredTestTempSpaceBytes)
-            {
-                _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
-                                             $"Required: {Formatter.FormatBytes(MinimumRequiredTestTempSpaceBytes)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
-                                             "Please free up space or choose a different temporary drive if possible (via system settings).");
-                StopPerformanceCounter();
-                _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for ISO test. Available: {tempDriveInfo.AvailableFreeSpace}");
-                return;
-            }
-
-            _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(MinimumRequiredTestTempSpaceBytes)}).");
-
-            ResetSummaryStats();
-
-            var initialDriveForMonitoring = moveSuccessful ? GetDriveLetter(successFolder) : GetDriveLetter(Path.GetTempPath());
-            _currentOperationDrive = initialDriveForMonitoring; // Initial drive
-            InitializePerformanceCounter(initialDriveForMonitoring);
-
-            _operationStartTime = DateTime.Now;
-            _processingTimer.Start();
-
-            SetControlsState(false);
-            UpdateStatus("Starting batch ISO test...");
-            _logger.LogMessage("--- Starting batch ISO test process... ---");
-            _logger.LogMessage($"Input folder: {inputFolder}");
-            if (moveSuccessful) _logger.LogMessage($"Moving successful files to: {successFolder}");
-            if (moveFailed) _logger.LogMessage($"Moving failed files to: {failedFolder}");
+            _isOperationRunning = true;
 
             try
             {
-                await PerformBatchIsoTestAsync(extractXisoPath, inputFolder, moveSuccessful, successFolder, moveFailed, failedFolder);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogMessage("Operation was canceled by user.");
-                UpdateStatus("Operation cancelled. Ready.");
+                Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
+
+                _cts?.Dispose();
+                _cts = new CancellationTokenSource();
+
+                var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
+
+                if (!File.Exists(extractXisoPath))
+                {
+                    _logger.LogMessage("Error: extract-xiso.exe not found.");
+                    _messageBoxService.ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
+                    _ = ReportBugAsync("extract-xiso.exe not found at start of ISO test.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                var inputFolder = TestInputFolderTextBox.Text;
+                var moveSuccessful = MoveSuccessFilesCheckBox.IsChecked == true;
+                var successFolder = Path.Combine(inputFolder, "_success");
+                var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
+                var failedFolder = Path.Combine(inputFolder, "_failed");
+
+                if (string.IsNullOrEmpty(inputFolder))
+                {
+                    _messageBoxService.ShowError("Please select the input folder for testing.");
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                if (moveSuccessful && moveFailed && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(failedFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    _messageBoxService.ShowError("Success Folder and Failed Folder cannot be the same.");
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                if ((moveSuccessful && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(inputFolder, StringComparison.OrdinalIgnoreCase)) ||
+                    (moveFailed && !string.IsNullOrEmpty(failedFolder) && failedFolder.Equals(inputFolder, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _messageBoxService.ShowError("Success/Failed folder cannot be the same as the Input folder.");
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                // Check for sufficient temporary disk space
+                var tempPath = Path.GetTempPath();
+                var tempDriveLetter = GetDriveLetter(tempPath);
+                if (string.IsNullOrEmpty(tempDriveLetter))
+                {
+                    _messageBoxService.ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with ISO test.");
+                    StopPerformanceCounter();
+                    _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of ISO test.");
+                    return;
+                }
+
+                var tempDriveInfo = new DriveInfo(tempDriveLetter);
+                if (!tempDriveInfo.IsReady)
+                {
+                    _messageBoxService.ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with ISO test.");
+                    StopPerformanceCounter();
+                    _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of ISO test.");
+                    return;
+                }
+
+                if (tempDriveInfo.AvailableFreeSpace < MinimumRequiredTestTempSpaceBytes)
+                {
+                    _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
+                                                 $"Required: {Formatter.FormatBytes(MinimumRequiredTestTempSpaceBytes)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
+                                                 "Please free up space or choose a different temporary drive if possible (via system settings).");
+                    StopPerformanceCounter();
+                    _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for ISO test. Available: {tempDriveInfo.AvailableFreeSpace}");
+                    return;
+                }
+
+                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(MinimumRequiredTestTempSpaceBytes)}).");
+
+                // Scan input folder to get .iso files for size calculation and count
+                List<string> isoFilesToTest;
+                try
+                {
+                    isoFilesToTest = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", SearchOption.TopDirectoryOnly).ToList(), _cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogMessage($"Error scanning input folder for .iso files: {ex.Message}");
+                    _ = ReportBugAsync("Error scanning input folder for .iso files for testing", ex);
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                if (isoFilesToTest.Count == 0)
+                {
+                    _logger.LogMessage("No .iso files found in the input folder for testing.");
+                    StopPerformanceCounter();
+                    return;
+                }
+
+                var totalIsoSize = await CalculateTotalInputFileSizeAsync(isoFilesToTest);
+
+                // Check destination drive space for moving files (if cross-drive move)
+                if (moveSuccessful || moveFailed)
+                {
+                    var inputDriveLetter = GetDriveLetter(inputFolder);
+                    var checkedDrives = new HashSet<string>();
+
+                    if (moveSuccessful && successFolder != null)
+                    {
+                        var successDriveLetter = GetDriveLetter(successFolder);
+                        if (successDriveLetter != null && !successDriveLetter.Equals(inputDriveLetter, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (!CheckDriveSpace(successFolder, totalIsoSize, "success destination"))
+                            {
+                                StopPerformanceCounter();
+                                return;
+                            }
+
+                            checkedDrives.Add(successDriveLetter);
+                        }
+                    }
+
+                    if (moveFailed && failedFolder != null)
+                    {
+                        var failedDriveLetter = GetDriveLetter(failedFolder);
+                        if (failedDriveLetter != null && !failedDriveLetter.Equals(inputDriveLetter, StringComparison.OrdinalIgnoreCase) && !checkedDrives.Contains(failedDriveLetter))
+                        {
+                            if (!CheckDriveSpace(failedFolder, totalIsoSize, "failed destination"))
+                            {
+                                StopPerformanceCounter();
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                ResetSummaryStats();
+
+                // Initial drive for monitoring is the temp path, as the test involves extraction to temp.
+                var initialDriveForMonitoring = GetDriveLetter(Path.GetTempPath());
+                _currentOperationDrive = initialDriveForMonitoring; // Initial drive
+                InitializePerformanceCounter(initialDriveForMonitoring);
+
+                _operationStartTime = DateTime.Now;
+                _processingTimer.Start();
+
+                SetControlsState(false);
+                UpdateStatus("Starting batch ISO test...");
+                _logger.LogMessage("--- Starting batch ISO test process... ---");
+                _logger.LogMessage($"Input folder: {inputFolder}");
+                _logger.LogMessage($"Total ISOs to test: {isoFilesToTest.Count}. Total size: {Formatter.FormatBytes(totalIsoSize)}");
+                if (moveSuccessful) _logger.LogMessage($"Moving successful files to: {successFolder}");
+                if (moveFailed) _logger.LogMessage($"Moving failed files to: {failedFolder}");
+
+                try
+                {
+                    await PerformBatchIsoTestAsync(extractXisoPath, inputFolder, moveSuccessful, successFolder, moveFailed, failedFolder, isoFilesToTest);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogMessage("Operation was canceled by user during initial setup.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogMessage($"Critical Error during ISO test: {ex.Message}");
+                    UpdateStatus("An error occurred. Ready.");
+                    _ = ReportBugAsync("Critical error during batch ISO test process", ex);
+                }
+                finally
+                {
+                    _processingTimer.Stop();
+                    StopPerformanceCounter();
+                    _currentOperationDrive = null;
+                    var finalElapsedTime = DateTime.Now - _operationStartTime;
+                    Application.Current.Dispatcher.Invoke(() => ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
+                    SetControlsState(true);
+                    LogOperationSummary("Test");
+                    UpdateStatus("Test complete. Ready.");
+                    _isOperationRunning = false;
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogMessage($"Critical Error during ISO test: {ex.Message}");
-                UpdateStatus("An error occurred. Ready.");
-                _ = ReportBugAsync("Critical error during batch ISO test process", ex);
-            }
-            finally
-            {
-                _processingTimer.Stop();
+                _ = ReportBugAsync($"Error during batch ISO test process: {ex.Message}", ex);
+                _logger.LogMessage($"Error during batch ISO test process: {ex.Message}");
                 StopPerformanceCounter();
-                _currentOperationDrive = null;
-                var finalElapsedTime = DateTime.Now - _operationStartTime;
-                ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
-                SetControlsState(true);
-                LogOperationSummary("Test");
-                UpdateStatus("Test complete. Ready.");
+                _isOperationRunning = false;
             }
         }
         catch (Exception ex)
         {
             _ = ReportBugAsync($"Error during batch ISO test process: {ex.Message}", ex);
-            _logger.LogMessage($"Error during batch ISO test process: {ex.Message}");
-            StopPerformanceCounter();
         }
     }
 
@@ -663,7 +810,7 @@ public partial class MainWindow : IDisposable
         return $"iso_{fileIndex:D6}.iso";
     }
 
-    private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals, bool skipSystemUpdate) // Add skipSystemUpdate parameter
+    private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals, bool skipSystemUpdate, List<string> initialEntriesToProcess) // Add skipSystemUpdate parameter
     {
         var tempFoldersToCleanUpAtEnd = new List<string>();
         var archivesFailedToExtractOrProcess = 0;
@@ -673,36 +820,6 @@ public partial class MainWindow : IDisposable
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
         _uiSkippedCount = 0;
-
-        _logger.LogMessage("Scanning input folder for items to convert...");
-        Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = true);
-
-        List<string> initialEntriesToProcess;
-        try
-        {
-            initialEntriesToProcess = await Task.Run(() =>
-                    Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
-                        .Where(static f =>
-                        {
-                            var ext = Path.GetExtension(f).ToLowerInvariant();
-                            return ext is ".iso" or ".zip" or ".7z" or ".rar";
-                        }).ToList(),
-                _cts.Token);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogMessage($"Error scanning input folder: {ex.Message}");
-            _ = ReportBugAsync("Error scanning input folder", ex);
-            Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
-            return;
-        }
-
-        if (initialEntriesToProcess.Count == 0)
-        {
-            _logger.LogMessage("No ISO files or supported archives found in the input folder for conversion.");
-            Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
-            return;
-        }
 
         _logger.LogMessage($"Found {initialEntriesToProcess.Count} top-level items (ISOs or archives) for conversion.");
         var currentExpectedTotalIsos = initialEntriesToProcess.Count;
@@ -757,7 +874,7 @@ public partial class MainWindow : IDisposable
                     try
                     {
                         currentArchiveTempExtractionDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Extract", Guid.NewGuid().ToString());
-                        await Task.Run(() => Directory.CreateDirectory(currentArchiveTempExtractionDir), _cts.Token);
+                        await Task.Run(() => Directory.CreateDirectory(currentArchiveTempExtractionDir));
                         tempFoldersToCleanUpAtEnd.Add(currentArchiveTempExtractionDir);
                         SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath()));
                         archiveExtractedSuccessfully = await _fileExtractor.ExtractArchiveAsync(currentEntryPath, currentArchiveTempExtractionDir, _cts);
@@ -869,11 +986,11 @@ public partial class MainWindow : IDisposable
                     }
                     finally
                     {
-                        if (currentArchiveTempExtractionDir != null && await Task.Run(() => Directory.Exists(currentArchiveTempExtractionDir), _cts.Token))
+                        if (currentArchiveTempExtractionDir != null && await Task.Run(() => Directory.Exists(currentArchiveTempExtractionDir)))
                         {
                             try
                             {
-                                await Task.Run(() => Directory.Delete(currentArchiveTempExtractionDir, true), _cts.Token);
+                                await Task.Run(() => Directory.Delete(currentArchiveTempExtractionDir, true));
                                 tempFoldersToCleanUpAtEnd.Remove(currentArchiveTempExtractionDir);
                                 _logger.LogMessage($"Cleaned up temporary folder for {entryFileName}.");
                             }
@@ -911,7 +1028,7 @@ public partial class MainWindow : IDisposable
         await CleanupTempFoldersAsync(tempFoldersToCleanUpAtEnd);
     }
 
-    private async Task PerformBatchIsoTestAsync(string extractXisoPath, string inputFolder, bool moveSuccessful, string? successFolder, bool moveFailed, string? failedFolder)
+    private async Task PerformBatchIsoTestAsync(string extractXisoPath, string inputFolder, bool moveSuccessful, string? successFolder, bool moveFailed, string? failedFolder, List<string> isoFilesToTest)
     {
         var actualIsosProcessedForProgress = 0;
         var failedIsoOriginalPaths = new List<string>(); // Keep track of original paths for logging
@@ -919,29 +1036,6 @@ public partial class MainWindow : IDisposable
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
         _uiSkippedCount = 0;
-
-        _logger.LogMessage("Scanning input folder for .iso files to test...");
-        Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = true);
-
-        List<string> isoFilesToTest;
-        try
-        {
-            isoFilesToTest = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", SearchOption.TopDirectoryOnly).ToList(), _cts.Token);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogMessage($"Error scanning input folder for .iso files: {ex.Message}");
-            _ = ReportBugAsync("Error scanning input folder for .iso files for testing", ex);
-            Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
-            return;
-        }
-
-        if (isoFilesToTest.Count == 0)
-        {
-            _logger.LogMessage("No .iso files found in the input folder for testing.");
-            Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
-            return;
-        }
 
         _logger.LogMessage($"Found {isoFilesToTest.Count} .iso files for testing.");
         UpdateSummaryStatsUi(isoFilesToTest.Count);
@@ -1022,10 +1116,10 @@ public partial class MainWindow : IDisposable
 
         try
         {
-            await Task.Run(() => Directory.CreateDirectory(tempExtractionDir), _cts.Token);
+            await Task.Run(() => Directory.CreateDirectory(tempExtractionDir));
             _logger.LogMessage($"  Comprehensive Test for '{isoFileName}'");
 
-            if (!await Task.Run(() => File.Exists(isoFilePath), _cts.Token))
+            if (!File.Exists(isoFilePath))
             {
                 _logger.LogMessage($"  ERROR: ISO file does not exist: {isoFilePath}");
                 return IsoTestResultStatus.Failed;
@@ -1034,7 +1128,7 @@ public partial class MainWindow : IDisposable
             try
             {
                 var fileInfo = new FileInfo(isoFilePath);
-                var length = await Task.Run(() => fileInfo.Length, _cts.Token);
+                var length = await Task.Run(() => fileInfo.Length);
                 if (length == 0)
                 {
                     _logger.LogMessage($"  ERROR: ISO file is empty: {isoFileName}");
@@ -1057,7 +1151,7 @@ public partial class MainWindow : IDisposable
             simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
 
             _logger.LogMessage($"  Copying '{isoFileName}' to simple filename '{simpleFilename}' for testing");
-            await Task.Run(() => File.Copy(isoFilePath, simpleFilePath, true), _cts.Token);
+            await Task.Run(() => File.Copy(isoFilePath, simpleFilePath, true));
 
             var extractionSuccess = await RunIsoExtractionToTempAsync(extractXisoPath, simpleFilePath, tempExtractionDir);
 
@@ -1079,9 +1173,9 @@ public partial class MainWindow : IDisposable
             // Clean up temp dir which contains the simple file copy and any extracted contents
             try
             {
-                if (await Task.Run(() => Directory.Exists(tempExtractionDir), CancellationToken.None))
+                if (Directory.Exists(tempExtractionDir))
                 {
-                    await Task.Run(() => Directory.Delete(tempExtractionDir, true), CancellationToken.None);
+                    await Task.Run(() => Directory.Delete(tempExtractionDir, true));
                 }
             }
             catch (Exception ex)
@@ -1163,9 +1257,9 @@ public partial class MainWindow : IDisposable
             var expectedExtractionSubDir = Path.Combine(tempExtractionDir, isoNameWithoutExtension);
 
             var filesWereExtracted = false;
-            if (await Task.Run(() => Directory.Exists(expectedExtractionSubDir), _cts.Token))
+            if (Directory.Exists(expectedExtractionSubDir))
             {
-                var extractedFiles = await Task.Run(() => Directory.GetFiles(expectedExtractionSubDir, "*", SearchOption.AllDirectories), _cts.Token);
+                var extractedFiles = Directory.GetFiles(expectedExtractionSubDir, "*", SearchOption.AllDirectories);
                 filesWereExtracted = extractedFiles.Length > 0;
                 _logger.LogMessage($"    Files found by Directory.GetFiles in '{expectedExtractionSubDir}' (recursive): {extractedFiles.Length}. filesWereExtracted: {filesWereExtracted}");
             }
@@ -1255,7 +1349,7 @@ public partial class MainWindow : IDisposable
         {
             // 1. Create a local temporary directory for this file's processing
             localTempWorkingDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Convert", Guid.NewGuid().ToString());
-            await Task.Run(() => Directory.CreateDirectory(localTempWorkingDir), _cts.Token);
+            await Task.Run(() => Directory.CreateDirectory(localTempWorkingDir));
             _logger.LogMessage($"{logPrefix} Created local temporary working directory: {localTempWorkingDir}");
 
             // 2. Generate simple filename for the local copy
@@ -1265,7 +1359,7 @@ public partial class MainWindow : IDisposable
             // 3. Copy the original file from source (potentially UNC) to local temp
             _logger.LogMessage($"{logPrefix} Copying from '{inputFile}' to local temp '{localTempIsoPath}'...");
             SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Monitor temp drive for copy write
-            await Task.Run(() => File.Copy(inputFile, localTempIsoPath, true), _cts.Token);
+            await Task.Run(() => File.Copy(inputFile, localTempIsoPath, true));
             _logger.LogMessage($"{logPrefix} Successfully copied to local temp.");
 
             // 4. Run extract-xiso on the local temporary copy
@@ -1282,14 +1376,14 @@ public partial class MainWindow : IDisposable
             }
 
             // Ensure output folder exists
-            await Task.Run(() => Directory.CreateDirectory(outputFolder), _cts.Token);
+            await Task.Run(() => Directory.CreateDirectory(outputFolder));
             var destinationPath = Path.Combine(outputFolder, originalFileName); // Use original filename for destination
 
             if (toolResult == ConversionToolResultStatus.Skipped)
             {
                 _logger.LogMessage($"{logPrefix} Already optimized. Moving local copy to output with original filename.");
                 SetCurrentOperationDrive(GetDriveLetter(outputFolder)); // Monitor output drive for move write
-                await Task.Run(() => File.Move(localTempIsoPath, destinationPath, true), _cts.Token);
+                await Task.Run(() => File.Move(localTempIsoPath, destinationPath, true));
 
                 if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
                 {
@@ -1312,7 +1406,7 @@ public partial class MainWindow : IDisposable
             // If toolResult is Success
             _logger.LogMessage($"{logPrefix} Moving converted local file to output with original filename: {destinationPath}");
             SetCurrentOperationDrive(GetDriveLetter(outputFolder)); // Monitor output drive for move write
-            await Task.Run(() => File.Move(localTempIsoPath, destinationPath, true), _cts.Token);
+            await Task.Run(() => File.Move(localTempIsoPath, destinationPath, true));
 
             if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
             {
@@ -1349,9 +1443,9 @@ public partial class MainWindow : IDisposable
             {
                 try
                 {
-                    if (await Task.Run(() => Directory.Exists(localTempWorkingDir), CancellationToken.None))
+                    if (Directory.Exists(localTempWorkingDir))
                     {
-                        await Task.Run(() => Directory.Delete(localTempWorkingDir, true), CancellationToken.None);
+                        await Task.Run(() => Directory.Delete(localTempWorkingDir, true));
                         _logger.LogMessage($"{logPrefix} Cleaned up local temporary working directory: {localTempWorkingDir}");
                     }
                 }
@@ -1496,9 +1590,9 @@ public partial class MainWindow : IDisposable
         {
             try
             {
-                if (!await Task.Run(() => Directory.Exists(folder), CancellationToken.None)) continue;
+                if (!Directory.Exists(folder)) continue;
 
-                await Task.Run(() => Directory.Delete(folder, true), CancellationToken.None);
+                await Task.Run(() => Directory.Delete(folder, true));
                 tempFolders.Remove(folder);
             }
             catch (Exception ex)
@@ -1515,9 +1609,9 @@ public partial class MainWindow : IDisposable
     {
         try
         {
-            if (!await Task.Run(() => File.Exists(filePath), _cts.Token)) return;
+            if (!File.Exists(filePath)) return;
 
-            await Task.Run(() => File.Delete(filePath), _cts.Token);
+            await Task.Run(() => File.Delete(filePath));
             _logger.LogMessage($"Deleted: {Path.GetFileName(filePath)}");
         }
         catch (OperationCanceledException)
@@ -1557,6 +1651,70 @@ public partial class MainWindow : IDisposable
             "test" => "tested",
             _ => verb.ToLowerInvariant() + "ed"
         };
+    }
+
+    private async Task<long> CalculateTotalInputFileSizeAsync(List<string> filePaths)
+    {
+        long totalSize = 0;
+        foreach (var filePath in filePaths)
+        {
+            _cts.Token.ThrowIfCancellationRequested();
+            try
+            {
+                totalSize += await Task.Run(() => new FileInfo(filePath).Length);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogMessage($"Warning: Could not get size of file {Path.GetFileName(filePath)} for disk space calculation: {ex.Message}");
+                // Continue, but totalSize might be underestimated.
+            }
+        }
+
+        return totalSize;
+    }
+
+    private bool CheckDriveSpace(string path, long requiredSpace, string operationDescription)
+    {
+        var driveLetter = GetDriveLetter(path);
+        if (string.IsNullOrEmpty(driveLetter))
+        {
+            _messageBoxService.ShowError($"Could not determine drive for {operationDescription} path '{path}'. Cannot proceed.");
+            _ = ReportBugAsync($"Could not determine drive for {operationDescription} path '{path}'.");
+            return false;
+        }
+
+        DriveInfo driveInfo;
+        try
+        {
+            driveInfo = new DriveInfo(driveLetter);
+        }
+        catch (ArgumentException ex)
+        {
+            _messageBoxService.ShowError($"Invalid drive specified for {operationDescription} path '{path}': {ex.Message}. Cannot proceed.");
+            _ = ReportBugAsync($"Invalid drive for {operationDescription} path '{path}'. Exception: {ex.Message}", ex);
+            return false;
+        }
+
+        if (!driveInfo.IsReady)
+        {
+            _messageBoxService.ShowError($"{operationDescription} drive '{driveLetter}' is not ready. Cannot proceed.");
+            _ = ReportBugAsync($"{operationDescription} drive '{driveLetter}' not ready.");
+            return false;
+        }
+
+        if (driveInfo.AvailableFreeSpace < requiredSpace)
+        {
+            _messageBoxService.ShowError($"Insufficient free space on {operationDescription} drive ({driveLetter}). Required (estimated): {Formatter.FormatBytes(requiredSpace)}, Available: {Formatter.FormatBytes(driveInfo.AvailableFreeSpace)}. Please free up space.");
+            _ = ReportBugAsync($"Insufficient space on {operationDescription} drive {driveLetter}. Available: {driveInfo.AvailableFreeSpace}, Required: {requiredSpace}");
+            return false;
+        }
+
+        _logger.LogMessage($"INFO: {operationDescription} drive '{driveLetter}' has {Formatter.FormatBytes(driveInfo.AvailableFreeSpace)} free space (estimated required: {Formatter.FormatBytes(requiredSpace)}).");
+        return true;
     }
 
     public async Task ReportBugAsync(string message, Exception? exception = null)

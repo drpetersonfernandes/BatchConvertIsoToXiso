@@ -17,6 +17,7 @@ public partial class App
 
     private IBugReportService? _bugReportService;
     public static IServiceProvider? ServiceProvider { get; private set; }
+    private IMessageBoxService? _messageBoxService;
 
     public App()
     {
@@ -35,6 +36,7 @@ public partial class App
         ServiceProvider = serviceCollection.BuildServiceProvider();
 
         _bugReportService = ServiceProvider.GetRequiredService<IBugReportService>();
+        _messageBoxService = ServiceProvider.GetRequiredService<IMessageBoxService>();
 
         InitializeSevenZipSharp();
 
@@ -86,6 +88,12 @@ public partial class App
             {
                 _ = _bugReportService.SendBugReportAsync(message);
             }
+
+            // Inform the user that a critical error occurred
+            Current.Dispatcher.Invoke(() =>
+            {
+                _messageBoxService?.ShowError("A critical error occurred and has been reported. The application may need to close.");
+            });
         }
         catch
         {
