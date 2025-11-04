@@ -74,8 +74,7 @@ public partial class MainWindow : IDisposable
         else
         {
             LogMessage("WARNING: extract-xiso.exe not found. ISO conversion and testing will fail.");
-            // FIX: Unnecessary Task.FromResult
-            Task.Run(() => ReportBugAsync("extract-xiso.exe not found."));
+            _ = ReportBugAsync("extract-xiso.exe not found.");
         }
 
         LogMessage("INFO: Archive extraction uses the SevenZipExtractor library.");

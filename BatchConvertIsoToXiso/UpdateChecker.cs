@@ -2,6 +2,7 @@
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso;
@@ -30,8 +31,17 @@ public class UpdateChecker : IDisposable
                 return (false, null, null);
             }
 
-            // The tag name is expected to be like "release-1.5.1"
-            var latestVersionStr = releaseInfo.TagName.Replace("release-", "").Trim();
+            // Use a regular expression to extract a semantic version number (e.g., X.Y.Z)
+            // This makes the parsing more robust against varying tag prefixes like "release-" or "v".
+            var versionMatch = Regex.Match(releaseInfo.TagName, @"\d+\.\d+\.\d+(\.\d+)?");
+            if (!versionMatch.Success)
+            {
+                // If no version number can be extracted, treat as no update available.
+                return (false, null, null);
+            }
+
+            var latestVersionStr = versionMatch.Value;
+
             if (Version.TryParse(latestVersionStr, out var latestVersion))
             {
                 var currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
