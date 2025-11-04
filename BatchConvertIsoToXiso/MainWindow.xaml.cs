@@ -682,7 +682,7 @@ public partial class MainWindow : IDisposable
         {
             initialEntriesToProcess = await Task.Run(() =>
                     Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
-                        .Where(f =>
+                        .Where(static f =>
                         {
                             var ext = Path.GetExtension(f).ToLowerInvariant();
                             return ext is ".iso" or ".zip" or ".7z" or ".rar";
@@ -1653,12 +1653,6 @@ public partial class MainWindow : IDisposable
         }
     }
 
-
-    private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        Close();
-    }
-
     private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -1672,6 +1666,11 @@ public partial class MainWindow : IDisposable
             _logger.LogMessage($"Error opening About window: {ex.Message}");
             _ = ReportBugAsync("Error opening About window", ex);
         }
+    }
+
+    private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
     }
 
     public void Dispose()
