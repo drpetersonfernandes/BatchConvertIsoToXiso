@@ -1471,9 +1471,11 @@ public partial class MainWindow : IDisposable
     {
         var simpleFileName = Path.GetFileName(inputFile);
         var arguments = $"-r \"{inputFile}\"";
+
+        // If skipSystemUpdate is true, prepend the -s option
         if (skipSystemUpdate)
         {
-            arguments += " -s"; // Add -s argument if checkbox is checked
+            arguments = $"-s {arguments}"; // This will result in "-s -r \"{inputFile}\""
         }
 
         LogMessage($"Running extract-xiso {arguments} on simple filename: {simpleFileName} (original: {originalFileName})");
