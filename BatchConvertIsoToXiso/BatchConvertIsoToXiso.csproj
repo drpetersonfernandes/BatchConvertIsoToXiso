@@ -1,46 +1,43 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-    <ApplicationIcon>icon\icon.ico</ApplicationIcon>
-    <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
-    <AssemblyVersion>1.5.2</AssemblyVersion>
-    <FileVersion>1.5.2</FileVersion>
-    <IsPackable>false</IsPackable>
-    <NeutralLanguage>en-US</NeutralLanguage>
-    <DebugType>embedded</DebugType>
-    <DebugSymbols>true</DebugSymbols>
-  </PropertyGroup>
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net9.0-windows</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UseWPF>true</UseWPF>
+        <ApplicationIcon>icon\icon.ico</ApplicationIcon>
+        <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+        <AssemblyVersion>1.5.2</AssemblyVersion>
+        <FileVersion>1.5.2</FileVersion>
+        <IsPackable>false</IsPackable>
+        <NeutralLanguage>en-US</NeutralLanguage>
+        <DebugType>embedded</DebugType>
+        <DebugSymbols>true</DebugSymbols>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <Resource Include="icon\icon.ico" />
-    <Resource Include="icon\icon.png" />
-    <None Remove="images\about.png" />
-    <Resource Include="images\about.png" />
-    <None Remove="images\exit.png" />
-    <Resource Include="images\exit.png" />
-    <None Remove="images\logo.png" />
-    <Resource Include="images\logo.png" />
-    <None Update="7z_x64.dll">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="7z_x86.dll">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+    <ItemGroup>
+        <Resource Include="icon\icon.ico" />
+        <Resource Include="icon\icon.png" />
+        <Resource Include="images\about.png" />
+        <Resource Include="images\exit.png" />
+        <Resource Include="images\logo.png" />
+        <None Update="7z_x64.dll" Condition="'$(Platform)' == 'x64'">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="7z_x86.dll" Condition="'$(Platform)' == 'x86'">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
 
-  <ItemGroup>
-    <None Update="extract-xiso.exe">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+    <ItemGroup>
+        <None Update="extract-xiso.exe">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Squid-Box.SevenZipSharp" Version="1.6.2.24" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Squid-Box.SevenZipSharp" Version="1.6.2.24" />
+    </ItemGroup>
 
 </Project>

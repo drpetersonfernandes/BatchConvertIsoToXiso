@@ -33,15 +33,16 @@ public partial class AboutWindow
         }
         catch (Exception ex)
         {
-            var bugReportService = new BugReportService(
-                App.BugReportApiUrl,
-                App.BugReportApiKey,
-                App.ApplicationName);
-
-            _ = bugReportService.SendBugReportAsync($"Error opening URL: {e.Uri.AbsoluteUri}. Exception: {ex.Message}");
-
-            bugReportService.Dispose();
-
+            // Use the application's singleton BugReportService instance
+            if (Application.Current is App app)
+            {
+                _ = app.SendBugReportFromAnywhereAsync($"Error opening URL: {e.Uri.AbsoluteUri}. Exception: {ex.Message}");
+            }
+            else
+            {
+                // Fallback or log if App.Current is not of type App (shouldn't happen in a typical WPF app)
+                Debug.WriteLine($"Could not access App instance to send bug report for URL error: {ex.Message}");
+            }
 
             MessageBox.Show($"Unable to open link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }

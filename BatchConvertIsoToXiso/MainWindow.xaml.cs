@@ -15,7 +15,6 @@ namespace BatchConvertIsoToXiso;
 public partial class MainWindow : IDisposable
 {
     private CancellationTokenSource _cts;
-    private readonly BugReportService _bugReportService;
     private readonly UpdateChecker _updateChecker;
 
     // Summary Stats
@@ -31,12 +30,15 @@ public partial class MainWindow : IDisposable
     private string? _activeMonitoringDriveLetter;
     private string? _currentOperationDrive;
 
+    // Minimum required free space on the temporary drive for operations
+    private const long MinimumRequiredConversionTempSpaceBytes = 10L * 1024 * 1024 * 1024; // 10 GB
+    private const long MinimumRequiredTestTempSpaceBytes = 20L * 1024 * 1024 * 1024; // 20 GB (for ISO copy + full extraction)
+
     public MainWindow()
     {
         InitializeComponent();
 
-        _cts = new CancellationTokenSource();
-        _bugReportService = new BugReportService(App.BugReportApiUrl, App.BugReportApiKey, App.ApplicationName);
+        _cts = new CancellationTokenSource(); // Initialized here, will be replaced at start of each operation.
         _updateChecker = new UpdateChecker();
 
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -72,7 +74,8 @@ public partial class MainWindow : IDisposable
         else
         {
             LogMessage("WARNING: extract-xiso.exe not found. ISO conversion and testing will fail.");
-            Task.Run(() => Task.FromResult(_ = ReportBugAsync("extract-xiso.exe not found.")));
+            // FIX: Unnecessary Task.FromResult
+            Task.Run(() => ReportBugAsync("extract-xiso.exe not found."));
         }
 
         LogMessage("INFO: Archive extraction uses the SevenZipExtractor library.");
@@ -127,6 +130,24 @@ public partial class MainWindow : IDisposable
             return $"{bytesPerSecond / kilobyte:F1} KB/s";
 
         return $"{bytesPerSecond / megabyte:F1} MB/s";
+    }
+
+    // Format bytes for display
+    private static string FormatBytes(long bytes)
+    {
+        const long kilobyte = 1024;
+        const long megabyte = kilobyte * 1024;
+        const long gigabyte = megabyte * 1024;
+        const long terabyte = gigabyte * 1024;
+
+        return bytes switch
+        {
+            < kilobyte => $"{bytes} B",
+            < megabyte => $"{bytes / kilobyte:F1} KB",
+            < gigabyte => $"{bytes / megabyte:F1} MB",
+            < terabyte => $"{bytes / gigabyte:F1} GB",
+            _ => $"{bytes / terabyte:F1} TB"
+        };
     }
 
     private void SetCurrentOperationDrive(string? driveLetter)
@@ -271,6 +292,10 @@ public partial class MainWindow : IDisposable
         {
             Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
 
+            // FIX: Cancellation Logic - Dispose previous CTS and create a new one for this operation
+            _cts?.Dispose();
+            _cts = new CancellationTokenSource();
+
             var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
 
@@ -286,6 +311,7 @@ public partial class MainWindow : IDisposable
             var inputFolder = ConversionInputFolderTextBox.Text;
             var outputFolder = ConversionOutputFolderTextBox.Text;
             var deleteFiles = DeleteOriginalsCheckBox.IsChecked ?? false;
+            var skipSystemUpdate = SkipSystemUpdateCheckBox.IsChecked ?? false; // Get state of new checkbox
 
             if (string.IsNullOrEmpty(inputFolder) || string.IsNullOrEmpty(outputFolder))
             {
@@ -301,11 +327,37 @@ public partial class MainWindow : IDisposable
                 return;
             }
 
-            if (_cts.IsCancellationRequested)
+            // Check for sufficient temporary disk space
+            var tempPath = Path.GetTempPath();
+            var tempDriveLetter = GetDriveLetter(tempPath);
+            if (string.IsNullOrEmpty(tempDriveLetter))
             {
-                _cts.Dispose();
-                _cts = new CancellationTokenSource();
+                ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with conversion.");
+                StopPerformanceCounter();
+                _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of conversion.");
+                return;
             }
+
+            var tempDriveInfo = new DriveInfo(tempDriveLetter);
+            if (!tempDriveInfo.IsReady)
+            {
+                ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with conversion.");
+                StopPerformanceCounter();
+                _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of conversion.");
+                return;
+            }
+
+            if (tempDriveInfo.AvailableFreeSpace < MinimumRequiredConversionTempSpaceBytes)
+            {
+                ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
+                          $"Required: {FormatBytes(MinimumRequiredConversionTempSpaceBytes)}, Available: {FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
+                          "Please free up space or choose a different temporary drive if possible (via system settings).");
+                StopPerformanceCounter();
+                _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for conversion. Available: {tempDriveInfo.AvailableFreeSpace}");
+                return;
+            }
+
+            LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {FormatBytes(MinimumRequiredConversionTempSpaceBytes)}).");
 
             ResetSummaryStats();
 
@@ -323,10 +375,11 @@ public partial class MainWindow : IDisposable
             LogMessage($"Input folder: {inputFolder}");
             LogMessage($"Output folder: {outputFolder}");
             LogMessage($"Delete original files: {deleteFiles}");
+            LogMessage($"Skip $SystemUpdate folder: {skipSystemUpdate}"); // Log new option
 
             try
             {
-                await PerformBatchConversionAsync(extractXisoPath, inputFolder, outputFolder, deleteFiles);
+                await PerformBatchConversionAsync(extractXisoPath, inputFolder, outputFolder, deleteFiles, skipSystemUpdate); // Pass new option
             }
             catch (OperationCanceledException)
             {
@@ -365,6 +418,10 @@ public partial class MainWindow : IDisposable
         {
             Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
 
+            // FIX: Cancellation Logic - Dispose previous CTS and create a new one for this operation
+            _cts?.Dispose();
+            _cts = new CancellationTokenSource();
+
             var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
 
@@ -379,9 +436,9 @@ public partial class MainWindow : IDisposable
 
             var inputFolder = TestInputFolderTextBox.Text;
             var moveSuccessful = MoveSuccessFilesCheckBox.IsChecked == true;
-            var successFolder = Path.Combine(inputFolder, "_success");
+            var successFolder = Path.Combine(inputFolder, "_success"); // Hardcoded as per user request
             var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
-            var failedFolder = Path.Combine(inputFolder, "_failed");
+            var failedFolder = Path.Combine(inputFolder, "_failed"); // Hardcoded as per user request
 
             if (string.IsNullOrEmpty(inputFolder))
             {
@@ -390,19 +447,9 @@ public partial class MainWindow : IDisposable
                 return;
             }
 
-            if (moveSuccessful && string.IsNullOrEmpty(successFolder))
-            {
-                ShowError("Please select a Success Folder or uncheck the option to move successful files.");
-                StopPerformanceCounter();
-                return;
-            }
-
-            if (moveFailed && string.IsNullOrEmpty(failedFolder))
-            {
-                ShowError("Please select a Failed Folder or uncheck the option to move failed files.");
-                StopPerformanceCounter();
-                return;
-            }
+            // No need to check for empty successFolder/failedFolder as they are now hardcoded relative to inputFolder
+            // and will always have a value if inputFolder is not empty.
+            // The checks below are still valid for ensuring they are not the same as inputFolder or each other.
 
             if (moveSuccessful && moveFailed && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(failedFolder, StringComparison.OrdinalIgnoreCase))
             {
@@ -419,11 +466,37 @@ public partial class MainWindow : IDisposable
                 return;
             }
 
-            if (_cts.IsCancellationRequested)
+            // Check for sufficient temporary disk space
+            var tempPath = Path.GetTempPath();
+            var tempDriveLetter = GetDriveLetter(tempPath);
+            if (string.IsNullOrEmpty(tempDriveLetter))
             {
-                _cts.Dispose();
-                _cts = new CancellationTokenSource();
+                ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with ISO test.");
+                StopPerformanceCounter();
+                _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of ISO test.");
+                return;
             }
+
+            var tempDriveInfo = new DriveInfo(tempDriveLetter);
+            if (!tempDriveInfo.IsReady)
+            {
+                ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with ISO test.");
+                StopPerformanceCounter();
+                _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of ISO test.");
+                return;
+            }
+
+            if (tempDriveInfo.AvailableFreeSpace < MinimumRequiredTestTempSpaceBytes)
+            {
+                ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
+                          $"Required: {FormatBytes(MinimumRequiredTestTempSpaceBytes)}, Available: {FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
+                          "Please free up space or choose a different temporary drive if possible (via system settings).");
+                StopPerformanceCounter();
+                _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for ISO test. Available: {tempDriveInfo.AvailableFreeSpace}");
+                return;
+            }
+
+            LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {FormatBytes(MinimumRequiredTestTempSpaceBytes)}).");
 
             ResetSummaryStats();
 
@@ -491,6 +564,7 @@ public partial class MainWindow : IDisposable
         ConversionOutputFolderTextBox.IsEnabled = enabled;
         BrowseConversionOutputButton.IsEnabled = enabled;
         DeleteOriginalsCheckBox.IsEnabled = enabled;
+        SkipSystemUpdateCheckBox.IsEnabled = enabled; // Enable/disable new checkbox
         StartConversionButton.IsEnabled = enabled;
 
         // Test Tab
@@ -500,8 +574,9 @@ public partial class MainWindow : IDisposable
         MoveFailedFilesCheckBox.IsEnabled = enabled;
         StartTestButton.IsEnabled = enabled;
 
-        SuccessFolderPanel.IsEnabled = enabled;
-        FailedFolderPanel.IsEnabled = enabled;
+        // FIX: Removed panels, so remove their state management
+        // SuccessFolderPanel.IsEnabled = enabled;
+        // FailedFolderPanel.IsEnabled = enabled;
 
         // Main Window Controls
         MainTabControl.IsEnabled = enabled;
@@ -518,27 +593,28 @@ public partial class MainWindow : IDisposable
         }
     }
 
-    private void MoveSuccessFilesCheckBox_CheckedUnchecked(object sender, RoutedEventArgs e)
-    {
-        if (SuccessFolderPanel == null)
-        {
-            return; // Control is not yet initialized, do nothing.
-        }
-
-        SuccessFolderPanel.Visibility = MoveSuccessFilesCheckBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        SetControlsState(StartConversionButton.IsEnabled);
-    }
-
-    private void MoveFailedFilesCheckBox_CheckedUnchecked(object sender, RoutedEventArgs e)
-    {
-        if (FailedFolderPanel == null)
-        {
-            return; // Control is not yet initialized, do nothing.
-        }
-
-        FailedFolderPanel.Visibility = MoveFailedFilesCheckBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        SetControlsState(StartConversionButton.IsEnabled);
-    }
+    // FIX: Removed these methods as panels are removed and checkboxes no longer toggle visibility
+    // private void MoveSuccessFilesCheckBox_CheckedUnchecked(object sender, RoutedEventArgs e)
+    // {
+    //     if (SuccessFolderPanel == null)
+    //     {
+    //         return; // Control is not yet initialized, do nothing.
+    //     }
+    //
+    //     SuccessFolderPanel.Visibility = MoveSuccessFilesCheckBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    //     SetControlsState(StartConversionButton.IsEnabled);
+    // }
+    //
+    // private void MoveFailedFilesCheckBox_CheckedUnchecked(object sender, RoutedEventArgs e)
+    // {
+    //     if (FailedFolderPanel == null)
+    //     {
+    //         return; // Control is not yet initialized, do nothing.
+    //     }
+    //
+    //     FailedFolderPanel.Visibility = MoveFailedFilesCheckBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    //     SetControlsState(StartConversionButton.IsEnabled);
+    // }
 
     private static string? SelectFolder(string description)
     {
@@ -647,7 +723,7 @@ public partial class MainWindow : IDisposable
         return $"iso_{fileIndex:D6}.iso";
     }
 
-    private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals)
+    private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals, bool skipSystemUpdate) // Add skipSystemUpdate parameter
     {
         var tempFoldersToCleanUpAtEnd = new List<string>();
         var archivesFailedToExtractOrProcess = 0;
@@ -705,166 +781,170 @@ public partial class MainWindow : IDisposable
             UpdateStatus($"Processing: {entryFileName}");
             var entryExtension = Path.GetExtension(currentEntryPath).ToLowerInvariant();
 
-            if (entryExtension == ".iso")
+            switch (entryExtension)
             {
-                LogMessage($"Processing standalone ISO: {entryFileName}...");
-                SetCurrentOperationDrive(GetDriveLetter(outputFolder));
-                var status = await ConvertFileAsync(extractXisoPath, currentEntryPath, outputFolder, deleteOriginals, globalFileIndex);
-                globalFileIndex++;
-                actualIsosProcessedForProgress++;
-                switch (status)
+                case ".iso":
                 {
-                    case FileProcessingStatus.Converted:
-                        _uiSuccessCount++;
-                        break;
-                    case FileProcessingStatus.Skipped:
-                        _uiSkippedCount++;
-                        break;
-                    case FileProcessingStatus.Failed:
-                        _uiFailedCount++;
-                        failedConversionFilePaths.Add(currentEntryPath);
-                        break;
-                }
-
-                UpdateSummaryStatsUi();
-                UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
-            }
-            else if (entryExtension is ".zip" or ".7z" or ".rar")
-            {
-                LogMessage($"Processing archive: {entryFileName}...");
-                var statusesOfIsosInThisArchive = new List<FileProcessingStatus>();
-                string? currentArchiveTempExtractionDir = null;
-                var archiveExtractedSuccessfully = false;
-
-                try
-                {
-                    currentArchiveTempExtractionDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Extract", Guid.NewGuid().ToString());
-                    await Task.Run(() => Directory.CreateDirectory(currentArchiveTempExtractionDir), _cts.Token);
-                    tempFoldersToCleanUpAtEnd.Add(currentArchiveTempExtractionDir);
-                    SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath()));
-                    archiveExtractedSuccessfully = await ExtractArchiveAsync(currentEntryPath, currentArchiveTempExtractionDir);
-                    if (archiveExtractedSuccessfully)
+                    LogMessage($"Processing standalone ISO: {entryFileName}...");
+                    var status = await ConvertFileAsync(extractXisoPath, currentEntryPath, outputFolder, deleteOriginals, globalFileIndex, skipSystemUpdate); // Pass new option
+                    globalFileIndex++;
+                    actualIsosProcessedForProgress++;
+                    switch (status)
                     {
-                        var extractedIsoFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.iso", SearchOption.AllDirectories), _cts.Token);
-                        switch (extractedIsoFiles.Length)
+                        case FileProcessingStatus.Converted:
+                            _uiSuccessCount++;
+                            break;
+                        case FileProcessingStatus.Skipped:
+                            _uiSkippedCount++;
+                            break;
+                        case FileProcessingStatus.Failed:
+                            _uiFailedCount++;
+                            failedConversionFilePaths.Add(currentEntryPath);
+                            break;
+                    }
+
+                    UpdateSummaryStatsUi();
+                    UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                    break;
+                }
+                case ".zip" or ".7z" or ".rar":
+                {
+                    LogMessage($"Processing archive: {entryFileName}...");
+                    var statusesOfIsosInThisArchive = new List<FileProcessingStatus>();
+                    string? currentArchiveTempExtractionDir = null;
+                    var archiveExtractedSuccessfully = false;
+
+                    try
+                    {
+                        currentArchiveTempExtractionDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Extract", Guid.NewGuid().ToString());
+                        await Task.Run(() => Directory.CreateDirectory(currentArchiveTempExtractionDir), _cts.Token);
+                        tempFoldersToCleanUpAtEnd.Add(currentArchiveTempExtractionDir);
+                        SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath()));
+                        archiveExtractedSuccessfully = await ExtractArchiveAsync(currentEntryPath, currentArchiveTempExtractionDir);
+                        if (archiveExtractedSuccessfully)
                         {
-                            case > 0:
+                            var extractedIsoFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.iso", SearchOption.AllDirectories), _cts.Token);
+                            switch (extractedIsoFiles.Length)
                             {
-                                var newIsosFound = extractedIsoFiles.Length;
-                                currentExpectedTotalIsos += (newIsosFound - 1);
-                                UpdateSummaryStatsUi(currentExpectedTotalIsos);
-                                UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
-                                LogMessage($"Found {newIsosFound} ISO(s) in {entryFileName}. Total expected ISOs now: {currentExpectedTotalIsos}. Processing them now...");
-                                break;
+                                case > 0:
+                                {
+                                    var newIsosFound = extractedIsoFiles.Length;
+                                    currentExpectedTotalIsos += (newIsosFound - 1);
+                                    UpdateSummaryStatsUi(currentExpectedTotalIsos);
+                                    UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                                    LogMessage($"Found {newIsosFound} ISO(s) in {entryFileName}. Total expected ISOs now: {currentExpectedTotalIsos}. Processing them now...");
+                                    break;
+                                }
+                                case 0:
+                                    LogMessage($"No ISO files found in archive: {entryFileName}.");
+                                    actualIsosProcessedForProgress++;
+                                    UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                                    break;
                             }
-                            case 0:
-                                LogMessage($"No ISO files found in archive: {entryFileName}.");
+
+                            foreach (var extractedIsoPath in extractedIsoFiles)
+                            {
+                                _cts.Token.ThrowIfCancellationRequested();
+                                var extractedIsoName = Path.GetFileName(extractedIsoPath);
+                                LogMessage($"  Converting ISO from archive: {extractedIsoName}...");
+                                var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate); // Pass new option
+                                globalFileIndex++;
+                                statusesOfIsosInThisArchive.Add(status);
                                 actualIsosProcessedForProgress++;
-                                UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
-                                break;
-                        }
+                                switch (status)
+                                {
+                                    case FileProcessingStatus.Converted:
+                                        _uiSuccessCount++;
+                                        break;
+                                    case FileProcessingStatus.Skipped:
+                                        _uiSkippedCount++;
+                                        break;
+                                    case FileProcessingStatus.Failed:
+                                        _uiFailedCount++;
+                                        failedConversionFilePaths.Add(extractedIsoPath);
+                                        break;
+                                }
 
-                        foreach (var extractedIsoPath in extractedIsoFiles)
-                        {
-                            _cts.Token.ThrowIfCancellationRequested();
-                            var extractedIsoName = Path.GetFileName(extractedIsoPath);
-                            LogMessage($"  Converting ISO from archive: {extractedIsoName}...");
-                            SetCurrentOperationDrive(GetDriveLetter(outputFolder));
-                            var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false, globalFileIndex);
-                            globalFileIndex++;
-                            statusesOfIsosInThisArchive.Add(status);
-                            actualIsosProcessedForProgress++;
-                            switch (status)
-                            {
-                                case FileProcessingStatus.Converted:
-                                    _uiSuccessCount++;
-                                    break;
-                                case FileProcessingStatus.Skipped:
-                                    _uiSkippedCount++;
-                                    break;
-                                case FileProcessingStatus.Failed:
-                                    _uiFailedCount++;
-                                    failedConversionFilePaths.Add(extractedIsoPath);
-                                    break;
+                                UpdateSummaryStatsUi();
+                                UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                             }
 
+                            if (extractedIsoFiles.Length == 0)
+                            {
+                                statusesOfIsosInThisArchive.Add(FileProcessingStatus.Skipped);
+                            }
+                        }
+                        else
+                        {
+                            LogMessage($"Failed to extract archive: {entryFileName}. It will be skipped.");
+                            archivesFailedToExtractOrProcess++;
+                            statusesOfIsosInThisArchive.Add(FileProcessingStatus.Failed);
+                            failedConversionFilePaths.Add(currentEntryPath);
+                            actualIsosProcessedForProgress++;
+                            _uiFailedCount++;
                             UpdateSummaryStatsUi();
                             UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                         }
 
-                        if (extractedIsoFiles.Length == 0)
+                        switch (deleteOriginals)
                         {
-                            statusesOfIsosInThisArchive.Add(FileProcessingStatus.Skipped);
+                            case true when archiveExtractedSuccessfully:
+                            {
+                                var allIsosFromArchiveOk = statusesOfIsosInThisArchive.Count > 0 &&
+                                                           statusesOfIsosInThisArchive.All(static s => s is FileProcessingStatus.Converted or FileProcessingStatus.Skipped);
+                                if (allIsosFromArchiveOk)
+                                {
+                                    LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
+                                    await TryDeleteFileAsync(currentEntryPath);
+                                }
+                                else if (statusesOfIsosInThisArchive.Count > 0)
+                                {
+                                    LogMessage($"Not deleting archive {entryFileName} due to processing issues with its contents.");
+                                }
+
+                                break;
+                            }
+                            case true when !archiveExtractedSuccessfully:
+                                LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
+                                break;
                         }
                     }
-                    else
+                    catch (OperationCanceledException)
                     {
-                        LogMessage($"Failed to extract archive: {entryFileName}. It will be skipped.");
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        LogMessage($"Error processing archive {entryFileName}: {ex.Message}");
+                        _ = ReportBugAsync($"Error during processing of archive {entryFileName}", ex);
                         archivesFailedToExtractOrProcess++;
-                        statusesOfIsosInThisArchive.Add(FileProcessingStatus.Failed);
                         failedConversionFilePaths.Add(currentEntryPath);
-                        actualIsosProcessedForProgress++;
-                        _uiFailedCount++;
-                        UpdateSummaryStatsUi();
-                        UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                        if (!archiveExtractedSuccessfully)
+                        {
+                            actualIsosProcessedForProgress++;
+                            _uiFailedCount++;
+                            UpdateSummaryStatsUi();
+                            UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                        }
+                    }
+                    finally
+                    {
+                        if (currentArchiveTempExtractionDir != null && await Task.Run(() => Directory.Exists(currentArchiveTempExtractionDir), _cts.Token))
+                        {
+                            try
+                            {
+                                await Task.Run(() => Directory.Delete(currentArchiveTempExtractionDir, true), _cts.Token);
+                                tempFoldersToCleanUpAtEnd.Remove(currentArchiveTempExtractionDir);
+                                LogMessage($"Cleaned up temporary folder for {entryFileName}.");
+                            }
+                            catch (Exception ex)
+                            {
+                                LogMessage($"Error cleaning temp folder {currentArchiveTempExtractionDir} for {entryFileName}: {ex.Message}. Will retry at end.");
+                            }
+                        }
                     }
 
-                    switch (deleteOriginals)
-                    {
-                        case true when archiveExtractedSuccessfully:
-                        {
-                            var allIsosFromArchiveOk = statusesOfIsosInThisArchive.Count > 0 &&
-                                                       statusesOfIsosInThisArchive.All(static s => s is FileProcessingStatus.Converted or FileProcessingStatus.Skipped);
-                            if (allIsosFromArchiveOk)
-                            {
-                                LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
-                                await TryDeleteFileAsync(currentEntryPath);
-                            }
-                            else if (statusesOfIsosInThisArchive.Count > 0)
-                            {
-                                LogMessage($"Not deleting archive {entryFileName} due to processing issues with its contents.");
-                            }
-
-                            break;
-                        }
-                        case true when !archiveExtractedSuccessfully:
-                            LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
-                            break;
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    LogMessage($"Error processing archive {entryFileName}: {ex.Message}");
-                    _ = ReportBugAsync($"Error during processing of archive {entryFileName}", ex);
-                    archivesFailedToExtractOrProcess++;
-                    failedConversionFilePaths.Add(currentEntryPath);
-                    if (!archiveExtractedSuccessfully)
-                    {
-                        actualIsosProcessedForProgress++;
-                        _uiFailedCount++;
-                        UpdateSummaryStatsUi();
-                        UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
-                    }
-                }
-                finally
-                {
-                    if (currentArchiveTempExtractionDir != null && await Task.Run(() => Directory.Exists(currentArchiveTempExtractionDir), _cts.Token))
-                    {
-                        try
-                        {
-                            await Task.Run(() => Directory.Delete(currentArchiveTempExtractionDir, true), _cts.Token);
-                            tempFoldersToCleanUpAtEnd.Remove(currentArchiveTempExtractionDir);
-                            LogMessage($"Cleaned up temporary folder for {entryFileName}.");
-                        }
-                        catch (Exception ex)
-                        {
-                            LogMessage($"Error cleaning temp folder {currentArchiveTempExtractionDir} for {entryFileName}: {ex.Message}. Will retry at end.");
-                        }
-                    }
+                    break;
                 }
             }
         }
@@ -1269,97 +1349,89 @@ public partial class MainWindow : IDisposable
         }
     }
 
-    private async Task<FileProcessingStatus> ConvertFileAsync(string extractXisoPath, string inputFile, string outputFolder, bool deleteOriginalIsoFile, int fileIndex)
+    private async Task<FileProcessingStatus> ConvertFileAsync(string extractXisoPath, string inputFile, string outputFolder, bool deleteOriginalIsoFile, int fileIndex, bool skipSystemUpdate) // Add skipSystemUpdate parameter
     {
         var originalFileName = Path.GetFileName(inputFile);
         var logPrefix = $"File '{originalFileName}':";
-        string? simpleFilePath = null;
+        string? localTempIsoPath; // Path to the ISO in the local temp directory
+        string? localTempWorkingDir = null; // Directory for local temp operations
 
         try
         {
-            // Generate simple filename
+            // 1. Create a local temporary directory for this file's processing
+            localTempWorkingDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Convert", Guid.NewGuid().ToString());
+            await Task.Run(() => Directory.CreateDirectory(localTempWorkingDir), _cts.Token);
+            LogMessage($"{logPrefix} Created local temporary working directory: {localTempWorkingDir}");
+
+            // 2. Generate simple filename for the local copy
             var simpleFilename = GenerateSimpleFilename(fileIndex);
-            var workingDirectory = Path.GetDirectoryName(inputFile) ?? Path.GetTempPath();
-            simpleFilePath = Path.Combine(workingDirectory, simpleFilename);
+            localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);
 
-            LogMessage($"{logPrefix} Renaming to simple filename '{simpleFilename}' for conversion");
+            // 3. Copy the original file from source (potentially UNC) to local temp
+            LogMessage($"{logPrefix} Copying from '{inputFile}' to local temp '{localTempIsoPath}'...");
+            SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Monitor temp drive for copy write
+            await Task.Run(() => File.Copy(inputFile, localTempIsoPath, true), _cts.Token);
+            LogMessage($"{logPrefix} Successfully copied to local temp.");
 
-            // Rename to simple filename
-            await Task.Run(() => File.Move(inputFile, simpleFilePath, true), _cts.Token);
+            // 4. Run extract-xiso on the local temporary copy
+            SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Still monitoring temp drive for in-place rewrite
+            var toolResult = await RunConversionToolAsync(extractXisoPath, localTempIsoPath, originalFileName, skipSystemUpdate); // Pass new option
 
-            var toolResult = await RunConversionToolAsync(extractXisoPath, simpleFilePath, originalFileName);
+            var isTemporaryFileFromArchive = inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase);
 
             if (toolResult == ConversionToolResultStatus.Failed)
             {
-                LogMessage($"{logPrefix} extract-xiso tool reported failure.");
-
-                // Restore original filename if conversion failed
-                if (!await Task.Run(() => File.Exists(simpleFilePath), _cts.Token)) return FileProcessingStatus.Failed;
-
-                await Task.Run(() => File.Move(simpleFilePath, inputFile, true), _cts.Token);
-                LogMessage($"{logPrefix} Restored original filename after conversion failure");
-
+                LogMessage($"{logPrefix} extract-xiso tool reported failure on local copy.");
+                // No need to restore original filename as original is untouched.
                 return FileProcessingStatus.Failed;
             }
 
+            // Ensure output folder exists
             await Task.Run(() => Directory.CreateDirectory(outputFolder), _cts.Token);
             var destinationPath = Path.Combine(outputFolder, originalFileName); // Use original filename for destination
-            var isTemporaryFileFromArchive = inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase);
 
             if (toolResult == ConversionToolResultStatus.Skipped)
             {
-                LogMessage($"{logPrefix} Already optimized. Copying to output with original filename.");
-                await Task.Run(() => Directory.CreateDirectory(outputFolder), _cts.Token);
+                LogMessage($"{logPrefix} Already optimized. Moving local copy to output with original filename.");
+                SetCurrentOperationDrive(GetDriveLetter(outputFolder)); // Monitor output drive for move write
+                await Task.Run(() => File.Move(localTempIsoPath, destinationPath, true), _cts.Token);
 
-                // Copy the file to the destination
-                await Task.Run(() => File.Copy(simpleFilePath, destinationPath, true), _cts.Token);
-
-                // Now, handle the original file (which is currently at simpleFilePath)
                 if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
                 {
                     LogMessage($"{logPrefix} Deleting original file as requested.");
-                    await Task.Run(() => File.Delete(simpleFilePath), _cts.Token);
+                    await TryDeleteFileAsync(inputFile);
+                }
+                else if (isTemporaryFileFromArchive)
+                {
+                    // Original file was already temporary, it will be cleaned up by archive processing logic
+                    LogMessage($"{logPrefix} Original file was temporary (from archive), it will be cleaned up by archive logic.");
                 }
                 else
                 {
-                    // If we're not deleting, we must restore the original file by moving the simple-named file back.
-                    LogMessage($"{logPrefix} Restoring original filename.");
-                    await Task.Run(() => File.Move(simpleFilePath, inputFile, true), _cts.Token);
+                    LogMessage($"{logPrefix} Original file kept as requested.");
                 }
 
                 return FileProcessingStatus.Skipped;
             }
 
-            // For successful conversion, the simple filename file has been converted in place
-            var convertedFilePath = simpleFilePath;
-            var originalBackupPath = simpleFilePath + ".old";
+            // If toolResult is Success
+            LogMessage($"{logPrefix} Moving converted local file to output with original filename: {destinationPath}");
+            SetCurrentOperationDrive(GetDriveLetter(outputFolder)); // Monitor output drive for move write
+            await Task.Run(() => File.Move(localTempIsoPath, destinationPath, true), _cts.Token);
 
-            LogMessage($"{logPrefix} Moving converted file to output with original filename: {destinationPath}");
-            await Task.Run(() => File.Move(convertedFilePath, destinationPath, true), _cts.Token);
-
-            // Handle backup file cleanup
-            if (await Task.Run(() => File.Exists(originalBackupPath), _cts.Token))
+            if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
             {
-                if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
-                {
-                    LogMessage($"{logPrefix} Deleting backup of simple filename file (original will be deleted as requested)");
-                    await Task.Run(() => File.Delete(originalBackupPath), _cts.Token);
-                }
-                else if (!isTemporaryFileFromArchive)
-                {
-                    LogMessage($"{logPrefix} Restoring original file from backup with original filename");
-                    await Task.Run(() => File.Move(originalBackupPath, inputFile, true), _cts.Token);
-                }
-                else
-                {
-                    // Clean up backup of temporary file
-                    LogMessage($"{logPrefix} Cleaning up backup of temporary simple filename file");
-                    await Task.Run(() => File.Delete(originalBackupPath), _cts.Token);
-                }
+                LogMessage($"{logPrefix} Deleting original file as requested.");
+                await TryDeleteFileAsync(inputFile);
             }
-            else if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
+            else if (isTemporaryFileFromArchive)
             {
-                LogMessage($"{logPrefix} Original file was successfully converted and moved to destination.");
+                // Original file was already temporary, it will be cleaned up by archive processing logic
+                LogMessage($"{logPrefix} Original file was temporary (from archive), it will be cleaned up by archive logic.");
+            }
+            else
+            {
+                LogMessage($"{logPrefix} Original file kept as requested.");
             }
 
             return FileProcessingStatus.Converted;
@@ -1377,29 +1449,35 @@ public partial class MainWindow : IDisposable
         }
         finally
         {
-            // Clean up any remaining simple filename file
-            if (!string.IsNullOrEmpty(simpleFilePath))
+            // Clean up the local temporary working directory and its contents
+            if (!string.IsNullOrEmpty(localTempWorkingDir))
             {
                 try
                 {
-                    if (await Task.Run(() => File.Exists(simpleFilePath), CancellationToken.None))
+                    if (await Task.Run(() => Directory.Exists(localTempWorkingDir), CancellationToken.None))
                     {
-                        await Task.Run(() => File.Delete(simpleFilePath), CancellationToken.None);
-                        LogMessage($"{logPrefix} Cleaned up remaining simple filename file");
+                        await Task.Run(() => Directory.Delete(localTempWorkingDir, true), CancellationToken.None);
+                        LogMessage($"{logPrefix} Cleaned up local temporary working directory: {localTempWorkingDir}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogMessage($"{logPrefix} Error cleaning up simple filename file: {ex.Message}");
+                    LogMessage($"{logPrefix} Error cleaning up local temporary working directory {localTempWorkingDir}: {ex.Message}");
                 }
             }
         }
     }
 
-    private async Task<ConversionToolResultStatus> RunConversionToolAsync(string extractXisoPath, string inputFile, string originalFileName)
+    private async Task<ConversionToolResultStatus> RunConversionToolAsync(string extractXisoPath, string inputFile, string originalFileName, bool skipSystemUpdate) // Add skipSystemUpdate parameter
     {
         var simpleFileName = Path.GetFileName(inputFile);
-        LogMessage($"Running extract-xiso -r on simple filename: {simpleFileName} (original: {originalFileName})");
+        var arguments = $"-r \"{inputFile}\"";
+        if (skipSystemUpdate)
+        {
+            arguments += " -s"; // Add -s argument if checkbox is checked
+        }
+
+        LogMessage($"Running extract-xiso {arguments} on simple filename: {simpleFileName} (original: {originalFileName})");
 
         var localProcessOutputLines = new List<string>();
         var outputForUiLog = new StringBuilder();
@@ -1414,7 +1492,7 @@ public partial class MainWindow : IDisposable
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = extractXisoPath,
-                Arguments = $"-r \"{inputFile}\"",
+                Arguments = arguments, // Use the constructed arguments string
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -1658,7 +1736,10 @@ public partial class MainWindow : IDisposable
                 }
             }
 
-            await _bugReportService.SendBugReportAsync(fullReport.ToString());
+            if (Application.Current is App app)
+            {
+                await app.SendBugReportFromAnywhereAsync(fullReport.ToString());
+            }
         }
         catch
         {
@@ -1743,7 +1824,6 @@ public partial class MainWindow : IDisposable
         StopPerformanceCounter();
         _cts?.Cancel();
         _cts?.Dispose();
-        _bugReportService?.Dispose();
         GC.SuppressFinalize(this);
     }
 

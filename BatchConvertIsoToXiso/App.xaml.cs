@@ -135,6 +135,25 @@ public partial class App
         }
     }
 
+    /// <summary>
+    /// Public method to send a bug report from any part of the application using the singleton service.
+    /// </summary>
+    /// <param name="message">The error message or bug report.</param>
+    public async Task SendBugReportFromAnywhereAsync(string message)
+    {
+        try
+        {
+            if (_bugReportService != null)
+            {
+                await _bugReportService.SendBugReportAsync(message);
+            }
+        }
+        catch
+        {
+            /* Ignore any errors during bug reporting itself */
+        }
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         // Clean up event handlers
