@@ -12,11 +12,13 @@ public class FileExtractorService : IFileExtractor
 {
     private readonly ILogger _logger;
     private readonly IBugReportService _bugReportService;
+    private readonly IMessageBoxService _messageBoxService;
 
-    public FileExtractorService(ILogger logger, IBugReportService bugReportService)
+    public FileExtractorService(ILogger logger, IBugReportService bugReportService, IMessageBoxService messageBoxService)
     {
         _logger = logger;
         _bugReportService = bugReportService;
+        _messageBoxService = messageBoxService;
     }
 
     public async Task<bool> ExtractArchiveAsync(string archivePath, string extractionPath, CancellationTokenSource cts)
@@ -39,6 +41,15 @@ public class FileExtractorService : IFileExtractor
         {
             _logger.LogMessage($"Extraction of {archiveFileName} was canceled.");
             throw;
+        }
+        catch (SevenZipLibraryException ex)
+        {
+            var errorMessage = $"Error extracting {archiveFileName}: Could not load the 7-Zip library. " +
+                               "Please ensure 7z_x64.dll or 7z_x86.dll is in the application folder.";
+            _logger.LogMessage(errorMessage);
+            _messageBoxService.ShowError(errorMessage);
+            _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. Exception: {ex}");
+            return false;
         }
         catch (Exception ex)
         {

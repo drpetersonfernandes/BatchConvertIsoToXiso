@@ -52,7 +52,7 @@ The application features real-time progress tracking, detailed summary statistic
 
 *   Windows 7 or later
 *   [.NET 9.0 Runtime](https://dotnet.microsoft.com/download/dotnet/9.0) (or newer)
-*   **Bundled Tools**: This application includes `extract-xiso.exe` (for ISO processing), `bchunk.exe` (for CUE/BIN conversion), and `7z_x64.dll`/`7z_x86.dll` (for archive extraction) in its release package. No separate downloads for these tools are required.
+*   **Bundled Tools**: This application includes `extract-xiso.exe` (for ISO processing), `bchunk.exe` (for CUE/BIN conversion), and `7z_x64.dll` (for archive extraction) in its release package. No separate downloads for these tools are required.
 
 ## Installation
 

@@ -1689,8 +1689,15 @@ public partial class MainWindow : IDisposable
                                                                        line.Contains("already an XISO image", StringComparison.OrdinalIgnoreCase)):
                     return ConversionToolResultStatus.Skipped;
                 case 1:
-                    _logger.LogMessage($"extract-xiso -r for {originalFileName} exited with 1 but no 'skipped' message. Treating as failure.");
-                    _ = ReportBugAsync($"extract-xiso -r for {originalFileName} exited 1 without skip message. Output: {string.Join(Environment.NewLine, localProcessOutputLines)}");
+                    // Handle cases where exit code is 1 but the operation was successful.
+                    if (localProcessOutputLines.Any(static line => line.Contains("successfully rewritten", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        _logger.LogMessage($"extract-xiso -r for {originalFileName} exited with 1, but output indicates success ('successfully rewritten'). Treating as success.");
+                        return ConversionToolResultStatus.Success;
+                    }
+
+                    _logger.LogMessage($"extract-xiso -r for {originalFileName} exited with 1 but no 'skipped' or 'success' message. Treating as failure.");
+                    _ = ReportBugAsync($"extract-xiso -r for {originalFileName} exited 1 without skip/success message. Output: {string.Join(Environment.NewLine, localProcessOutputLines)}");
                     return ConversionToolResultStatus.Failed;
                 default:
                     _ = ReportBugAsync($"extract-xiso -r failed for {originalFileName} with exit code {process.ExitCode}. Output: {string.Join(Environment.NewLine, localProcessOutputLines)}");

@@ -146,7 +146,7 @@ public partial class App
     {
         try
         {
-            var dllName = Environment.Is64BitProcess ? "7z_x64.dll" : "7z_x86.dll";
+            const string dllName = "7z_x64.dll"; // This application now only supports x64.
             var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
 
             if (File.Exists(dllPath))
@@ -155,12 +155,19 @@ public partial class App
             }
             else
             {
-                var errorMessage = $"Could not find the required 7-Zip library: {dllName} in {AppDomain.CurrentDomain.BaseDirectory}";
+                const string userErrorMessage = $"Could not find the required 7-Zip x64 library: {dllName}. " +
+                                                "This application is designed for x64 systems only. Please ensure '7z_x64.dll' is in the same folder as the application. " +
+                                                "Archive extraction features (.zip, .7z, .rar) will not work.";
+
+                var bugReportMessage = $"Could not find the required 7-Zip library: {dllName} in {AppDomain.CurrentDomain.BaseDirectory}";
 
                 if (_bugReportService != null)
                 {
-                    _ = _bugReportService.SendBugReportAsync(errorMessage);
+                    _ = _bugReportService.SendBugReportAsync(bugReportMessage);
                 }
+
+                // Inform the user about the issue.
+                _messageBoxService?.ShowError(userErrorMessage);
             }
         }
         catch (Exception ex)
@@ -169,6 +176,8 @@ public partial class App
             {
                 _ = _bugReportService.SendBugReportAsync(ex.Message);
             }
+
+            _messageBoxService?.ShowError($"An error occurred while initializing the archive extraction library: {ex.Message}");
         }
     }
 
