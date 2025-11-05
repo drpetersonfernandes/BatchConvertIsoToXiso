@@ -94,6 +94,18 @@ public partial class MainWindow : IDisposable
             _ = ReportBugAsync("extract-xiso.exe not found.");
         }
 
+        var bchunkPath = Path.Combine(appDirectory, "bchunk.exe");
+        if (File.Exists(bchunkPath))
+        {
+            _logger.LogMessage("INFO: bchunk.exe found. CUE/BIN conversion is enabled.");
+        }
+        else
+        {
+            _logger.LogMessage("WARNING: bchunk.exe not found. CUE/BIN conversion will fail.");
+            _ = ReportBugAsync("bchunk.exe not found.");
+        }
+
+
         _logger.LogMessage("INFO: Archive extraction uses the SevenZipExtractor library.");
         _logger.LogMessage("--- Ready ---");
     }
@@ -375,7 +387,7 @@ public partial class MainWindow : IDisposable
                                 .Where(static f =>
                                 {
                                     var ext = Path.GetExtension(f).ToLowerInvariant();
-                                    return ext is ".iso" or ".zip" or ".7z" or ".rar";
+                                    return ext is ".iso" or ".zip" or ".7z" or ".rar" or ".cue";
                                 }).ToList(),
                         _cts.Token);
                 }
@@ -881,19 +893,20 @@ public partial class MainWindow : IDisposable
                         if (archiveExtractedSuccessfully)
                         {
                             var extractedIsoFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.iso", SearchOption.AllDirectories), _cts.Token);
-                            switch (extractedIsoFiles.Length)
+                            var extractedCueFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.cue", SearchOption.AllDirectories), _cts.Token);
+                            var totalFoundFiles = extractedIsoFiles.Length + extractedCueFiles.Length;
+                            switch (totalFoundFiles)
                             {
                                 case > 0:
                                 {
-                                    var newIsosFound = extractedIsoFiles.Length;
-                                    currentExpectedTotalIsos += (newIsosFound - 1);
+                                    currentExpectedTotalIsos += (totalFoundFiles - 1);
                                     UpdateSummaryStatsUi(currentExpectedTotalIsos);
                                     UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
-                                    _logger.LogMessage($"Found {newIsosFound} ISO(s) in {entryFileName}. Total expected ISOs now: {currentExpectedTotalIsos}. Processing them now...");
+                                    _logger.LogMessage($"Found {extractedIsoFiles.Length} ISO(s) and {extractedCueFiles.Length} CUE file(s) in {entryFileName}. Total expected items now: {currentExpectedTotalIsos}. Processing them now...");
                                     break;
                                 }
                                 case 0:
-                                    _logger.LogMessage($"No ISO files found in archive: {entryFileName}.");
+                                    _logger.LogMessage($"No ISO or CUE files found in archive: {entryFileName}.");
                                     actualIsosProcessedForProgress++;
                                     UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                                     break;
@@ -926,7 +939,60 @@ public partial class MainWindow : IDisposable
                                 UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                             }
 
-                            if (extractedIsoFiles.Length == 0)
+                            foreach (var extractedCuePath in extractedCueFiles)
+                            {
+                                _cts.Token.ThrowIfCancellationRequested();
+                                var extractedCueName = Path.GetFileName(extractedCuePath);
+                                _logger.LogMessage($"  Converting CUE/BIN from archive: {extractedCueName}...");
+                                string? tempCueBinDir = null;
+
+                                try
+                                {
+                                    tempCueBinDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_CueBin", Guid.NewGuid().ToString());
+                                    await Task.Run(() => Directory.CreateDirectory(tempCueBinDir));
+
+                                    var tempIsoPath = await ConvertCueBinToIsoAsync(extractedCuePath, tempCueBinDir);
+
+                                    if (tempIsoPath != null && await Task.Run(() => File.Exists(tempIsoPath)))
+                                    {
+                                        var status = await ConvertFileAsync(extractXisoPath, tempIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
+                                        globalFileIndex++;
+                                        statusesOfIsosInThisArchive.Add(status);
+                                        actualIsosProcessedForProgress++;
+
+                                        switch (status)
+                                        {
+                                            case FileProcessingStatus.Converted:
+                                                _uiSuccessCount++;
+                                                break;
+                                            case FileProcessingStatus.Skipped:
+                                                _uiSkippedCount++;
+                                                break;
+                                            case FileProcessingStatus.Failed:
+                                                _uiFailedCount++;
+                                                failedConversionFilePaths.Add(extractedCuePath); // Log the original CUE path as the failure source
+                                                break;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        _logger.LogMessage($"Failed to convert CUE/BIN to ISO: {extractedCueName}. It will be skipped.");
+                                        _uiFailedCount++;
+                                        failedConversionFilePaths.Add(extractedCuePath);
+                                        actualIsosProcessedForProgress++;
+                                        statusesOfIsosInThisArchive.Add(FileProcessingStatus.Failed);
+                                    }
+                                }
+                                finally
+                                {
+                                    if (tempCueBinDir != null) await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
+                                    UpdateSummaryStatsUi();
+                                    UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                                }
+                            }
+
+
+                            if (totalFoundFiles == 0)
                             {
                                 statusesOfIsosInThisArchive.Add(FileProcessingStatus.Skipped);
                             }
@@ -999,6 +1065,73 @@ public partial class MainWindow : IDisposable
                                 _logger.LogMessage($"Error cleaning temp folder {currentArchiveTempExtractionDir} for {entryFileName}: {ex.Message}. Will retry at end.");
                             }
                         }
+                    }
+
+                    break;
+                }
+                case ".cue":
+                {
+                    _logger.LogMessage($"Processing CUE/BIN: {entryFileName}...");
+                    string? tempCueBinDir = null;
+
+                    try
+                    {
+                        // Create a temp dir for bchunk output
+                        tempCueBinDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_CueBin", Guid.NewGuid().ToString());
+                        await Task.Run(() => Directory.CreateDirectory(tempCueBinDir));
+
+                        // Run bchunk to convert CUE/BIN to ISO
+                        var tempIsoPath = await ConvertCueBinToIsoAsync(currentEntryPath, tempCueBinDir);
+
+                        if (tempIsoPath != null && await Task.Run(() => File.Exists(tempIsoPath)))
+                        {
+                            // Now, process the newly created ISO file
+                            // We pass 'false' for deleteOriginalIsoFile because we handle deletion of cue/bin separately
+                            var status = await ConvertFileAsync(extractXisoPath, tempIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
+                            globalFileIndex++;
+                            actualIsosProcessedForProgress++;
+
+                            switch (status)
+                            {
+                                case FileProcessingStatus.Converted:
+                                    _uiSuccessCount++;
+                                    if (deleteOriginals) await DeleteCueAndBinFilesAsync(currentEntryPath);
+                                    break;
+                                case FileProcessingStatus.Skipped:
+                                    _uiSkippedCount++;
+                                    if (deleteOriginals) await DeleteCueAndBinFilesAsync(currentEntryPath);
+                                    break;
+                                case FileProcessingStatus.Failed:
+                                    _uiFailedCount++;
+                                    failedConversionFilePaths.Add(currentEntryPath);
+                                    break;
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogMessage($"Failed to convert CUE/BIN to ISO: {entryFileName}. It will be skipped.");
+                            _uiFailedCount++;
+                            failedConversionFilePaths.Add(currentEntryPath);
+                            actualIsosProcessedForProgress++;
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogMessage($"Error processing CUE/BIN {entryFileName}: {ex.Message}");
+                        _ = ReportBugAsync($"Error during processing of CUE/BIN {entryFileName}", ex);
+                        _uiFailedCount++;
+                        failedConversionFilePaths.Add(currentEntryPath);
+                        actualIsosProcessedForProgress++;
+                    }
+                    finally
+                    {
+                        if (tempCueBinDir != null) await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
+                        UpdateSummaryStatsUi();
+                        UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                     }
 
                     break;
@@ -1579,6 +1712,163 @@ public partial class MainWindow : IDisposable
         {
             await cancellationRegistration.DisposeAsync();
         }
+    }
+
+    private async Task<string?> ParseCueForBinFileAsync(string cuePath)
+    {
+        var cueDir = Path.GetDirectoryName(cuePath);
+        if (cueDir == null) return null;
+
+        try
+        {
+            var lines = await File.ReadAllLinesAsync(cuePath, _cts.Token);
+            foreach (var line in lines)
+            {
+                if (!line.Trim().StartsWith("FILE", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var parts = line.Split('"');
+                if (parts.Length < 2) continue;
+
+                var binFileName = parts[1];
+                var binPath = Path.Combine(cueDir, binFileName);
+                if (await Task.Run(() => File.Exists(binPath), _cts.Token))
+                {
+                    return binPath;
+                }
+
+                _logger.LogMessage($"  BIN file '{binFileName}' specified in CUE not found at '{binPath}'.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogMessage($"  Error reading CUE file '{cuePath}': {ex.Message}");
+        }
+
+        // Fallback: check for a .bin file with the same base name as the .cue file
+        var fallbackBinPath = Path.ChangeExtension(cuePath, ".bin");
+        if (await Task.Run(() => File.Exists(fallbackBinPath), _cts.Token))
+        {
+            _logger.LogMessage($"  Using fallback to find BIN file: {Path.GetFileName(fallbackBinPath)}");
+            return fallbackBinPath;
+        }
+
+        _logger.LogMessage($"  Could not find a valid BIN file for CUE: {Path.GetFileName(cuePath)}");
+        return null;
+    }
+
+    private async Task<string?> ConvertCueBinToIsoAsync(string cuePath, string tempOutputDir)
+    {
+        var bchunkPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bchunk.exe");
+        if (!File.Exists(bchunkPath))
+        {
+            _logger.LogMessage("  Error: bchunk.exe not found. Cannot convert CUE/BIN files.");
+            _ = ReportBugAsync("bchunk.exe not found for CUE/BIN conversion.");
+            return null;
+        }
+
+        var binPath = await ParseCueForBinFileAsync(cuePath);
+        if (string.IsNullOrEmpty(binPath))
+        {
+            _logger.LogMessage($"  Could not find the corresponding BIN file for {Path.GetFileName(cuePath)}.");
+            return null;
+        }
+
+        var outputBaseName = Path.GetFileNameWithoutExtension(cuePath);
+        var arguments = $"\"{binPath}\" \"{cuePath}\" \"{outputBaseName}\"";
+        _logger.LogMessage($"  Running bchunk.exe {arguments}");
+
+        var processOutputCollector = new StringBuilder();
+        Process? processRef;
+        CancellationTokenRegistration cancellationRegistration = default;
+
+        try
+        {
+            using var process = new Process();
+            processRef = process;
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = bchunkPath,
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = tempOutputDir
+            };
+
+            cancellationRegistration = _cts.Token.Register(() =>
+            {
+                try
+                {
+                    processRef?.Kill(true);
+                }
+                catch
+                {
+                    /* Ignore */
+                }
+            });
+            process.OutputDataReceived += (_, args) =>
+            {
+                if (args.Data != null)
+                    lock (processOutputCollector)
+                    {
+                        processOutputCollector.AppendLine(args.Data);
+                    }
+            };
+            process.ErrorDataReceived += (_, args) =>
+            {
+                if (!string.IsNullOrEmpty(args.Data))
+                    lock (processOutputCollector)
+                    {
+                        processOutputCollector.AppendLine(CultureInfo.InvariantCulture, $"STDERR: {args.Data}");
+                    }
+            };
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            await process.WaitForExitAsync(_cts.Token);
+            _cts.Token.ThrowIfCancellationRequested();
+            var collectedOutput = processOutputCollector.ToString();
+            _logger.LogMessage($"  Output from bchunk.exe for '{Path.GetFileName(cuePath)}':\n{collectedOutput}");
+            if (process.ExitCode != 0)
+            {
+                _logger.LogMessage($"  bchunk.exe failed with exit code {process.ExitCode}.");
+                return null;
+            }
+
+            var createdIso = await Task.Run(() => Directory.GetFiles(tempOutputDir, "*.iso").FirstOrDefault(), _cts.Token);
+            if (createdIso == null)
+            {
+                _logger.LogMessage("  bchunk.exe finished, but no ISO file was found in the output directory.");
+                return null;
+            }
+
+            _logger.LogMessage($"  Successfully created temporary ISO: {Path.GetFileName(createdIso)}");
+            return createdIso;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogMessage($"  CUE/BIN conversion for {Path.GetFileName(cuePath)} was canceled.");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogMessage($"  Error running bchunk.exe for {Path.GetFileName(cuePath)}: {ex.Message}");
+            _ = ReportBugAsync($"Exception during bchunk.exe for {Path.GetFileName(cuePath)}", ex);
+            return null;
+        }
+        finally
+        {
+            await cancellationRegistration.DisposeAsync();
+        }
+    }
+
+    private async Task DeleteCueAndBinFilesAsync(string cuePath)
+    {
+        _logger.LogMessage($"  Deleting original CUE/BIN files for {Path.GetFileName(cuePath)}...");
+        var binPath = await ParseCueForBinFileAsync(cuePath);
+        await TryDeleteFileAsync(cuePath);
+        if (!string.IsNullOrEmpty(binPath)) await TryDeleteFileAsync(binPath);
     }
 
     private async Task CleanupTempFoldersAsync(List<string> tempFolders)

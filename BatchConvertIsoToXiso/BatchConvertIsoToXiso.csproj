@@ -34,6 +34,9 @@
         <None Update="7z_x86.dll">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
+        <None Update="bchunk.exe">
+          <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 
     <ItemGroup>

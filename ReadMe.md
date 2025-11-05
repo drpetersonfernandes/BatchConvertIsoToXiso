@@ -26,6 +26,7 @@ The application features real-time progress tracking, detailed summary statistic
     *   Tests ISO integrity by attempting a full extraction using `extract-xiso -x`.
     *   Can also process existing XISO files (which `extract-xiso -r` will typically skip if already optimized during conversion).
 *   **Archive Support (for Conversion only)**: Automatically extracts ISO files from `.zip`, `.7z`, and `.rar` archives found in the input folder for conversion using the SevenZipExtractor library.
+*   **CUE/BIN Support (for Conversion only)**: Automatically converts `.cue`/`.bin` disc images to `.iso` format using the bundled `bchunk.exe` before processing them into XISOs.
 *   **Skip System Update Folder**: Option to skip the `$SystemUpdate` folder during conversion (`extract-xiso -s` flag), which can reduce output file size and is often desired for game ISOs.
 *   **Progress Tracking & Summary**:
     *   Real-time log messages detailing the status of each file.
@@ -43,14 +44,15 @@ The application features real-time progress tracking, detailed summary statistic
 *   **Input for Conversion**:
     *   `.iso` files: Standard Xbox and Xbox 360 ISO images.
     *   `.zip`, `.7z`, `.rar` archives: Archives containing `.iso` files (extraction is recursive).
+    *   `.cue` / `.bin` files: Common disc image format.
 *   **Input for Testing**:
     *   `.iso` files: Standard Xbox and Xbox 360 ISO images (direct files only, not from archives).
 
 ## Requirements
 
 *   Windows 7 or later
-*   [.NET 9.0 Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
-*   **Bundled Tools**: This application includes `extract-xiso.exe` (for ISO processing) and `7z_x64.dll`/`7z_x86.dll` (for archive extraction) in its release package. No separate downloads for these tools are required.
+*   [.NET 9.0 Runtime](https://dotnet.microsoft.com/download/dotnet/9.0) (or newer)
+*   **Bundled Tools**: This application includes `extract-xiso.exe` (for ISO processing), `bchunk.exe` (for CUE/BIN conversion), and `7z_x64.dll`/`7z_x86.dll` (for archive extraction) in its release package. No separate downloads for these tools are required.
 
 ## Installation
 
@@ -62,7 +64,7 @@ The application features real-time progress tracking, detailed summary statistic
 
 1.  **Launch the Application**.
 2.  **Select Input Folder**: Click the "Browse" button next to "Source Files Folder" (for conversion) or "ISO Files Folder" (for testing). Choose the folder containing your ISO files. For conversion, this folder can also contain archives (ZIP, 7Z, RAR) with ISOs. For testing, only direct `.iso` files in this folder will be processed.
-3.  **Select Output Folder**: Click the "Browse" button next to "Output XISO Folder" (for conversion).
+3.  **Select Output Folder (for Conversion)**: Click the "Browse" button next to "Output XISO Folder".
     *   For **Conversion**: This is where converted XISO files will be saved.
     *   For **Testing**: If "Move successfully tested ISOs to Success Folder" is checked, this is where successfully tested ISOs will be moved.
 4.  **Configure Options**:
@@ -99,7 +101,7 @@ XISO is the native disk image format used by Xbox consoles. It is essentially an
 
 ## Troubleshooting
 
-*   **`extract-xiso.exe` Missing**: Ensure `extract-xiso.exe` is present in the same directory as the application. It is bundled with the release, so if it's missing, re-extract the application. `extract-xiso.exe` is crucial for both conversion and testing.
+*   **`extract-xiso.exe` or `bchunk.exe` Missing**: Ensure `extract-xiso.exe` and `bchunk.exe` are present in the same directory as the application. They are bundled with the release, so if one is missing, re-extract the application. `extract-xiso.exe` is crucial for both conversion and testing. `bchunk.exe` is required for converting CUE/BIN files.
 *   **Archive Extraction Failed (e.g., "File is corrupted")**: If you encounter errors like "File is corrupted. Data error has occurred." when processing `.zip`, `.7z`, or `.rar` files, it indicates that the archive itself is damaged or incomplete. This application cannot repair corrupted archives. Please verify the integrity of your source archive files.
 *   **"Not enough space on the disk"**: This error occurs when the drive where files are being processed (input, output, or temporary extraction folders) runs out of space. Ensure you have sufficient free disk space, especially when converting or testing many large files, as temporary files can consume significant space during the process.
 *   **Invalid ISO**: If `extract-xiso` reports that an ISO is "not a valid xbox iso image", the file may be corrupted or not a true Xbox/Xbox 360 ISO. Review the application log for detailed error messages from `extract-xiso`.
@@ -119,3 +121,4 @@ XISO is the native disk image format used by Xbox consoles. It is essentially an
 ⭐ **Don't forget to Star this repository if you find it useful!** ⭐
 
 Thank you for using **Batch Convert ISO to XISO**! For more information and support, visit [purelogiccode.com](https://www.purelogiccode.com).
+```
