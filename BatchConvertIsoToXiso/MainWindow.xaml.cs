@@ -6,14 +6,13 @@ using System.Text;
 using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Threading;
-using System.Windows.Controls;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BatchConvertIsoToXiso;
 
-public partial class MainWindow : IDisposable
+public partial class MainWindow
 {
     private CancellationTokenSource _cts;
     private readonly IUpdateChecker _updateChecker;
@@ -64,7 +63,11 @@ public partial class MainWindow : IDisposable
         _processingTimer.Tick += ProcessingTimer_Tick;
         ResetSummaryStats();
 
-        Loaded += async (s, e) => await CheckForUpdatesAsync();
+        Loaded += async (s, e) =>
+        {
+            DisplayInitialInstructions(); // Fix 1: Call DisplayInitialInstructions
+            await CheckForUpdatesAsync();
+        };
     }
 
     private void DisplayInitialInstructions()
@@ -108,11 +111,6 @@ public partial class MainWindow : IDisposable
 
         _logger.LogMessage("INFO: Archive extraction uses the SevenZipExtractor library.");
         _logger.LogMessage("--- Ready ---");
-    }
-
-    private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (e.Source is not TabControl) return;
     }
 
     private string? GetDriveLetter(string? path)
@@ -262,14 +260,14 @@ public partial class MainWindow : IDisposable
         });
     }
 
+    // Fix 2: Move cleanup logic from Dispose() to Window_Closing
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         _cts.Cancel();
-    }
-
-    protected override void OnClosing(CancelEventArgs e)
-    {
-        _cts.Cancel();
+        _processingTimer.Tick -= ProcessingTimer_Tick;
+        _processingTimer.Stop();
+        StopPerformanceCounter();
+        _cts?.Dispose();
         base.OnClosing(e);
     }
 
@@ -2125,16 +2123,6 @@ public partial class MainWindow : IDisposable
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        Close();
-    }
-
-    public void Dispose()
-    {
-        _processingTimer.Tick -= ProcessingTimer_Tick;
-        _processingTimer.Stop();
-        StopPerformanceCounter();
-        _cts?.Cancel();
-        _cts?.Dispose();
-        GC.SuppressFinalize(this);
+        Application.Current.Shutdown();
     }
 }

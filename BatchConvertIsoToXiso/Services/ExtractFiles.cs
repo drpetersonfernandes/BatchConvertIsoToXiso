@@ -44,11 +44,11 @@ public class FileExtractorService : IFileExtractor
         }
         catch (SevenZipLibraryException ex)
         {
-            var errorMessage = $"Error extracting {archiveFileName}: Could not load the 7-Zip library. " +
-                               "Please ensure 7z_x64.dll or 7z_x86.dll is in the application folder.";
+            var errorMessage = $"Error extracting {archiveFileName}: Could not load the 7-Zip x64 library. " +
+                               "Please ensure 7z_x64.dll is in the application folder.";
             _logger.LogMessage(errorMessage);
             _messageBoxService.ShowError(errorMessage);
-            _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. Exception: {ex}");
+            _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. SevenZipLibraryException: {ex}");
             return false;
         }
         catch (Exception ex)

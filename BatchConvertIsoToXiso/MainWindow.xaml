@@ -34,7 +34,7 @@
         </Menu>
 
         <!-- Tab Control for Main Operations -->
-        <TabControl Grid.Row="1" x:Name="MainTabControl" Margin="10" SelectionChanged="MainTabControl_SelectionChanged">
+        <TabControl Grid.Row="1" x:Name="MainTabControl" Margin="10">
             <TabItem Header="Convert to XISO" x:Name="ConvertTab">
                 <StackPanel Margin="10">
                     <!-- Input Folder for Conversion -->
