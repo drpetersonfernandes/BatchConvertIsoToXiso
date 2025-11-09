@@ -78,6 +78,9 @@ public partial class MainWindow
         _logger.LogMessage("1. Convert to XISO: Converts standard Xbox ISO files to the optimized XISO format. It can also process ISOs found within .zip, .7z, and .rar archives.");
         _logger.LogMessage("2. Test ISO Integrity: Verifies the integrity of your .iso files by attempting a full extraction to a temporary location.");
         _logger.LogMessage("");
+        _logger.LogMessage("IMPORTANT: This tool ONLY works with Xbox and Xbox 360 ISO files.");
+        _logger.LogMessage("It cannot convert or test ISOs from PlayStation, PlayStation 2, or other consoles.");
+        _logger.LogMessage("");
         _logger.LogMessage("General Steps:");
         _logger.LogMessage("- Select the appropriate tab for the operation you want to perform.");
         _logger.LogMessage("- Use the 'Browse' buttons to select your source and destination folders.");
@@ -200,7 +203,7 @@ public partial class MainWindow
         }
         catch (InvalidOperationException ex)
         {
-            // This catch block should now primarily handle issues during counter creation/access after existence checks.
+            // This catch block should now primarily handle issues during counter-creation/access after existence checks.
             _logger.LogMessage($"Error initializing performance counter for drive {perfCounterInstanceName}: {ex.Message}. Write speed monitoring disabled.");
             _ = ReportBugAsync($"PerfCounter Init InvalidOpExc for {perfCounterInstanceName}", ex);
             _diskWriteSpeedCounter?.Dispose();
@@ -720,12 +723,18 @@ public partial class MainWindow
         return dialog.ShowDialog() == true ? dialog.FolderName : null;
     }
 
+    // Add these fields to track invalid ISO errors
+    private int _invalidIsoErrorCount;
+    private int _totalProcessedFiles;
+
     private void ResetSummaryStats()
     {
         _uiTotalFiles = 0;
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
         _uiSkippedCount = 0;
+        _invalidIsoErrorCount = 0; // Reset counter
+        _totalProcessedFiles = 0; // Reset counter
         UpdateSummaryStatsUi();
         UpdateProgressUi(0, 0);
         ProcessingTimeValue.Text = "00:00:00";
@@ -856,6 +865,7 @@ public partial class MainWindow
                     var status = await ConvertFileAsync(extractXisoPath, currentEntryPath, outputFolder, deleteOriginals, globalFileIndex, skipSystemUpdate); // Pass new option
                     globalFileIndex++;
                     actualIsosProcessedForProgress++;
+                    _totalProcessedFiles++; // Increment for each ISO processed
                     switch (status)
                     {
                         case FileProcessingStatus.Converted:
@@ -867,6 +877,7 @@ public partial class MainWindow
                         case FileProcessingStatus.Failed:
                             _uiFailedCount++;
                             failedConversionFilePaths.Add(currentEntryPath);
+                            _totalProcessedFiles++; // Track total processed
                             break;
                     }
 
@@ -906,6 +917,7 @@ public partial class MainWindow
                                 case 0:
                                     _logger.LogMessage($"No ISO or CUE files found in archive: {entryFileName}.");
                                     actualIsosProcessedForProgress++;
+                                    _totalProcessedFiles++; // Increment for archive that yielded no ISOs
                                     UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
                                     break;
                             }
@@ -919,6 +931,7 @@ public partial class MainWindow
                                 globalFileIndex++;
                                 statusesOfIsosInThisArchive.Add(status);
                                 actualIsosProcessedForProgress++;
+                                _totalProcessedFiles++; // Increment for each ISO processed from archive
                                 switch (status)
                                 {
                                     case FileProcessingStatus.Converted:
@@ -930,6 +943,7 @@ public partial class MainWindow
                                     case FileProcessingStatus.Failed:
                                         _uiFailedCount++;
                                         failedConversionFilePaths.Add(extractedIsoPath);
+                                        _totalProcessedFiles++; // Track total processed
                                         break;
                                 }
 
@@ -957,7 +971,7 @@ public partial class MainWindow
                                         globalFileIndex++;
                                         statusesOfIsosInThisArchive.Add(status);
                                         actualIsosProcessedForProgress++;
-
+                                        _totalProcessedFiles++; // Increment for each ISO processed from CUE/BIN
                                         switch (status)
                                         {
                                             case FileProcessingStatus.Converted:
@@ -969,6 +983,7 @@ public partial class MainWindow
                                             case FileProcessingStatus.Failed:
                                                 _uiFailedCount++;
                                                 failedConversionFilePaths.Add(extractedCuePath); // Log the original CUE path as the failure source
+                                                _totalProcessedFiles++; // Track total processed
                                                 break;
                                         }
                                     }
@@ -978,6 +993,7 @@ public partial class MainWindow
                                         _uiFailedCount++;
                                         failedConversionFilePaths.Add(extractedCuePath);
                                         actualIsosProcessedForProgress++;
+                                        _totalProcessedFiles++; // Increment for failed CUE/BIN conversion
                                         statusesOfIsosInThisArchive.Add(FileProcessingStatus.Failed);
                                     }
                                 }
@@ -1002,6 +1018,7 @@ public partial class MainWindow
                             statusesOfIsosInThisArchive.Add(FileProcessingStatus.Failed);
                             failedConversionFilePaths.Add(currentEntryPath);
                             actualIsosProcessedForProgress++;
+                            _totalProcessedFiles++; // Increment for failed archive extraction
                             _uiFailedCount++;
                             UpdateSummaryStatsUi();
                             UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
@@ -1043,6 +1060,7 @@ public partial class MainWindow
                         if (!archiveExtractedSuccessfully)
                         {
                             actualIsosProcessedForProgress++;
+                            _totalProcessedFiles++; // Increment for archive processing error
                             _uiFailedCount++;
                             UpdateSummaryStatsUi();
                             UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
@@ -1088,6 +1106,7 @@ public partial class MainWindow
                             var status = await ConvertFileAsync(extractXisoPath, tempIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
                             globalFileIndex++;
                             actualIsosProcessedForProgress++;
+                            _totalProcessedFiles++; // Increment for CUE/BIN processed to ISO
 
                             switch (status)
                             {
@@ -1102,6 +1121,7 @@ public partial class MainWindow
                                 case FileProcessingStatus.Failed:
                                     _uiFailedCount++;
                                     failedConversionFilePaths.Add(currentEntryPath);
+                                    _totalProcessedFiles++; // Track total processed
                                     break;
                             }
                         }
@@ -1111,6 +1131,7 @@ public partial class MainWindow
                             _uiFailedCount++;
                             failedConversionFilePaths.Add(currentEntryPath);
                             actualIsosProcessedForProgress++;
+                            _totalProcessedFiles++; // Increment for failed CUE/BIN conversion
                         }
                     }
                     catch (OperationCanceledException)
@@ -1124,6 +1145,7 @@ public partial class MainWindow
                         _uiFailedCount++;
                         failedConversionFilePaths.Add(currentEntryPath);
                         actualIsosProcessedForProgress++;
+                        _totalProcessedFiles++; // Increment for CUE/BIN processing error
                     }
                     finally
                     {
@@ -1190,6 +1212,7 @@ public partial class MainWindow
             var testStatus = await TestSingleIsoAsync(extractXisoPath, isoFilePath, testFileIndex);
             testFileIndex++;
             actualIsosProcessedForProgress++;
+            _totalProcessedFiles++; // Increment for each ISO tested
 
             if (testStatus == IsoTestResultStatus.Passed)
             {
@@ -1687,6 +1710,19 @@ public partial class MainWindow
                                                                        line.Contains("already an XISO image", StringComparison.OrdinalIgnoreCase)):
                     return ConversionToolResultStatus.Skipped;
                 case 1:
+                    // Check for expected validation failures (non-Xbox ISOs)
+                    var outputString = string.Join(Environment.NewLine, localProcessOutputLines);
+                    if (outputString.Contains("does not appear to be a valid xbox iso image", StringComparison.OrdinalIgnoreCase) ||
+                        outputString.Contains("failed to rewrite xbox iso image", StringComparison.OrdinalIgnoreCase) ||
+                        outputString.Contains("read error: No error", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogMessage($"SKIPPED: '{originalFileName}' is not a valid Xbox ISO image. " +
+                                           $"This file appears to be from a different console (e.g., PlayStation). " +
+                                           $"Please ensure you are processing Xbox or Xbox 360 ISO files only.");
+                        _invalidIsoErrorCount++; // Track invalid ISO errors
+                        return ConversionToolResultStatus.Failed; // Don't send bug report for expected errors
+                    }
+
                     // Handle cases where exit code is 1 but the operation was successful.
                     if (localProcessOutputLines.Any(static line => line.Contains("successfully rewritten", StringComparison.OrdinalIgnoreCase)))
                     {
@@ -1929,13 +1965,25 @@ public partial class MainWindow
         if (_uiFailedCount > 0) _logger.LogMessage($"Failed to {operationType.ToLowerInvariant()}: {_uiFailedCount} files");
 
         Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            // Show warning if high rate of invalid ISOs detected
+            if (_totalProcessedFiles > 5 && (double)_invalidIsoErrorCount / _totalProcessedFiles > 0.5)
+            {
+                _messageBoxService.ShowWarning(
+                    $"Many files ({_invalidIsoErrorCount} out of {_totalProcessedFiles}) were not valid Xbox ISOs. " +
+                    "Please ensure you are selecting the correct ISO files from Xbox or Xbox 360 games, " +
+                    "not from other consoles like PlayStation.",
+                    "High Rate of Invalid ISOs Detected");
+            }
+
             _messageBoxService.Show($"Batch {operationType.ToLowerInvariant()} completed.\n\n" +
                                     $"Total files processed: {_uiTotalFiles}\n" +
                                     $"Successfully {GetPastTense(operationType)}: {_uiSuccessCount} files\n" +
                                     $"Skipped: {_uiSkippedCount} files\n" +
                                     $"Failed: {_uiFailedCount} files",
                 $"{operationType} Complete", MessageBoxButton.OK,
-                _uiFailedCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information));
+                _uiFailedCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        });
     }
 
     private static string GetPastTense(string verb)
