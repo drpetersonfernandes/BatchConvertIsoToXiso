@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Navigation;
 using BatchConvertIsoToXiso.Services;
 
@@ -7,10 +7,12 @@ namespace BatchConvertIsoToXiso;
 public partial class AboutWindow
 {
     private readonly IUrlOpener _urlOpener;
+    private readonly IMessageBoxService _messageBoxService;
 
-    public AboutWindow(IUrlOpener urlOpener)
+    public AboutWindow(IUrlOpener urlOpener, IMessageBoxService messageBoxService)
     {
         _urlOpener = urlOpener;
+        _messageBoxService = messageBoxService;
         InitializeComponent();
 
         AppVersionTextBlock.Text = $"Version: {GetApplicationVersion.GetProgramVersion()}";
@@ -23,7 +25,15 @@ public partial class AboutWindow
 
     private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
     {
-        _urlOpener.OpenUrl(e.Uri.AbsoluteUri);
+        try
+        {
+            _urlOpener.OpenUrl(e.Uri.AbsoluteUri);
+        }
+        catch (Exception ex)
+        {
+            _messageBoxService.ShowError($"Unable to open link: {ex.Message}");
+        }
+
         e.Handled = true;
     }
 }

@@ -86,9 +86,9 @@
                     </Grid>
 
                     <!-- Test Options -->
-                    <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to '__success' subfolder" Margin="0,10,0,0" HorizontalAlignment="Left" IsChecked="True" />
+                    <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to a '_success' subfolder within the source folder" Margin="0,10,0,0" HorizontalAlignment="Left" IsChecked="True" />
                     <CheckBox x:Name="SearchSubfoldersTestCheckBox" Content="Search for files in subfolders" Margin="0,5,0,5" HorizontalAlignment="Left" />
-                    <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to a '__failed' subfolder" Margin="0,10,0,10" HorizontalAlignment="Left" IsChecked="True" />
+                    <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to a '_failed' subfolder within the source folder" Margin="0,10,0,10" HorizontalAlignment="Left" IsChecked="True" />
 
                     <!-- Test Action Button -->
                     <Button x:Name="StartTestButton" Content="Start Test" Click="StartTestButton_Click" Margin="0,10,0,0" Padding="15,8" HorizontalAlignment="Center" FontWeight="Bold" />

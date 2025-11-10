@@ -11,13 +11,11 @@ public class UrlOpenerService : IUrlOpener
 {
     private readonly ILogger _logger;
     private readonly IBugReportService _bugReportService;
-    private readonly IMessageBoxService _messageBoxService;
 
-    public UrlOpenerService(ILogger logger, IBugReportService bugReportService, IMessageBoxService messageBoxService)
+    public UrlOpenerService(ILogger logger, IBugReportService bugReportService)
     {
         _logger = logger;
         _bugReportService = bugReportService;
-        _messageBoxService = messageBoxService;
     }
 
     public void OpenUrl(string url)
@@ -35,7 +33,7 @@ public class UrlOpenerService : IUrlOpener
         {
             _logger.LogMessage($"Error opening URL: {url}. Exception: {ex.Message}");
             _ = _bugReportService.SendBugReportAsync($"Error opening URL: {url}. Exception: {ex}");
-            _messageBoxService.ShowError($"Unable to open link: {ex.Message}");
+            throw; // Re-throw the exception for the caller to handle UI
         }
     }
 }

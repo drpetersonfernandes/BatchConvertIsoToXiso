@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using BatchConvertIsoToXiso.Models;
+using SevenZip;
 
 namespace BatchConvertIsoToXiso;
 
@@ -71,7 +72,24 @@ public partial class MainWindow
                         await Task.Run(() => Directory.CreateDirectory(currentArchiveTempExtractionDir));
                         tempFoldersToCleanUpAtEnd.Add(currentArchiveTempExtractionDir);
                         SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath()));
-                        archiveExtractedSuccessfully = await _fileExtractor.ExtractArchiveAsync(currentEntryPath, currentArchiveTempExtractionDir, _cts);
+                        try
+                        {
+                            archiveExtractedSuccessfully = await _fileExtractor.ExtractArchiveAsync(currentEntryPath, currentArchiveTempExtractionDir, _cts);
+                        }
+                        catch (SevenZipLibraryException ex)
+                        {
+                            _messageBoxService.ShowError($"Error extracting {entryFileName}: Could not load the 7-Zip x64 library. " +
+                                                         "Please ensure 7z_x64.dll is in the application folder.");
+                            _logger.LogMessage($"Extraction of {entryFileName} failed due to missing 7z_x64.dll: {ex.Message}");
+                            archiveExtractedSuccessfully = false;
+                        }
+                        catch (Exception ex)
+                        {
+                            _messageBoxService.ShowError($"Error extracting archive {entryFileName}: {ex.Message}");
+                            _logger.LogMessage($"Extraction of {entryFileName} failed: {ex.Message}");
+                            archiveExtractedSuccessfully = false;
+                        }
+
                         if (archiveExtractedSuccessfully)
                         {
                             var extractedIsoFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.iso", SearchOption.AllDirectories), _cts.Token);

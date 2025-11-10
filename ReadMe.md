@@ -37,7 +37,7 @@ The application features real-time progress tracking, detailed summary statistic
     *   **Conversion**: Option to **delete original files after successful conversion** (applies to standalone ISOs or archives if all contained ISOs processed successfully). **Use with caution!**
     *   **Testing**: Options to move successfully tested ISOs to a specified "Success Folder" and/or move failed ISOs to a "Failed" subfolder in the input folder.
 *   **Global Error Reporting**: Includes a feature to automatically send silent bug reports to the developer with comprehensive error details to aid in improving the application.
-*   **User-Friendly Interface**: Simple and intuitive Windows interface with Menu Bar and About window.
+*   **Testing**: Options to move successfully tested ISOs to a `_success` subfolder and/or move failed ISOs to a `_failed` subfolder, both created within the source input folder.
 
 ## Supported File Formats
 
@@ -65,15 +65,14 @@ The application features real-time progress tracking, detailed summary statistic
 1.  **Launch the Application**.
 2.  **Select Input Folder**: Click the "Browse" button next to "Source Files Folder" (for conversion) or "ISO Files Folder" (for testing). Choose the folder containing your ISO files. For conversion, this folder can also contain archives (ZIP, 7Z, RAR) with ISOs. For testing, only direct `.iso` files in this folder will be processed.
 3.  **Select Output Folder (for Conversion)**: Click the "Browse" button next to "Output XISO Folder".
-    *   For **Conversion**: This is where converted XISO files will be saved.
-    *   For **Testing**: If "Move successfully tested ISOs to Success Folder" is checked, this is where successfully tested ISOs will be moved.
+    This is where converted XISO files will be saved. (Note: For the "Test ISO Integrity" tab, successfully or failed tested ISOs are moved to subfolders *within the source input folder*, not to this output folder.)
 4.  **Configure Options**:
     *   **For Conversion**:
         *   Check "Delete original files after successful conversion" if you want standalone ISOs or archive files (if all contained ISOs processed successfully) to be deleted. **Use with caution!**
         *   Check `Skip $SystemUpdate folder during conversion` if you want to omit this folder from the XISO output. This is often useful for game ISOs to save space and avoid unnecessary data.
     *   **For Testing**:
-        *   Check/uncheck "Move successfully tested ISOs to Success Folder".
-        *   Check/uncheck "Move failed tested ISOs to Failed Folder" (creates a `_failed` subfolder in the input directory by default).
+        *   Check/uncheck "Move successfully tested ISOs to a `_success` subfolder within the source folder".
+        *   Check/uncheck "Move failed tested ISOs to a `_failed` subfolder within the source folder".
 5.  **Choose Action**:
     *   Click **"Start Conversion"** to convert ISOs to XISO format.
     *   Click **"Start Test"** to test the integrity of ISO files.
@@ -121,4 +120,3 @@ XISO is the native disk image format used by Xbox consoles. It is essentially an
 ⭐ **Don't forget to Star this repository if you find it useful!** ⭐
 
 Thank you for using **Batch Convert ISO to XISO**! For more information and support, visit [purelogiccode.com](https://www.purelogiccode.com).
-```

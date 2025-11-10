@@ -36,10 +36,6 @@ public partial class MainWindow
     private string? _activeMonitoringDriveLetter;
     private string? _currentOperationDrive;
 
-    // Minimum required free space on the temporary drive for operations
-    private const long MinimumRequiredConversionTempSpaceBytes = 10L * 1024 * 1024 * 1024; // 10 GB
-    private const long MinimumRequiredTestTempSpaceBytes = 20L * 1024 * 1024 * 1024; // 20 GB (for ISO copy + full extraction)
-
     private int _invalidIsoErrorCount;
     private int _totalProcessedFiles;
     private readonly List<string> _failedConversionFilePaths = new();
@@ -74,10 +70,35 @@ public partial class MainWindow
         StatusTextBlock.Text = status;
     }
 
+    /// <summary>
+    /// Checks if the selected path is the system's temporary directory or a subfolder within it.
+    /// </summary>
+    /// <param name="selectedPath">The path selected by the user.</param>
+    /// <returns>True if the path is the system temp folder or a subfolder, false otherwise.</returns>
+    private bool IsSystemTempPath(string selectedPath)
+    {
+        var systemTempPath = Path.GetTempPath();
+
+        // Normalize both paths to ensure consistent comparison (e.g., handle trailing slashes)
+        var normalizedSystemTempPath = Path.GetFullPath(systemTempPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedSelectedPath = Path.GetFullPath(selectedPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        // Check if the selected path is exactly the system temp path or starts with it (indicating a subfolder)
+        return normalizedSelectedPath.Equals(normalizedSystemTempPath, StringComparison.OrdinalIgnoreCase) ||
+               normalizedSelectedPath.StartsWith(normalizedSystemTempPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
     private void BrowseConversionInputButton_Click(object sender, RoutedEventArgs e)
     {
         var inputFolder = SelectFolder("Select the folder containing ISO or archive files");
         if (string.IsNullOrEmpty(inputFolder)) return;
+
+        if (IsSystemTempPath(inputFolder))
+        {
+            _messageBoxService.ShowError("The system's temporary folder or a subfolder within it cannot be selected as an input folder. Please choose a different location.");
+            _logger.LogMessage($"Attempted to select system temp folder '{inputFolder}' as conversion input. Blocked.");
+            return;
+        }
 
         ConversionInputFolderTextBox.Text = inputFolder;
         _logger.LogMessage($"Conversion input folder selected: {inputFolder}");
@@ -88,6 +109,13 @@ public partial class MainWindow
         var outputFolder = SelectFolder("Select the output folder for converted XISO files");
         if (string.IsNullOrEmpty(outputFolder)) return;
 
+        if (IsSystemTempPath(outputFolder))
+        {
+            _messageBoxService.ShowError("The system's temporary folder or a subfolder within it cannot be selected as an output folder. Please choose a different location.");
+            _logger.LogMessage($"Attempted to select system temp folder '{outputFolder}' as conversion output. Blocked.");
+            return;
+        }
+
         ConversionOutputFolderTextBox.Text = outputFolder;
         _logger.LogMessage($"Conversion output folder selected: {outputFolder}");
     }
@@ -96,6 +124,13 @@ public partial class MainWindow
     {
         var inputFolder = SelectFolder("Select the folder containing ISO files to test");
         if (string.IsNullOrEmpty(inputFolder)) return;
+
+        if (IsSystemTempPath(inputFolder))
+        {
+            _messageBoxService.ShowError("The system's temporary folder or a subfolder within it cannot be selected as an input folder for testing. Please choose a different location.");
+            _logger.LogMessage($"Attempted to select system temp folder '{inputFolder}' as test input. Blocked.");
+            return;
+        }
 
         TestInputFolderTextBox.Text = inputFolder;
         _logger.LogMessage($"Test input folder selected: {inputFolder}");
@@ -149,7 +184,7 @@ public partial class MainWindow
                 }
 
                 // Check for sufficient temporary disk space
-                var tempPath = Path.GetTempPath();
+                var tempPath = Path.GetTempPath(); // This is the base temp path, not the specific working dir
                 var tempDriveLetter = GetDriveLetter(tempPath);
                 if (string.IsNullOrEmpty(tempDriveLetter))
                 {
@@ -168,19 +203,7 @@ public partial class MainWindow
                     return;
                 }
 
-                if (tempDriveInfo.AvailableFreeSpace < MinimumRequiredConversionTempSpaceBytes)
-                {
-                    _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
-                                                 $"Required: {Formatter.FormatBytes(MinimumRequiredConversionTempSpaceBytes)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
-                                                 "Please free up space or choose a different temporary drive if possible (via system settings).");
-                    StopPerformanceCounter();
-                    _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for conversion. Available: {tempDriveInfo.AvailableFreeSpace}");
-                    return;
-                }
-
-                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required for conversion: {Formatter.FormatBytes(MinimumRequiredConversionTempSpaceBytes)}).");
-
-                // --- Count total processable files ---
+                // Calculate required temporary space dynamically based on the largest single item being processed
                 List<string> topLevelEntries;
                 try
                 {
@@ -196,7 +219,8 @@ public partial class MainWindow
                     if (topLevelEntries.Count == 0)
                     {
                         _logger.LogMessage("No compatible files found in the input folder for conversion.");
-                        _messageBoxService.ShowError("No compatible files (.iso, .zip, .7z, .rar, .cue) were found in the selected folder. Please note this tool does not search in subfolders.");
+                        var subfolderHint = searchSubfolders ? "" : " Please note this tool is currently configured not to search in subfolders.";
+                        _messageBoxService.ShowError($"No compatible files (.iso, .zip, .7z, .rar, .cue) were found in the selected folder.{subfolderHint}");
                         SetControlsState(true);
                         _isOperationRunning = false;
                         return;
@@ -213,6 +237,22 @@ public partial class MainWindow
                     StopPerformanceCounter();
                     return;
                 }
+
+                var maxTempSpaceNeededForConversion = await CalculateMaxTempSpaceForSingleOperation(topLevelEntries, true);
+                if (tempDriveInfo.AvailableFreeSpace < maxTempSpaceNeededForConversion)
+                {
+                    _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
+                                                 $"Required (estimated for largest item): {Formatter.FormatBytes(maxTempSpaceNeededForConversion)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
+                                                 "Please free up space or choose a different temporary drive if possible (via system settings).");
+                    StopPerformanceCounter();
+                    _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for conversion. Available: {tempDriveInfo.AvailableFreeSpace}, Required: {maxTempSpaceNeededForConversion}");
+                    return;
+                }
+
+                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required for conversion: {Formatter.FormatBytes(maxTempSpaceNeededForConversion)}).");
+
+                // --- Count total processable files ---
+
 
                 // Calculate the total size of input files for output drive space check
                 var totalInputSize = await CalculateTotalInputFileSizeAsync(topLevelEntries);
@@ -361,18 +401,6 @@ public partial class MainWindow
                     return;
                 }
 
-                if (tempDriveInfo.AvailableFreeSpace < MinimumRequiredTestTempSpaceBytes)
-                {
-                    _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
-                                                 $"Required: {Formatter.FormatBytes(MinimumRequiredTestTempSpaceBytes)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
-                                                 "Please free up space or choose a different temporary drive if possible (via system settings).");
-                    StopPerformanceCounter();
-                    _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for ISO test. Available: {tempDriveInfo.AvailableFreeSpace}");
-                    return;
-                }
-
-                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(MinimumRequiredTestTempSpaceBytes)}).");
-
                 // Scan the input folder to get .iso files for size calculation and count
                 List<string> isoFilesToTest;
                 try
@@ -396,6 +424,21 @@ public partial class MainWindow
                     _isOperationRunning = false;
                     return;
                 }
+
+                // Calculate required temporary space dynamically based on the largest ISO being tested
+                var maxTempSpaceNeededForTest = await CalculateMaxTempSpaceForSingleOperation(isoFilesToTest, false);
+                if (tempDriveInfo.AvailableFreeSpace < maxTempSpaceNeededForTest)
+                {
+                    _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
+                                                 $"Required (estimated for largest item): {Formatter.FormatBytes(maxTempSpaceNeededForTest)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
+                                                 "Please free up space or choose a different temporary drive if possible (via system settings).");
+                    StopPerformanceCounter();
+                    _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for ISO test. Available: {tempDriveInfo.AvailableFreeSpace}, Required: {maxTempSpaceNeededForTest}");
+                    return;
+                }
+
+                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(maxTempSpaceNeededForTest)}).");
+
 
                 var totalIsoSize = await CalculateTotalInputFileSizeAsync(isoFilesToTest);
 
@@ -737,6 +780,66 @@ public partial class MainWindow
         }
 
         return totalSize;
+    }
+
+    /// <summary>
+    /// Calculates the maximum temporary disk space required for a single item (ISO, CUE/BIN, or archive)
+    /// during either a conversion or test operation, including a buffer.
+    /// </summary>
+    /// <param name="filePaths">List of file paths to consider.</param>
+    /// <param name="isConversionOperation">True if calculating for conversion, false for testing.</param>
+    /// <returns>The estimated maximum required temporary space in bytes.</returns>
+    private async Task<long> CalculateMaxTempSpaceForSingleOperation(List<string> filePaths, bool isConversionOperation)
+    {
+        long maxRequiredSpace = 0;
+        foreach (var filePath in filePaths)
+        {
+            _cts.Token.ThrowIfCancellationRequested();
+            try
+            {
+                var fileExtension = Path.GetExtension(filePath).ToLowerInvariant();
+                long currentItemSize = 0;
+
+                if (fileExtension == ".iso")
+                {
+                    currentItemSize = await Task.Run(() => new FileInfo(filePath).Length);
+                }
+                else if (isConversionOperation && fileExtension == ".cue")
+                {
+                    // For CUE, we need space for the resulting ISO. Assume it's roughly the size of the largest BIN.
+                    var binPath = await ParseCueForBinFileAsync(filePath);
+                    if (!string.IsNullOrEmpty(binPath)) // ParseCueForBinFileAsync already checks File.Exists
+                    {
+                        currentItemSize = await Task.Run(() => new FileInfo(binPath).Length);
+                    }
+                }
+                else if (isConversionOperation && (fileExtension == ".zip" || fileExtension == ".7z" || fileExtension == ".rar"))
+                {
+                    // For archives, we need space for the extracted contents.
+                    try
+                    {
+                        currentItemSize = await _fileExtractor.GetUncompressedArchiveSizeAsync(filePath, _cts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogMessage($"Warning: Could not get uncompressed size of archive {Path.GetFileName(filePath)} for disk space calculation: {ex.Message}. Using heuristic.");
+                        currentItemSize = new FileInfo(filePath).Length * 3; // Fallback heuristic: 3x compressed size
+                    }
+                }
+
+                maxRequiredSpace = Math.Max(maxRequiredSpace, currentItemSize);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogMessage($"Warning: Could not get size of file {Path.GetFileName(filePath)} for disk space calculation: {ex.Message}");
+            }
+        }
+
+        return isConversionOperation ? (long)(maxRequiredSpace * 1.5) : (long)(maxRequiredSpace * 2.1);
     }
 
     private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
