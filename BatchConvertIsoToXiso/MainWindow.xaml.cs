@@ -249,7 +249,14 @@ public partial class MainWindow
     // Fix 2: Move cleanup logic from Dispose() to Window_Closing
     private void Window_Closing(object sender, CancelEventArgs e)
     {
-        _cts.Cancel();
+        try
+        {
+            _cts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CancellationTokenSource was already disposed, which is fine
+        }
         _processingTimer.Tick -= ProcessingTimer_Tick;
         _processingTimer.Stop();
         StopPerformanceCounter();
