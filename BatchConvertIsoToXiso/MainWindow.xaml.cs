@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Text;
 using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Threading;
@@ -133,6 +132,7 @@ public partial class MainWindow
                 var outputFolder = ConversionOutputFolderTextBox.Text;
                 var deleteFiles = DeleteOriginalsCheckBox.IsChecked ?? false;
                 var skipSystemUpdate = SkipSystemUpdateCheckBox.IsChecked ?? false; // Get state of new checkbox
+                var searchSubfolders = SearchSubfoldersConversionCheckBox.IsChecked ?? false;
 
                 if (string.IsNullOrEmpty(inputFolder) || string.IsNullOrEmpty(outputFolder))
                 {
@@ -184,7 +184,8 @@ public partial class MainWindow
                 List<string> topLevelEntries;
                 try
                 {
-                    topLevelEntries = await Task.Run(() => Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
+                    var searchOption = searchSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                    topLevelEntries = await Task.Run(() => Directory.GetFiles(inputFolder, "*.*", searchOption)
                             .Where(static f =>
                             {
                                 var ext = Path.GetExtension(f).ToLowerInvariant();
@@ -194,8 +195,10 @@ public partial class MainWindow
 
                     if (topLevelEntries.Count == 0)
                     {
-                        _logger.LogMessage("No ISO files or supported archives found in the input folder for conversion.");
-                        StopPerformanceCounter();
+                        _logger.LogMessage("No compatible files found in the input folder for conversion.");
+                        _messageBoxService.ShowError("No compatible files (.iso, .zip, .7z, .rar, .cue) were found in the selected folder. Please note this tool does not search in subfolders.");
+                        SetControlsState(true);
+                        _isOperationRunning = false;
                         return;
                     }
 
@@ -234,6 +237,7 @@ public partial class MainWindow
                 _logger.LogMessage("--- Starting batch conversion process... ---");
                 _logger.LogMessage($"Input folder: {inputFolder}");
                 _logger.LogMessage($"Output folder: {outputFolder} (Estimated required space: {Formatter.FormatBytes(requiredOutputSpace)})");
+                _logger.LogMessage($"Search in subfolders: {searchSubfolders}");
                 _logger.LogMessage($"Skip $SystemUpdate folder: {skipSystemUpdate}. Delete originals: {deleteFiles}");
 
                 try
@@ -313,6 +317,7 @@ public partial class MainWindow
                 var successFolder = Path.Combine(inputFolder, "_success");
                 var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
                 var failedFolder = Path.Combine(inputFolder, "_failed");
+                var searchSubfolders = SearchSubfoldersTestCheckBox.IsChecked ?? false;
 
                 if (string.IsNullOrEmpty(inputFolder))
                 {
@@ -372,7 +377,8 @@ public partial class MainWindow
                 List<string> isoFilesToTest;
                 try
                 {
-                    isoFilesToTest = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", SearchOption.TopDirectoryOnly).ToList(), _cts.Token);
+                    var searchOption = searchSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                    isoFilesToTest = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", searchOption).ToList(), _cts.Token);
                 }
                 catch (Exception ex)
                 {
@@ -385,7 +391,9 @@ public partial class MainWindow
                 if (isoFilesToTest.Count == 0)
                 {
                     _logger.LogMessage("No .iso files found in the input folder for testing.");
-                    StopPerformanceCounter();
+                    _messageBoxService.ShowError($"No .iso files were found in the selected folder for testing. {(searchSubfolders ? "" : "Please note this tool is currently configured not to search in subfolders.")}");
+                    SetControlsState(true);
+                    _isOperationRunning = false;
                     return;
                 }
 
@@ -442,6 +450,7 @@ public partial class MainWindow
                 _logger.LogMessage("--- Starting batch ISO test process... ---");
                 _logger.LogMessage($"Input folder: {inputFolder}");
                 _logger.LogMessage($"Total ISOs to test: {isoFilesToTest.Count}. Total size: {Formatter.FormatBytes(totalIsoSize)}");
+                _logger.LogMessage($"Search in subfolders: {searchSubfolders}");
                 if (moveSuccessful) _logger.LogMessage($"Moving successful files to: {successFolder}"); // This is a subfolder, so it's fine.
                 if (moveFailed) _logger.LogMessage($"Moving failed files to: {failedFolder}");
 
@@ -503,6 +512,7 @@ public partial class MainWindow
         BrowseConversionInputButton.IsEnabled = enabled;
         ConversionOutputFolderTextBox.IsEnabled = enabled;
         BrowseConversionOutputButton.IsEnabled = enabled;
+        SearchSubfoldersConversionCheckBox.IsEnabled = enabled;
         DeleteOriginalsCheckBox.IsEnabled = enabled;
         SkipSystemUpdateCheckBox.IsEnabled = enabled;
         StartConversionButton.IsEnabled = enabled;
@@ -511,6 +521,7 @@ public partial class MainWindow
         TestInputFolderTextBox.IsEnabled = enabled;
         BrowseTestInputButton.IsEnabled = enabled;
         MoveSuccessFilesCheckBox.IsEnabled = enabled;
+        SearchSubfoldersTestCheckBox.IsEnabled = enabled;
         MoveFailedFilesCheckBox.IsEnabled = enabled;
         StartTestButton.IsEnabled = enabled;
 
@@ -726,28 +737,6 @@ public partial class MainWindow
         }
 
         return totalSize;
-    }
-
-    private static void AppendExceptionDetails(StringBuilder sb, Exception exception, int level = 0)
-    {
-        while (true)
-        {
-            var indent = new string(' ', level * 2);
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}Type: {exception.GetType().FullName}");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}Message: {exception.Message}");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}Source: {exception.Source}");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}StackTrace:");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}{exception.StackTrace}");
-            if (exception.InnerException != null)
-            {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}Inner Exception:");
-                exception = exception.InnerException;
-                level += 1;
-                continue;
-            }
-
-            break;
-        }
     }
 
     private void AboutMenuItem_Click(object sender, RoutedEventArgs e)

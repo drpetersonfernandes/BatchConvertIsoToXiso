@@ -1,5 +1,6 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text;
+using BatchConvertIsoToXiso.Services;
 
 namespace BatchConvertIsoToXiso;
 
@@ -23,7 +24,7 @@ public partial class MainWindow
             if (exception != null)
             {
                 fullReport.AppendLine("=== Exception Details ===");
-                AppendExceptionDetails(fullReport, exception);
+                ExceptionFormatter.AppendExceptionDetails(fullReport, exception);
             }
 
             if (LogViewer != null)

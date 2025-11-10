@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -62,7 +62,8 @@ public partial class MainWindow
                 {
                     _logger.LogMessage($"Processing archive: {entryFileName}...");
                     string? currentArchiveTempExtractionDir = null;
-                    var archiveExtractedSuccessfully = false;
+                    var archiveExtractedSuccessfully = false; // <--- Declare here, initialize to false
+                    var archiveContainedFailures = false;
 
                     try
                     {
@@ -103,6 +104,7 @@ public partial class MainWindow
                                     case FileProcessingStatus.Failed:
                                         _uiFailedCount++;
                                         _failedConversionFilePaths.Add(extractedIsoPath);
+                                        archiveContainedFailures = true;
                                         break;
                                 }
 
@@ -138,11 +140,13 @@ public partial class MainWindow
                                             case FileProcessingStatus.Failed:
                                                 _uiFailedCount++;
                                                 _failedConversionFilePaths.Add(extractedCuePath); // Log the original CUE path as the failure source
+                                                archiveContainedFailures = true;
                                                 break;
                                         }
                                     }
                                     else
                                     {
+                                        archiveContainedFailures = true;
                                         _logger.LogMessage($"Failed to convert CUE/BIN to ISO: {extractedCueName}. It will be skipped.");
                                         _uiFailedCount++;
                                         _failedConversionFilePaths.Add(extractedCuePath);
@@ -159,37 +163,9 @@ public partial class MainWindow
                         else
                         {
                             _logger.LogMessage($"Failed to extract archive: {entryFileName}. It will be skipped.");
+                            archiveContainedFailures = true;
                             archivesFailedToExtractOrProcess++;
-                            _totalProcessedFiles++; // Increment for the archive itself as a failed item
-                            _uiFailedCount++;
-                            _failedConversionFilePaths.Add(currentEntryPath);
                             UpdateSummaryStatsUi();
-                        }
-
-                        switch (deleteOriginals)
-                        {
-                            case true when archiveExtractedSuccessfully:
-                            {
-                                // Check if all ISOs/CUEs *from this archive* were successful or skipped.
-                                // This is tricky because _uiSuccessCount and _uiSkippedCount are global.
-                                // A more robust way would be to track statuses per archive, but for now,
-                                // we'll assume if the archive extracted and we didn't add its original path to _failedConversionFilePaths, it's okay.
-                                // For simplicity, if *any* ISO from the archive failed, we won't delete the archive.
-                                if (!_failedConversionFilePaths.Contains(currentEntryPath)) // If the archive itself wasn't marked as failed
-                                {
-                                    _logger.LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
-                                    await TryDeleteFileAsync(currentEntryPath);
-                                }
-                                else
-                                {
-                                    _logger.LogMessage($"Not deleting archive {entryFileName} due to processing issues with its contents.");
-                                }
-
-                                break;
-                            }
-                            case true when !archiveExtractedSuccessfully:
-                                _logger.LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
-                                break;
                         }
                     }
                     catch (OperationCanceledException)
@@ -200,14 +176,12 @@ public partial class MainWindow
                     {
                         _logger.LogMessage($"Error processing archive {entryFileName}: {ex.Message}");
                         _ = ReportBugAsync($"Error during processing of archive {entryFileName}", ex);
+                        archiveContainedFailures = true;
                         archivesFailedToExtractOrProcess++;
                         _failedConversionFilePaths.Add(currentEntryPath);
-                        if (!archiveExtractedSuccessfully)
-                        {
-                            _totalProcessedFiles++; // Increment for the archive itself as a failed item
-                            _uiFailedCount++;
-                            UpdateSummaryStatsUi();
-                        }
+                        _totalProcessedFiles++; // Increment for the archive itself as a failed item
+                        _uiFailedCount++;
+                        UpdateSummaryStatsUi();
                     }
                     finally
                     {
@@ -224,6 +198,29 @@ public partial class MainWindow
                                 _logger.LogMessage($"Error cleaning temp folder {currentArchiveTempExtractionDir} for {entryFileName}: {ex.Message}. Will retry at end.");
                             }
                         }
+                    }
+
+                    // MOVED THIS BLOCK HERE, AFTER THE TRY-CATCH-FINALLY
+                    switch (deleteOriginals)
+                    {
+                        case true when archiveExtractedSuccessfully:
+                        {
+                            // Only delete the original archive if it was successfully extracted AND all its contents were processed without failure.
+                            if (!archiveContainedFailures)
+                            {
+                                _logger.LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
+                                await TryDeleteFileAsync(currentEntryPath);
+                            }
+                            else
+                            {
+                                _logger.LogMessage($"Not deleting archive {entryFileName} due to processing issues with its contents.");
+                            }
+
+                            break;
+                        }
+                        case true when !archiveExtractedSuccessfully:
+                            _logger.LogMessage($"Not deleting archive {entryFileName} due to extraction failure.");
+                            break;
                     }
 
                     break;
