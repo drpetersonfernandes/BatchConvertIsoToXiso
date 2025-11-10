@@ -11,7 +11,6 @@ public interface IBugReportService
 public class BugReportService : IBugReportService, IDisposable
 {
     private readonly HttpClient _httpClient = new();
-    private bool _disposed;
     private readonly string _apiUrl;
     private readonly string _apiKey;
     private readonly string _applicationName;
@@ -56,19 +55,7 @@ public class BugReportService : IBugReportService, IDisposable
 
     public void Dispose()
     {
-        Dispose(true);
+        _httpClient?.Dispose();
         GC.SuppressFinalize(this);
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (_disposed) return;
-
-        if (disposing)
-        {
-            _httpClient.Dispose();
-        }
-
-        _disposed = true;
     }
 }

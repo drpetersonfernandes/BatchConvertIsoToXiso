@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Navigation;
 using BatchConvertIsoToXiso.Services;
 
@@ -14,7 +13,7 @@ public partial class AboutWindow
         _urlOpener = urlOpener;
         InitializeComponent();
 
-        AppVersionTextBlock.Text = $"Version: {GetApplicationVersion()}";
+        AppVersionTextBlock.Text = $"Version: {GetApplicationVersion.GetProgramVersion()}";
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -26,11 +25,5 @@ public partial class AboutWindow
     {
         _urlOpener.OpenUrl(e.Uri.AbsoluteUri);
         e.Handled = true;
-    }
-
-    private static string GetApplicationVersion()
-    {
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
-        return version?.ToString() ?? "Unknown";
     }
 }

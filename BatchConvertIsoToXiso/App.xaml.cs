@@ -21,7 +21,6 @@ public partial class App
 
     public App()
     {
-        // Set up global exception handling
         AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
         DispatcherUnhandledException += App_DispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
@@ -39,7 +38,6 @@ public partial class App
         _messageBoxService = ServiceProvider.GetRequiredService<IMessageBoxService>();
 
         CleanupTemporaryFolders();
-
         InitializeSevenZipSharp();
 
         var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
@@ -65,7 +63,6 @@ public partial class App
         services.AddSingleton<IUrlOpener, UrlOpenerService>();
         services.AddTransient<IFileExtractor, FileExtractorService>();
         services.AddTransient<IFileMover, FileMoverService>();
-
         services.AddTransient<AboutWindow>();
         services.AddSingleton<MainWindow>();
     }
@@ -202,15 +199,14 @@ public partial class App
                 {
                     // Attempt to delete the directory and its contents recursively
                     Directory.Delete(dir, true);
-                    // Console.WriteLine($"Cleaned up orphaned temporary folder: {dir}"); // For debugging
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    // Ignore if we can't delete due to permissions or file in use
+                    // Ignore
                 }
                 catch (IOException)
                 {
-                    /* Ignore if directory is in use */
+                    // Ignore
                 }
                 catch (Exception ex)
                 {

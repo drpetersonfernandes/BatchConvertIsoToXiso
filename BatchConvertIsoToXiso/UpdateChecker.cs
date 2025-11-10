@@ -74,7 +74,7 @@ public class UpdateChecker : IUpdateChecker, IDisposable
 
     public void Dispose()
     {
-        _httpClient.Dispose();
+        _httpClient?.Dispose();
         GC.SuppressFinalize(this);
     }
 }
