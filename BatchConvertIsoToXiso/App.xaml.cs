@@ -180,19 +180,4 @@ public partial class App
             _messageBoxService?.ShowError($"An error occurred while initializing the archive extraction library: {ex.Message}");
         }
     }
-
-    protected override void OnExit(ExitEventArgs e)
-    {
-        // Clean up event handlers
-        AppDomain.CurrentDomain.UnhandledException -= CurrentDomain_UnhandledException;
-        DispatcherUnhandledException -= App_DispatcherUnhandledException;
-        TaskScheduler.UnobservedTaskException -= TaskScheduler_UnobservedTaskException;
-
-        if (ServiceProvider is IDisposable disposable)
-        {
-            disposable.Dispose();
-        }
-
-        base.OnExit(e);
-    }
 }

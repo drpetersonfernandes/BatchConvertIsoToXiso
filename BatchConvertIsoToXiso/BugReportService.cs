@@ -46,7 +46,6 @@ public class BugReportService : IBugReportService, IDisposable
             // Send the request
             var response = await _httpClient.PostAsync(_apiUrl, content);
 
-            // Return true if successful
             return response.IsSuccessStatusCode;
         }
         catch

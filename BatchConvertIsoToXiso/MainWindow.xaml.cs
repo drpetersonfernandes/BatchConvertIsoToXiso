@@ -65,7 +65,7 @@ public partial class MainWindow
 
         Loaded += async (s, e) =>
         {
-            DisplayInitialInstructions(); // Fix 1: Call DisplayInitialInstructions
+            DisplayInitialInstructions();
             await CheckForUpdatesAsync();
         };
     }
@@ -194,7 +194,7 @@ public partial class MainWindow
 
             // If both category and instance exist, proceed with creating the counter.
             _diskWriteSpeedCounter = new PerformanceCounter("LogicalDisk", "Disk Write Bytes/sec", perfCounterInstanceName, true);
-            _diskWriteSpeedCounter.NextValue(); // Initial call to prime the counter, ignore first value
+            _diskWriteSpeedCounter.NextValue(); // Initial call to prime the counter, ignore the first value
             // Second call to get a valid initial value, though it might still be 0
             _diskWriteSpeedCounter.NextValue();
             _activeMonitoringDriveLetter = driveLetter;
@@ -242,23 +242,6 @@ public partial class MainWindow
             if (WriteSpeedDriveIndicator != null)
             {
                 WriteSpeedDriveIndicator.Text = "";
-            }
-        });
-    }
-
-    private void ResetPerformanceCounterState()
-    {
-        _activeMonitoringDriveLetter = null;
-        Application.Current?.Dispatcher.InvokeAsync(() =>
-        {
-            if (WriteSpeedDriveIndicator != null)
-            {
-                WriteSpeedDriveIndicator.Text = "";
-            }
-
-            if (WriteSpeedValue != null)
-            {
-                WriteSpeedValue.Text = "N/A";
             }
         });
     }
@@ -379,7 +362,7 @@ public partial class MainWindow
 
                 _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(MinimumRequiredConversionTempSpaceBytes)}).");
 
-                // Scan input folder to get initial entries for size calculation and count
+                // Scan the input folder to get initial entries for size calculation and count
                 List<string> initialEntriesToProcess;
                 try
                 {
@@ -407,7 +390,7 @@ public partial class MainWindow
                     return;
                 }
 
-                // Calculate total size of input files for output drive space check
+                // Calculate the total size of input files for output drive space check
                 var totalInputSize = await CalculateTotalInputFileSizeAsync(initialEntriesToProcess);
                 var requiredOutputSpace = (long)(totalInputSize * 1.1); // 10% buffer for potential slight size increase or temporary files
                 if (!CheckDriveSpace(outputFolder, requiredOutputSpace, "output"))
@@ -418,7 +401,7 @@ public partial class MainWindow
 
                 ResetSummaryStats();
 
-                // Start with output drive but allow dynamic switching
+                // Start with the output drive but allow dynamic switching
                 var outputDrive = GetDriveLetter(outputFolder);
                 _currentOperationDrive = outputDrive;
                 InitializePerformanceCounter(outputDrive);
@@ -431,7 +414,7 @@ public partial class MainWindow
                 _logger.LogMessage("--- Starting batch conversion process... ---");
                 _logger.LogMessage($"Input folder: {inputFolder}");
                 _logger.LogMessage($"Output folder: {outputFolder} (Estimated required space: {Formatter.FormatBytes(requiredOutputSpace)})");
-                _logger.LogMessage($"Skip $SystemUpdate folder: {skipSystemUpdate}"); // Log new option
+                _logger.LogMessage($"Skip $SystemUpdate folder: {skipSystemUpdate}");
 
                 try
                 {
@@ -561,7 +544,7 @@ public partial class MainWindow
 
                 _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(MinimumRequiredTestTempSpaceBytes)}).");
 
-                // Scan input folder to get .iso files for size calculation and count
+                // Scan the input folder to get .iso files for size calculation and count
                 List<string> isoFilesToTest;
                 try
                 {
@@ -733,8 +716,8 @@ public partial class MainWindow
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
         _uiSkippedCount = 0;
-        _invalidIsoErrorCount = 0; // Reset counter
-        _totalProcessedFiles = 0; // Reset counter
+        _invalidIsoErrorCount = 0;
+        _totalProcessedFiles = 0;
         UpdateSummaryStatsUi();
         UpdateProgressUi(0, 0);
         ProcessingTimeValue.Text = "00:00:00";
@@ -877,7 +860,7 @@ public partial class MainWindow
                         case FileProcessingStatus.Failed:
                             _uiFailedCount++;
                             failedConversionFilePaths.Add(currentEntryPath);
-                            _totalProcessedFiles++; // Track total processed
+                            _totalProcessedFiles++; // Track the total processed
                             break;
                     }
 
@@ -927,11 +910,11 @@ public partial class MainWindow
                                 _cts.Token.ThrowIfCancellationRequested();
                                 var extractedIsoName = Path.GetFileName(extractedIsoPath);
                                 _logger.LogMessage($"  Converting ISO from archive: {extractedIsoName}...");
-                                var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate); // Pass new option
+                                var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
                                 globalFileIndex++;
                                 statusesOfIsosInThisArchive.Add(status);
                                 actualIsosProcessedForProgress++;
-                                _totalProcessedFiles++; // Increment for each ISO processed from archive
+                                _totalProcessedFiles++; // Increment for each ISO processed from the archive
                                 switch (status)
                                 {
                                     case FileProcessingStatus.Converted:
@@ -943,7 +926,7 @@ public partial class MainWindow
                                     case FileProcessingStatus.Failed:
                                         _uiFailedCount++;
                                         failedConversionFilePaths.Add(extractedIsoPath);
-                                        _totalProcessedFiles++; // Track total processed
+                                        _totalProcessedFiles++; // Track the total processed
                                         break;
                                 }
 
@@ -983,7 +966,7 @@ public partial class MainWindow
                                             case FileProcessingStatus.Failed:
                                                 _uiFailedCount++;
                                                 failedConversionFilePaths.Add(extractedCuePath); // Log the original CUE path as the failure source
-                                                _totalProcessedFiles++; // Track total processed
+                                                _totalProcessedFiles++; // Track the total processed
                                                 break;
                                         }
                                     }
@@ -1207,7 +1190,7 @@ public partial class MainWindow
             _logger.LogMessage($"Testing ISO: {isoFileName}...");
 
             // Drive for testing (temp) vs. moving successful (output)
-            SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Test extraction always uses temp path
+            SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Test extraction always uses the temp path
 
             var testStatus = await TestSingleIsoAsync(extractXisoPath, isoFilePath, testFileIndex);
             testFileIndex++;
@@ -1228,7 +1211,7 @@ public partial class MainWindow
             else // IsoTestResultStatus.Failed
             {
                 _uiFailedCount++;
-                failedIsoOriginalPaths.Add(isoFilePath); // Add original path before potential move
+                failedIsoOriginalPaths.Add(isoFilePath); // Add the original path before potential move
                 _logger.LogMessage($"  FAILURE: '{isoFileName}' failed test.");
 
                 if (moveFailed && !string.IsNullOrEmpty(failedFolder))
@@ -1300,7 +1283,7 @@ public partial class MainWindow
                 return IsoTestResultStatus.Failed;
             }
 
-            // Always rename to simple filename for testing
+            // Always rename to a simple filename for testing
             var simpleFilename = GenerateSimpleFilename(fileIndex);
             simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
 
@@ -1492,7 +1475,7 @@ public partial class MainWindow
         }
     }
 
-    private async Task<FileProcessingStatus> ConvertFileAsync(string extractXisoPath, string inputFile, string outputFolder, bool deleteOriginalIsoFile, int fileIndex, bool skipSystemUpdate) // Add skipSystemUpdate parameter
+    private async Task<FileProcessingStatus> ConvertFileAsync(string extractXisoPath, string inputFile, string outputFolder, bool deleteOriginalIsoFile, int fileIndex, bool skipSystemUpdate)
     {
         var originalFileName = Path.GetFileName(inputFile);
         var logPrefix = $"File '{originalFileName}':";
@@ -1506,7 +1489,7 @@ public partial class MainWindow
             await Task.Run(() => Directory.CreateDirectory(localTempWorkingDir));
             _logger.LogMessage($"{logPrefix} Created local temporary working directory: {localTempWorkingDir}");
 
-            // 2. Generate simple filename for the local copy
+            // 2. Generate a simple filename for the local copy
             var simpleFilename = GenerateSimpleFilename(fileIndex);
             localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);
 
@@ -1518,7 +1501,7 @@ public partial class MainWindow
 
             // 4. Run extract-xiso on the local temporary copy
             SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Still monitoring temp drive for in-place rewrite
-            var toolResult = await RunConversionToolAsync(extractXisoPath, localTempIsoPath, originalFileName, skipSystemUpdate); // Pass new option
+            var toolResult = await RunConversionToolAsync(extractXisoPath, localTempIsoPath, originalFileName, skipSystemUpdate);
 
             var isTemporaryFileFromArchive = inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase);
 
@@ -1531,7 +1514,7 @@ public partial class MainWindow
 
             // Ensure output folder exists
             await Task.Run(() => Directory.CreateDirectory(outputFolder));
-            var destinationPath = Path.Combine(outputFolder, originalFileName); // Use original filename for destination
+            var destinationPath = Path.Combine(outputFolder, originalFileName); // Use the original filename for destination
 
             if (toolResult == ConversionToolResultStatus.Skipped)
             {
@@ -1546,7 +1529,7 @@ public partial class MainWindow
                 }
                 else if (isTemporaryFileFromArchive)
                 {
-                    // Original file was already temporary, it will be cleaned up by archive processing logic
+                    // The original file was already temporary, it will be cleaned up by archive processing logic
                     _logger.LogMessage($"{logPrefix} Original file was temporary (from archive), it will be cleaned up by archive logic.");
                 }
                 else
@@ -1569,7 +1552,7 @@ public partial class MainWindow
             }
             else if (isTemporaryFileFromArchive)
             {
-                // Original file was already temporary, it will be cleaned up by archive processing logic
+                // The original file was already temporary, it will be cleaned up by archive processing logic
                 _logger.LogMessage($"{logPrefix} Original file was temporary (from archive), it will be cleaned up by archive logic.");
             }
             else
@@ -1611,7 +1594,7 @@ public partial class MainWindow
         }
     }
 
-    private async Task<ConversionToolResultStatus> RunConversionToolAsync(string extractXisoPath, string inputFile, string originalFileName, bool skipSystemUpdate) // Add skipSystemUpdate parameter
+    private async Task<ConversionToolResultStatus> RunConversionToolAsync(string extractXisoPath, string inputFile, string originalFileName, bool skipSystemUpdate)
     {
         var simpleFileName = Path.GetFileName(inputFile);
         var arguments = $"-r \"{inputFile}\"";
@@ -1637,7 +1620,7 @@ public partial class MainWindow
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = extractXisoPath,
-                Arguments = arguments, // Use the constructed arguments string
+                Arguments = arguments,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -1720,7 +1703,7 @@ public partial class MainWindow
                                            $"This file appears to be from a different console (e.g., PlayStation). " +
                                            $"Please ensure you are processing Xbox or Xbox 360 ISO files only.");
                         _invalidIsoErrorCount++; // Track invalid ISO errors
-                        return ConversionToolResultStatus.Failed; // Don't send bug report for expected errors
+                        return ConversionToolResultStatus.Failed; // Don't send the bug report for expected errors
                     }
 
                     // Handle cases where exit code is 1 but the operation was successful.
@@ -1845,7 +1828,7 @@ public partial class MainWindow
                 }
                 catch
                 {
-                    /* Ignore */
+                    // Ignore
                 }
             });
             process.OutputDataReceived += (_, args) =>
@@ -2013,7 +1996,7 @@ public partial class MainWindow
             catch (Exception ex)
             {
                 _logger.LogMessage($"Warning: Could not get size of file {Path.GetFileName(filePath)} for disk space calculation: {ex.Message}");
-                // Continue, but totalSize might be underestimated.
+                // Continue, but the totalSize might be underestimated.
             }
         }
 
@@ -2099,7 +2082,7 @@ public partial class MainWindow
         }
         catch
         {
-            // ignored
+            // ignore
         }
     }
 
