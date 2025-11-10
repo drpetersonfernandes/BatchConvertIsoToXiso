@@ -44,6 +44,16 @@ public partial class App
         mainWindow.Show();
     }
 
+    protected override void OnExit(ExitEventArgs e)
+    {
+        if (ServiceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+
+        base.OnExit(e);
+    }
+
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<IBugReportService>(new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
@@ -90,7 +100,7 @@ public partial class App
             }
 
             // Inform the user that a critical error occurred
-            Current.Dispatcher.Invoke(() =>
+            _ = Current.Dispatcher.InvokeAsync(() =>
             {
                 _messageBoxService?.ShowError("A critical error occurred and has been reported. The application may need to close.");
             });

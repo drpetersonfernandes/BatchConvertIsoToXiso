@@ -20,6 +20,7 @@ public class UpdateChecker : IUpdateChecker, IDisposable
     public UpdateChecker()
     {
         _httpClient = new HttpClient();
+        _httpClient.Timeout = TimeSpan.FromSeconds(15);
         // GitHub API requires a User-Agent header.
         _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BatchConvertIsoToXiso", GetApplicationVersion()));
     }

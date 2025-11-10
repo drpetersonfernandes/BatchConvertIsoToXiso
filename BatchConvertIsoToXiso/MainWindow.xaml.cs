@@ -257,6 +257,7 @@ public partial class MainWindow
         {
             // CancellationTokenSource was already disposed, which is fine
         }
+
         _processingTimer.Tick -= ProcessingTimer_Tick;
         _processingTimer.Stop();
         StopPerformanceCounter();

@@ -21,6 +21,7 @@ public class BugReportService : IBugReportService, IDisposable
         _apiUrl = apiUrl;
         _apiKey = apiKey;
         _applicationName = applicationName;
+        _httpClient.Timeout = TimeSpan.FromSeconds(15);
     }
 
     /// <summary>
