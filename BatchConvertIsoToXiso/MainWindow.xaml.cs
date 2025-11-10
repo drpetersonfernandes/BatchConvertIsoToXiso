@@ -381,13 +381,12 @@ public partial class MainWindow
                 List<string> topLevelEntries;
                 try
                 {
-                    topLevelEntries = await Task.Run(() =>
-                            Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
-                                .Where(static f =>
-                                {
-                                    var ext = Path.GetExtension(f).ToLowerInvariant();
-                                    return ext is ".iso" or ".zip" or ".7z" or ".rar" or ".cue";
-                                }).ToList(),
+                    topLevelEntries = await Task.Run(() => Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
+                            .Where(static f =>
+                            {
+                                var ext = Path.GetExtension(f).ToLowerInvariant();
+                                return ext is ".iso" or ".zip" or ".7z" or ".rar" or ".cue";
+                            }).ToList(),
                         _cts.Token);
 
                     if (topLevelEntries.Count == 0)
@@ -994,7 +993,6 @@ public partial class MainWindow
                                 // This is tricky because _uiSuccessCount and _uiSkippedCount are global.
                                 // A more robust way would be to track statuses per archive, but for now,
                                 // we'll assume if the archive extracted and we didn't add its original path to _failedConversionFilePaths, it's okay.
-                                // This logic needs to be refined if we want precise per-archive deletion.
                                 // For simplicity, if *any* ISO from the archive failed, we won't delete the archive.
                                 if (!_failedConversionFilePaths.Contains(currentEntryPath)) // If the archive itself wasn't marked as failed
                                 {
