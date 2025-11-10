@@ -38,6 +38,8 @@ public partial class App
         _bugReportService = ServiceProvider.GetRequiredService<IBugReportService>();
         _messageBoxService = ServiceProvider.GetRequiredService<IMessageBoxService>();
 
+        CleanupTemporaryFolders();
+
         InitializeSevenZipSharp();
 
         var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
@@ -94,16 +96,11 @@ public partial class App
         {
             var message = BuildExceptionReport(exception, source);
 
-            if (_bugReportService != null)
-            {
-                _ = _bugReportService.SendBugReportAsync(message);
-            }
+            _ = _bugReportService?.SendBugReportAsync(message);
 
             // Inform the user that a critical error occurred
-            _ = Current.Dispatcher.InvokeAsync(() =>
-            {
-                _messageBoxService?.ShowError("A critical error occurred and has been reported. The application may need to close.");
-            });
+            // Use Dispatcher.InvokeAsync to ensure UI operations are on the UI thread
+            Current.Dispatcher.InvokeAsync(() => _messageBoxService?.ShowError("A critical error occurred and has been reported. The application may need to close."));
         }
         catch
         {
@@ -156,7 +153,7 @@ public partial class App
     {
         try
         {
-            const string dllName = "7z_x64.dll"; // This application now only supports x64.
+            const string dllName = "7z_x64.dll";
             var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
 
             if (File.Exists(dllPath))
@@ -188,6 +185,42 @@ public partial class App
             }
 
             _messageBoxService?.ShowError($"An error occurred while initializing the archive extraction library: {ex.Message}");
+        }
+    }
+
+    private void CleanupTemporaryFolders()
+    {
+        var tempPath = Path.GetTempPath();
+        const string tempFolderPrefix = "BatchConvertIsoToXiso_";
+
+        try
+        {
+            var directories = Directory.EnumerateDirectories(tempPath, tempFolderPrefix + "*", SearchOption.TopDirectoryOnly);
+            foreach (var dir in directories)
+            {
+                try
+                {
+                    // Attempt to delete the directory and its contents recursively
+                    Directory.Delete(dir, true);
+                    // Console.WriteLine($"Cleaned up orphaned temporary folder: {dir}"); // For debugging
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Ignore if we can't delete due to permissions or file in use
+                }
+                catch (IOException)
+                {
+                    /* Ignore if directory is in use */
+                }
+                catch (Exception ex)
+                {
+                    _ = _bugReportService?.SendBugReportAsync($"Error cleaning orphaned temp folder {dir}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _ = _bugReportService?.SendBugReportAsync($"Error enumerating temp folders for cleanup: {ex.Message}");
         }
     }
 }

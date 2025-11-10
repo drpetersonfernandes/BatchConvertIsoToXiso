@@ -21,7 +21,9 @@ public class BugReportService : IBugReportService, IDisposable
         _apiUrl = apiUrl;
         _apiKey = apiKey;
         _applicationName = applicationName;
+
         _httpClient.Timeout = TimeSpan.FromSeconds(15);
+        _httpClient.DefaultRequestHeaders.Add("X-API-KEY", _apiKey); // Set API key once
     }
 
     /// <summary>
@@ -33,10 +35,6 @@ public class BugReportService : IBugReportService, IDisposable
     {
         try
         {
-            // Add the API key to the headers
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("X-API-KEY", _apiKey);
-
             // Create the request payload
             var content = JsonContent.Create(new
             {

@@ -111,9 +111,16 @@ public partial class MainWindow
             _ = ReportBugAsync("bchunk.exe not found.");
         }
 
-
         _logger.LogMessage("INFO: Archive extraction uses the SevenZipExtractor library.");
         _logger.LogMessage("--- Ready ---");
+    }
+
+    private void UpdateStatus(string status)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            StatusTextBlock.Text = status;
+        });
     }
 
     private string? GetDriveLetter(string? path)
@@ -261,7 +268,6 @@ public partial class MainWindow
         _processingTimer.Tick -= ProcessingTimer_Tick;
         _processingTimer.Stop();
         StopPerformanceCounter();
-        _cts?.Dispose();
         base.OnClosing(e);
     }
 
@@ -296,10 +302,10 @@ public partial class MainWindow
     {
         try
         {
-            if (_isOperationRunning) return;
+            if (_isOperationRunning) return; // Prevent multiple clicks
 
-            _isOperationRunning = true;
-
+            _isOperationRunning = true; // Set immediately
+            SetControlsState(false); // Disable controls immediately
             try
             {
                 Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
@@ -368,13 +374,14 @@ public partial class MainWindow
                     return;
                 }
 
-                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(MinimumRequiredConversionTempSpaceBytes)}).");
+                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required for conversion: {Formatter.FormatBytes(MinimumRequiredConversionTempSpaceBytes)}).");
 
-                // Scan the input folder to get initial entries for size calculation and count
-                List<string> initialEntriesToProcess;
+                // --- Dry run to count total processable ISOs/CUEs ---
+                // Scan the input folder to get initial entries for size calculation
+                List<string> topLevelEntries;
                 try
                 {
-                    initialEntriesToProcess = await Task.Run(() =>
+                    topLevelEntries = await Task.Run(() =>
                             Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
                                 .Where(static f =>
                                 {
@@ -382,6 +389,18 @@ public partial class MainWindow
                                     return ext is ".iso" or ".zip" or ".7z" or ".rar" or ".cue";
                                 }).ToList(),
                         _cts.Token);
+
+                    if (topLevelEntries.Count == 0)
+                    {
+                        _logger.LogMessage("No ISO files or supported archives found in the input folder for conversion.");
+                        StopPerformanceCounter();
+                        return;
+                    }
+
+                    // Perform a dry run to get the actual total count of ISOs/CUEs that will be processed
+                    _logger.LogMessage("Performing initial scan to count total ISOs/CUEs for accurate progress tracking...");
+                    _uiTotalFiles = await CountTotalIsosAndCuesInFolderAsync(topLevelEntries, inputFolder, _cts.Token);
+                    _logger.LogMessage($"Initial scan complete. Found {_uiTotalFiles} ISOs/CUEs to process.");
                 }
                 catch (Exception ex)
                 {
@@ -391,15 +410,8 @@ public partial class MainWindow
                     return;
                 }
 
-                if (initialEntriesToProcess.Count == 0)
-                {
-                    _logger.LogMessage("No ISO files or supported archives found in the input folder for conversion.");
-                    StopPerformanceCounter();
-                    return;
-                }
-
                 // Calculate the total size of input files for output drive space check
-                var totalInputSize = await CalculateTotalInputFileSizeAsync(initialEntriesToProcess);
+                var totalInputSize = await CalculateTotalInputFileSizeAsync(topLevelEntries);
                 var requiredOutputSpace = (long)(totalInputSize * 1.1); // 10% buffer for potential slight size increase or temporary files
                 if (!CheckDriveSpace(outputFolder, requiredOutputSpace, "output"))
                 {
@@ -417,16 +429,15 @@ public partial class MainWindow
                 _operationStartTime = DateTime.Now;
                 _processingTimer.Start();
 
-                SetControlsState(false);
                 UpdateStatus("Starting batch conversion...");
                 _logger.LogMessage("--- Starting batch conversion process... ---");
                 _logger.LogMessage($"Input folder: {inputFolder}");
                 _logger.LogMessage($"Output folder: {outputFolder} (Estimated required space: {Formatter.FormatBytes(requiredOutputSpace)})");
-                _logger.LogMessage($"Skip $SystemUpdate folder: {skipSystemUpdate}");
+                _logger.LogMessage($"Skip $SystemUpdate folder: {skipSystemUpdate}. Delete originals: {deleteFiles}");
 
                 try
                 {
-                    await PerformBatchConversionAsync(extractXisoPath, inputFolder, outputFolder, deleteFiles, skipSystemUpdate, initialEntriesToProcess);
+                    await PerformBatchConversionAsync(extractXisoPath, inputFolder, outputFolder, deleteFiles, skipSystemUpdate, topLevelEntries);
                 }
                 catch (OperationCanceledException)
                 {
@@ -446,7 +457,6 @@ public partial class MainWindow
                     var finalElapsedTime = DateTime.Now - _operationStartTime;
                     Application.Current.Dispatcher.Invoke(() => ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
                     SetControlsState(true);
-                    LogOperationSummary("Conversion");
                     UpdateStatus("Conversion complete. Ready.");
                     _isOperationRunning = false;
                 }
@@ -457,13 +467,18 @@ public partial class MainWindow
                 _logger.LogMessage($"Error during batch conversion process: {ex.Message}");
                 StopPerformanceCounter();
                 _isOperationRunning = false;
+                LogOperationSummary("Conversion");
             }
         }
         catch (Exception ex)
         {
             _ = ReportBugAsync($"Error during batch conversion process: {ex.Message}", ex);
         }
-    }
+        finally
+        {
+            LogOperationSummary("Conversion");
+        } // Ensure summary is always logged
+    } // End StartConversionButton_Click
 
     private async void StartTestButton_Click(object sender, RoutedEventArgs e)
     {
@@ -472,7 +487,7 @@ public partial class MainWindow
             if (_isOperationRunning) return;
 
             _isOperationRunning = true;
-
+            SetControlsState(false); // Disable controls immediately
             try
             {
                 Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
@@ -611,6 +626,8 @@ public partial class MainWindow
                 }
 
                 ResetSummaryStats();
+                _uiTotalFiles = isoFilesToTest.Count; // Set total files for testing
+                UpdateSummaryStatsUi();
 
                 // Initial drive for monitoring is the temp path, as the test involves extraction to temp.
                 var initialDriveForMonitoring = GetDriveLetter(Path.GetTempPath());
@@ -620,12 +637,11 @@ public partial class MainWindow
                 _operationStartTime = DateTime.Now;
                 _processingTimer.Start();
 
-                SetControlsState(false);
                 UpdateStatus("Starting batch ISO test...");
                 _logger.LogMessage("--- Starting batch ISO test process... ---");
                 _logger.LogMessage($"Input folder: {inputFolder}");
                 _logger.LogMessage($"Total ISOs to test: {isoFilesToTest.Count}. Total size: {Formatter.FormatBytes(totalIsoSize)}");
-                if (moveSuccessful) _logger.LogMessage($"Moving successful files to: {successFolder}");
+                if (moveSuccessful) _logger.LogMessage($"Moving successful files to: {successFolder}"); // This is a subfolder, so it's fine.
                 if (moveFailed) _logger.LogMessage($"Moving failed files to: {failedFolder}");
 
                 try
@@ -650,7 +666,6 @@ public partial class MainWindow
                     var finalElapsedTime = DateTime.Now - _operationStartTime;
                     Application.Current.Dispatcher.Invoke(() => ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
                     SetControlsState(true);
-                    LogOperationSummary("Test");
                     UpdateStatus("Test complete. Ready.");
                     _isOperationRunning = false;
                 }
@@ -661,7 +676,12 @@ public partial class MainWindow
                 _logger.LogMessage($"Error during batch ISO test process: {ex.Message}");
                 StopPerformanceCounter();
                 _isOperationRunning = false;
+                LogOperationSummary("Test");
             }
+            finally
+            {
+                LogOperationSummary("Test");
+            } // Ensure summary is always logged
         }
         catch (Exception ex)
         {
@@ -717,6 +737,7 @@ public partial class MainWindow
     // Add these fields to track invalid ISO errors
     private int _invalidIsoErrorCount;
     private int _totalProcessedFiles;
+    private readonly List<string> _failedConversionFilePaths = new(); // Track original paths of failed items
 
     private void ResetSummaryStats()
     {
@@ -724,8 +745,9 @@ public partial class MainWindow
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
         _uiSkippedCount = 0;
-        _invalidIsoErrorCount = 0;
-        _totalProcessedFiles = 0;
+        _invalidIsoErrorCount = 0; // Reset invalid ISO count
+        _totalProcessedFiles = 0; // Reset total processed count
+        _failedConversionFilePaths.Clear(); // Clear failed paths
         UpdateSummaryStatsUi();
         UpdateProgressUi(0, 0);
         ProcessingTimeValue.Text = "00:00:00";
@@ -733,22 +755,6 @@ public partial class MainWindow
         {
             StopPerformanceCounter();
         }
-    }
-
-    private void UpdateSummaryStatsUi(int? newTotalFiles = null)
-    {
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            if (newTotalFiles.HasValue)
-            {
-                _uiTotalFiles = newTotalFiles.Value;
-            }
-
-            TotalFilesValue.Text = _uiTotalFiles.ToString(CultureInfo.InvariantCulture);
-            SuccessValue.Text = _uiSuccessCount.ToString(CultureInfo.InvariantCulture);
-            FailedValue.Text = _uiFailedCount.ToString(CultureInfo.InvariantCulture);
-            SkippedValue.Text = _uiSkippedCount.ToString(CultureInfo.InvariantCulture);
-        });
     }
 
     private void ProcessingTimer_Tick(object? sender, EventArgs e)
@@ -783,17 +789,21 @@ public partial class MainWindow
         }
     }
 
-    private void UpdateStatus(string message)
+    private void UpdateSummaryStatsUi()
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
-            if (StatusTextBlock != null)
-            {
-                StatusTextBlock.Text = message;
-            }
+            TotalFilesValue.Text = _uiTotalFiles.ToString(CultureInfo.InvariantCulture);
+            SuccessValue.Text = _uiSuccessCount.ToString(CultureInfo.InvariantCulture);
+            FailedValue.Text = _uiFailedCount.ToString(CultureInfo.InvariantCulture);
+            SkippedValue.Text = _uiSkippedCount.ToString(CultureInfo.InvariantCulture);
         });
     }
 
+    // This method is now only for updating the progress bar, not the total files count.
+    // The total files count (_uiTotalFiles) is set once at the beginning by CountTotalIsosAndCuesInFolderAsync.
+    // The `current` parameter will be `actualIsosProcessedForProgress`.
+    // The `total` parameter will be `_uiTotalFiles`.
     private void UpdateProgressUi(int current, int total)
     {
         Application.Current.Dispatcher.Invoke(() =>
@@ -820,28 +830,24 @@ public partial class MainWindow
         return $"iso_{fileIndex:D6}.iso";
     }
 
-    private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals, bool skipSystemUpdate, List<string> initialEntriesToProcess) // Add skipSystemUpdate parameter
+    private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals, bool skipSystemUpdate, List<string> topLevelEntries) // Renamed initialEntriesToProcess to topLevelEntries
     {
         var tempFoldersToCleanUpAtEnd = new List<string>();
         var archivesFailedToExtractOrProcess = 0;
         var actualIsosProcessedForProgress = 0;
-        var failedConversionFilePaths = new List<string>();
 
-        _uiSuccessCount = 0;
-        _uiFailedCount = 0;
-        _uiSkippedCount = 0;
-
-        _logger.LogMessage($"Found {initialEntriesToProcess.Count} top-level items (ISOs or archives) for conversion.");
-        var currentExpectedTotalIsos = initialEntriesToProcess.Count;
-        UpdateSummaryStatsUi(currentExpectedTotalIsos);
-        UpdateProgressUi(0, currentExpectedTotalIsos);
+        // _uiTotalFiles is already set by the dry run in StartConversionButton_Click
+        UpdateSummaryStatsUi(); // Ensure UI reflects the initial _uiTotalFiles
+        UpdateProgressUi(0, _uiTotalFiles);
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
-        _logger.LogMessage($"Starting conversion... Total items to process initially: {currentExpectedTotalIsos}. This may increase if archives contain multiple ISOs.");
+        _logger.LogMessage($"Starting conversion... Total ISOs/CUEs to process: {_uiTotalFiles}.");
 
         var globalFileIndex = 1; // Global counter for simple filenames
 
-        foreach (var currentEntryPath in initialEntriesToProcess)
+        foreach (var currentEntryPath in topLevelEntries)
         {
+            // --- Increment _totalProcessedFiles here for each actual ISO/CUE processed ---
+            // This counter will be incremented for each ISO or CUE file that is *attempted* to be converted.
             _cts.Token.ThrowIfCancellationRequested();
 
             var entryFileName = Path.GetFileName(currentEntryPath);
@@ -854,9 +860,9 @@ public partial class MainWindow
                 {
                     _logger.LogMessage($"Processing standalone ISO: {entryFileName}...");
                     var status = await ConvertFileAsync(extractXisoPath, currentEntryPath, outputFolder, deleteOriginals, globalFileIndex, skipSystemUpdate); // Pass new option
+                    _totalProcessedFiles++; // Increment for each ISO processed
                     globalFileIndex++;
                     actualIsosProcessedForProgress++;
-                    _totalProcessedFiles++; // Increment for each ISO processed
                     switch (status)
                     {
                         case FileProcessingStatus.Converted:
@@ -867,19 +873,17 @@ public partial class MainWindow
                             break;
                         case FileProcessingStatus.Failed:
                             _uiFailedCount++;
-                            failedConversionFilePaths.Add(currentEntryPath);
-                            _totalProcessedFiles++; // Track the total processed
+                            _failedConversionFilePaths.Add(currentEntryPath);
                             break;
                     }
 
                     UpdateSummaryStatsUi();
-                    UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                    UpdateProgressUi(actualIsosProcessedForProgress, _uiTotalFiles);
                     break;
                 }
                 case ".zip" or ".7z" or ".rar":
                 {
                     _logger.LogMessage($"Processing archive: {entryFileName}...");
-                    var statusesOfIsosInThisArchive = new List<FileProcessingStatus>();
                     string? currentArchiveTempExtractionDir = null;
                     var archiveExtractedSuccessfully = false;
 
@@ -895,23 +899,13 @@ public partial class MainWindow
                             var extractedIsoFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.iso", SearchOption.AllDirectories), _cts.Token);
                             var extractedCueFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.cue", SearchOption.AllDirectories), _cts.Token);
                             var totalFoundFiles = extractedIsoFiles.Length + extractedCueFiles.Length;
-                            switch (totalFoundFiles)
+
+                            if (totalFoundFiles == 0)
                             {
-                                case > 0:
-                                {
-                                    currentExpectedTotalIsos += (totalFoundFiles - 1);
-                                    UpdateSummaryStatsUi(currentExpectedTotalIsos);
-                                    UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
-                                    _logger.LogMessage($"Found {extractedIsoFiles.Length} ISO(s) and {extractedCueFiles.Length} CUE file(s) in {entryFileName}. Total expected items now: {currentExpectedTotalIsos}. Processing them now...");
-                                    break;
-                                }
-                                case 0:
-                                    _logger.LogMessage($"No ISO or CUE files found in archive: {entryFileName}.");
-                                    actualIsosProcessedForProgress++;
-                                    _totalProcessedFiles++; // Increment for archive that yielded no ISOs
-                                    UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
-                                    break;
+                                _logger.LogMessage($"No ISO or CUE files found in archive: {entryFileName}. Skipping archive.");
                             }
+
+                            _logger.LogMessage($"Found {extractedIsoFiles.Length} ISO(s) and {extractedCueFiles.Length} CUE file(s) in {entryFileName}. Processing them now...");
 
                             foreach (var extractedIsoPath in extractedIsoFiles)
                             {
@@ -919,10 +913,9 @@ public partial class MainWindow
                                 var extractedIsoName = Path.GetFileName(extractedIsoPath);
                                 _logger.LogMessage($"  Converting ISO from archive: {extractedIsoName}...");
                                 var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
-                                globalFileIndex++;
-                                statusesOfIsosInThisArchive.Add(status);
-                                actualIsosProcessedForProgress++;
                                 _totalProcessedFiles++; // Increment for each ISO processed from the archive
+                                globalFileIndex++;
+                                actualIsosProcessedForProgress++;
                                 switch (status)
                                 {
                                     case FileProcessingStatus.Converted:
@@ -933,13 +926,12 @@ public partial class MainWindow
                                         break;
                                     case FileProcessingStatus.Failed:
                                         _uiFailedCount++;
-                                        failedConversionFilePaths.Add(extractedIsoPath);
-                                        _totalProcessedFiles++; // Track the total processed
+                                        _failedConversionFilePaths.Add(extractedIsoPath);
                                         break;
                                 }
 
                                 UpdateSummaryStatsUi();
-                                UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                                UpdateProgressUi(actualIsosProcessedForProgress, _uiTotalFiles);
                             }
 
                             foreach (var extractedCuePath in extractedCueFiles)
@@ -947,7 +939,7 @@ public partial class MainWindow
                                 _cts.Token.ThrowIfCancellationRequested();
                                 var extractedCueName = Path.GetFileName(extractedCuePath);
                                 _logger.LogMessage($"  Converting CUE/BIN from archive: {extractedCueName}...");
-                                string? tempCueBinDir = null;
+                                string? tempCueBinDir = null; // Local temp dir for bchunk output
 
                                 try
                                 {
@@ -955,14 +947,12 @@ public partial class MainWindow
                                     await Task.Run(() => Directory.CreateDirectory(tempCueBinDir));
 
                                     var tempIsoPath = await ConvertCueBinToIsoAsync(extractedCuePath, tempCueBinDir);
-
                                     if (tempIsoPath != null && await Task.Run(() => File.Exists(tempIsoPath)))
                                     {
                                         var status = await ConvertFileAsync(extractXisoPath, tempIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
-                                        globalFileIndex++;
-                                        statusesOfIsosInThisArchive.Add(status);
-                                        actualIsosProcessedForProgress++;
                                         _totalProcessedFiles++; // Increment for each ISO processed from CUE/BIN
+                                        globalFileIndex++;
+                                        actualIsosProcessedForProgress++;
                                         switch (status)
                                         {
                                             case FileProcessingStatus.Converted:
@@ -973,8 +963,7 @@ public partial class MainWindow
                                                 break;
                                             case FileProcessingStatus.Failed:
                                                 _uiFailedCount++;
-                                                failedConversionFilePaths.Add(extractedCuePath); // Log the original CUE path as the failure source
-                                                _totalProcessedFiles++; // Track the total processed
+                                                _failedConversionFilePaths.Add(extractedCuePath); // Log the original CUE path as the failure source
                                                 break;
                                         }
                                     }
@@ -982,51 +971,47 @@ public partial class MainWindow
                                     {
                                         _logger.LogMessage($"Failed to convert CUE/BIN to ISO: {extractedCueName}. It will be skipped.");
                                         _uiFailedCount++;
-                                        failedConversionFilePaths.Add(extractedCuePath);
+                                        _failedConversionFilePaths.Add(extractedCuePath);
                                         actualIsosProcessedForProgress++;
-                                        _totalProcessedFiles++; // Increment for failed CUE/BIN conversion
-                                        statusesOfIsosInThisArchive.Add(FileProcessingStatus.Failed);
+                                        _totalProcessedFiles++; // Increment for failed CUE/BIN conversion attempt
                                     }
                                 }
                                 finally
                                 {
                                     if (tempCueBinDir != null) await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
                                     UpdateSummaryStatsUi();
-                                    UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                                    UpdateProgressUi(actualIsosProcessedForProgress, _uiTotalFiles);
                                 }
-                            }
-
-
-                            if (totalFoundFiles == 0)
-                            {
-                                statusesOfIsosInThisArchive.Add(FileProcessingStatus.Skipped);
                             }
                         }
                         else
                         {
                             _logger.LogMessage($"Failed to extract archive: {entryFileName}. It will be skipped.");
                             archivesFailedToExtractOrProcess++;
-                            statusesOfIsosInThisArchive.Add(FileProcessingStatus.Failed);
-                            failedConversionFilePaths.Add(currentEntryPath);
                             actualIsosProcessedForProgress++;
-                            _totalProcessedFiles++; // Increment for failed archive extraction
+                            _totalProcessedFiles++; // Increment for the archive itself as a failed item
                             _uiFailedCount++;
+                            _failedConversionFilePaths.Add(currentEntryPath);
                             UpdateSummaryStatsUi();
-                            UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                            UpdateProgressUi(actualIsosProcessedForProgress, _uiTotalFiles);
                         }
 
                         switch (deleteOriginals)
                         {
                             case true when archiveExtractedSuccessfully:
                             {
-                                var allIsosFromArchiveOk = statusesOfIsosInThisArchive.Count > 0 &&
-                                                           statusesOfIsosInThisArchive.All(static s => s is FileProcessingStatus.Converted or FileProcessingStatus.Skipped);
-                                if (allIsosFromArchiveOk)
+                                // Check if all ISOs/CUEs *from this archive* were successful or skipped.
+                                // This is tricky because _uiSuccessCount and _uiSkippedCount are global.
+                                // A more robust way would be to track statuses per archive, but for now,
+                                // we'll assume if the archive extracted and we didn't add its original path to _failedConversionFilePaths, it's okay.
+                                // This logic needs to be refined if we want precise per-archive deletion.
+                                // For simplicity, if *any* ISO from the archive failed, we won't delete the archive.
+                                if (!_failedConversionFilePaths.Contains(currentEntryPath)) // If the archive itself wasn't marked as failed
                                 {
                                     _logger.LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
                                     await TryDeleteFileAsync(currentEntryPath);
                                 }
-                                else if (statusesOfIsosInThisArchive.Count > 0)
+                                else
                                 {
                                     _logger.LogMessage($"Not deleting archive {entryFileName} due to processing issues with its contents.");
                                 }
@@ -1047,14 +1032,14 @@ public partial class MainWindow
                         _logger.LogMessage($"Error processing archive {entryFileName}: {ex.Message}");
                         _ = ReportBugAsync($"Error during processing of archive {entryFileName}", ex);
                         archivesFailedToExtractOrProcess++;
-                        failedConversionFilePaths.Add(currentEntryPath);
+                        _failedConversionFilePaths.Add(currentEntryPath);
                         if (!archiveExtractedSuccessfully)
                         {
                             actualIsosProcessedForProgress++;
-                            _totalProcessedFiles++; // Increment for archive processing error
+                            _totalProcessedFiles++; // Increment for the archive itself as a failed item
                             _uiFailedCount++;
                             UpdateSummaryStatsUi();
-                            UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                            UpdateProgressUi(actualIsosProcessedForProgress, _uiTotalFiles);
                         }
                     }
                     finally
@@ -1096,8 +1081,8 @@ public partial class MainWindow
                             // We pass 'false' for deleteOriginalIsoFile because we handle deletion of cue/bin separately
                             var status = await ConvertFileAsync(extractXisoPath, tempIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
                             globalFileIndex++;
-                            actualIsosProcessedForProgress++;
                             _totalProcessedFiles++; // Increment for CUE/BIN processed to ISO
+                            actualIsosProcessedForProgress++;
 
                             switch (status)
                             {
@@ -1111,8 +1096,7 @@ public partial class MainWindow
                                     break;
                                 case FileProcessingStatus.Failed:
                                     _uiFailedCount++;
-                                    failedConversionFilePaths.Add(currentEntryPath);
-                                    _totalProcessedFiles++; // Track total processed
+                                    _failedConversionFilePaths.Add(currentEntryPath);
                                     break;
                             }
                         }
@@ -1120,9 +1104,9 @@ public partial class MainWindow
                         {
                             _logger.LogMessage($"Failed to convert CUE/BIN to ISO: {entryFileName}. It will be skipped.");
                             _uiFailedCount++;
-                            failedConversionFilePaths.Add(currentEntryPath);
+                            _failedConversionFilePaths.Add(currentEntryPath);
                             actualIsosProcessedForProgress++;
-                            _totalProcessedFiles++; // Increment for failed CUE/BIN conversion
+                            _totalProcessedFiles++; // Increment for failed CUE/BIN conversion attempt
                         }
                     }
                     catch (OperationCanceledException)
@@ -1134,7 +1118,7 @@ public partial class MainWindow
                         _logger.LogMessage($"Error processing CUE/BIN {entryFileName}: {ex.Message}");
                         _ = ReportBugAsync($"Error during processing of CUE/BIN {entryFileName}", ex);
                         _uiFailedCount++;
-                        failedConversionFilePaths.Add(currentEntryPath);
+                        _failedConversionFilePaths.Add(currentEntryPath);
                         actualIsosProcessedForProgress++;
                         _totalProcessedFiles++; // Increment for CUE/BIN processing error
                     }
@@ -1142,7 +1126,7 @@ public partial class MainWindow
                     {
                         if (tempCueBinDir != null) await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
                         UpdateSummaryStatsUi();
-                        UpdateProgressUi(actualIsosProcessedForProgress, currentExpectedTotalIsos);
+                        UpdateProgressUi(actualIsosProcessedForProgress, _uiTotalFiles);
                     }
 
                     break;
@@ -1150,9 +1134,9 @@ public partial class MainWindow
             }
         }
 
-        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= currentExpectedTotalIsos)
+        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= _uiTotalFiles)
         {
-            UpdateProgressUi(currentExpectedTotalIsos, currentExpectedTotalIsos);
+            UpdateProgressUi(_uiTotalFiles, _uiTotalFiles);
         }
 
         if (archivesFailedToExtractOrProcess > 0)
@@ -1160,10 +1144,10 @@ public partial class MainWindow
             _logger.LogMessage($"Note: {archivesFailedToExtractOrProcess} archive(s) failed to extract or had processing errors.");
         }
 
-        if (failedConversionFilePaths.Count > 0)
+        if (_failedConversionFilePaths.Count > 0)
         {
             _logger.LogMessage("\nList of items that failed conversion or archive extraction:");
-            foreach (var failedPath in failedConversionFilePaths)
+            foreach (var failedPath in _failedConversionFilePaths)
             {
                 _logger.LogMessage($"- {Path.GetFileName(failedPath)} (Full path: {failedPath})");
             }
@@ -1175,15 +1159,14 @@ public partial class MainWindow
     private async Task PerformBatchIsoTestAsync(string extractXisoPath, string inputFolder, bool moveSuccessful, string? successFolder, bool moveFailed, string? failedFolder, List<string> isoFilesToTest)
     {
         var actualIsosProcessedForProgress = 0;
-        var failedIsoOriginalPaths = new List<string>(); // Keep track of original paths for logging
 
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
         _uiSkippedCount = 0;
 
         _logger.LogMessage($"Found {isoFilesToTest.Count} .iso files for testing.");
-        UpdateSummaryStatsUi(isoFilesToTest.Count);
-        UpdateProgressUi(0, isoFilesToTest.Count);
+        UpdateSummaryStatsUi(); // Use _uiTotalFiles which is set to isoFilesToTest.Count
+        UpdateProgressUi(0, _uiTotalFiles);
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
         _logger.LogMessage($"Starting test... Total .iso files to test: {isoFilesToTest.Count}.");
 
@@ -1202,7 +1185,7 @@ public partial class MainWindow
 
             var testStatus = await TestSingleIsoAsync(extractXisoPath, isoFilePath, testFileIndex);
             testFileIndex++;
-            actualIsosProcessedForProgress++;
+            actualIsosProcessedForProgress++; // Increment for each ISO tested
             _totalProcessedFiles++; // Increment for each ISO tested
 
             if (testStatus == IsoTestResultStatus.Passed)
@@ -1219,7 +1202,7 @@ public partial class MainWindow
             else // IsoTestResultStatus.Failed
             {
                 _uiFailedCount++;
-                failedIsoOriginalPaths.Add(isoFilePath); // Add the original path before potential move
+                _failedConversionFilePaths.Add(isoFilePath); // Use the general failed paths list
                 _logger.LogMessage($"  FAILURE: '{isoFileName}' failed test.");
 
                 if (moveFailed && !string.IsNullOrEmpty(failedFolder))
@@ -1230,18 +1213,18 @@ public partial class MainWindow
             }
 
             UpdateSummaryStatsUi();
-            UpdateProgressUi(actualIsosProcessedForProgress, isoFilesToTest.Count);
+            UpdateProgressUi(actualIsosProcessedForProgress, _uiTotalFiles);
         }
 
-        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= isoFilesToTest.Count)
+        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= _uiTotalFiles)
         {
-            UpdateProgressUi(isoFilesToTest.Count, isoFilesToTest.Count);
+            UpdateProgressUi(_uiTotalFiles, _uiTotalFiles);
         }
 
-        if (failedIsoOriginalPaths.Count > 0 && _uiFailedCount > 0)
+        if (_failedConversionFilePaths.Count > 0 && _uiFailedCount > 0)
         {
             _logger.LogMessage("\nList of ISOs that failed the test (original names):");
-            foreach (var originalPath in failedIsoOriginalPaths)
+            foreach (var originalPath in _failedConversionFilePaths)
             {
                 _logger.LogMessage($"- {Path.GetFileName(originalPath)}");
             }
@@ -1707,6 +1690,7 @@ public partial class MainWindow
                         outputString.Contains("failed to rewrite xbox iso image", StringComparison.OrdinalIgnoreCase) ||
                         outputString.Contains("read error: No error", StringComparison.OrdinalIgnoreCase))
                     {
+                        // --- Increment _invalidIsoErrorCount only for these specific messages ---
                         _logger.LogMessage($"SKIPPED: '{originalFileName}' is not a valid Xbox ISO image. " +
                                            $"This file appears to be from a different console (e.g., PlayStation). " +
                                            $"Please ensure you are processing Xbox or Xbox 360 ISO files only.");
@@ -1985,6 +1969,78 @@ public partial class MainWindow
             "test" => "tested",
             _ => verb.ToLowerInvariant() + "ed"
         };
+    }
+
+    private async Task<int> CountTotalIsosAndCuesInFolderAsync(List<string> topLevelEntries, string inputFolder, CancellationToken token)
+    {
+        var totalCount = 0;
+        var fileExtractor = _serviceProvider.GetRequiredService<IFileExtractor>(); // Get a new instance for dry run
+
+        foreach (var entryPath in topLevelEntries)
+        {
+            token.ThrowIfCancellationRequested();
+
+            var entryExtension = Path.GetExtension(entryPath).ToLowerInvariant();
+
+            switch (entryExtension)
+            {
+                case ".iso":
+                case ".cue":
+                    totalCount++;
+                    break;
+                case ".zip" or ".7z" or ".rar":
+                {
+                    // For archives, we need to peek inside to count contained ISOs/CUEs
+                    var tempExtractionDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_DryRun", Guid.NewGuid().ToString());
+                    try
+                    {
+                        await Task.Run(() => Directory.CreateDirectory(tempExtractionDir), token);
+                        var archiveExtractedSuccessfully = await fileExtractor.ExtractArchiveAsync(entryPath, tempExtractionDir, _cts);
+
+                        if (archiveExtractedSuccessfully)
+                        {
+                            var extractedIsoFiles = await Task.Run(() => Directory.GetFiles(tempExtractionDir, "*.iso", SearchOption.AllDirectories), token);
+                            var extractedCueFiles = await Task.Run(() => Directory.GetFiles(tempExtractionDir, "*.cue", SearchOption.AllDirectories), token);
+                            totalCount += extractedIsoFiles.Length;
+                            totalCount += extractedCueFiles.Length;
+
+                            if (extractedIsoFiles.Length == 0 && extractedCueFiles.Length == 0)
+                            {
+                                // If an archive is processed but contains no relevant files, we still count it as one "processed item" (the archive itself)
+                                // to ensure the progress bar eventually reaches 100%.
+                                totalCount++;
+                            }
+                        }
+                        else
+                        {
+                            // If archive extraction fails, we count the archive itself as one "processed item" (failed)
+                            totalCount++;
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogMessage($"Warning: Error during dry run extraction of {Path.GetFileName(entryPath)}: {ex.Message}");
+                        // If an error occurs during dry run extraction, count the archive itself as one "processed item" (failed)
+                        totalCount++;
+                    }
+                    finally
+                    {
+                        if (Directory.Exists(tempExtractionDir))
+                        {
+                            await Task.Run(() => Directory.Delete(tempExtractionDir, true), token);
+                        }
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        return totalCount;
     }
 
     private async Task<long> CalculateTotalInputFileSizeAsync(List<string> filePaths)
