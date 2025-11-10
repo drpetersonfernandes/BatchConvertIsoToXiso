@@ -70,30 +70,12 @@ public partial class MainWindow
         StatusTextBlock.Text = status;
     }
 
-    /// <summary>
-    /// Checks if the selected path is the system's temporary directory or a subfolder within it.
-    /// </summary>
-    /// <param name="selectedPath">The path selected by the user.</param>
-    /// <returns>True if the path is the system temp folder or a subfolder, false otherwise.</returns>
-    private bool IsSystemTempPath(string selectedPath)
-    {
-        var systemTempPath = Path.GetTempPath();
-
-        // Normalize both paths to ensure consistent comparison (e.g., handle trailing slashes)
-        var normalizedSystemTempPath = Path.GetFullPath(systemTempPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var normalizedSelectedPath = Path.GetFullPath(selectedPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        // Check if the selected path is exactly the system temp path or starts with it (indicating a subfolder)
-        return normalizedSelectedPath.Equals(normalizedSystemTempPath, StringComparison.OrdinalIgnoreCase) ||
-               normalizedSelectedPath.StartsWith(normalizedSystemTempPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-    }
-
     private void BrowseConversionInputButton_Click(object sender, RoutedEventArgs e)
     {
         var inputFolder = SelectFolder("Select the folder containing ISO or archive files");
         if (string.IsNullOrEmpty(inputFolder)) return;
 
-        if (IsSystemTempPath(inputFolder))
+        if (CheckForTempPath.IsSystemTempPath(inputFolder))
         {
             _messageBoxService.ShowError("The system's temporary folder or a subfolder within it cannot be selected as an input folder. Please choose a different location.");
             _logger.LogMessage($"Attempted to select system temp folder '{inputFolder}' as conversion input. Blocked.");
@@ -109,7 +91,7 @@ public partial class MainWindow
         var outputFolder = SelectFolder("Select the output folder for converted XISO files");
         if (string.IsNullOrEmpty(outputFolder)) return;
 
-        if (IsSystemTempPath(outputFolder))
+        if (CheckForTempPath.IsSystemTempPath(outputFolder))
         {
             _messageBoxService.ShowError("The system's temporary folder or a subfolder within it cannot be selected as an output folder. Please choose a different location.");
             _logger.LogMessage($"Attempted to select system temp folder '{outputFolder}' as conversion output. Blocked.");
@@ -125,7 +107,7 @@ public partial class MainWindow
         var inputFolder = SelectFolder("Select the folder containing ISO files to test");
         if (string.IsNullOrEmpty(inputFolder)) return;
 
-        if (IsSystemTempPath(inputFolder))
+        if (CheckForTempPath.IsSystemTempPath(inputFolder))
         {
             _messageBoxService.ShowError("The system's temporary folder or a subfolder within it cannot be selected as an input folder for testing. Please choose a different location.");
             _logger.LogMessage($"Attempted to select system temp folder '{inputFolder}' as test input. Blocked.");
@@ -548,6 +530,163 @@ public partial class MainWindow
         _logger.LogMessage("Cancellation requested. Finishing current file/archive...");
     }
 
+    private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var aboutWindow = _serviceProvider.GetRequiredService<AboutWindow>();
+            aboutWindow.Owner = this;
+            aboutWindow.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogMessage($"Error opening About window: {ex.Message}");
+            _ = ReportBugAsync("Error opening About window", ex);
+        }
+    }
+
+    private static string? SelectFolder(string description)
+    {
+        var dialog = new OpenFolderDialog { Title = description };
+        return dialog.ShowDialog() == true ? dialog.FolderName : null;
+    }
+
+    private void UpdateSummaryStatsUi()
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            TotalFilesValue.Text = _uiTotalFiles.ToString(CultureInfo.InvariantCulture);
+            SuccessValue.Text = _uiSuccessCount.ToString(CultureInfo.InvariantCulture);
+            FailedValue.Text = _uiFailedCount.ToString(CultureInfo.InvariantCulture);
+            SkippedValue.Text = _uiSkippedCount.ToString(CultureInfo.InvariantCulture);
+        });
+    }
+
+    private void UpdateProgressUi(int current, int total)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (ProgressBar == null || ProgressTextBlock == null) return;
+
+            ProgressBar.Maximum = total > 0 ? total : 1;
+            ProgressBar.Value = current;
+
+            if (total > 0 && ProgressBar.Visibility == Visibility.Visible)
+            {
+                var percentage = ((double)current / total) * 100;
+                ProgressTextBlock.Text = $"{current} of {total} ({percentage:F0}%)";
+            }
+            else
+            {
+                ProgressTextBlock.Text = "";
+            }
+        });
+    }
+
+    private void LogOperationSummary(string operationType)
+    {
+        _logger.LogMessage("");
+        _logger.LogMessage($"--- Batch {operationType.ToLowerInvariant()} completed. ---");
+        _logger.LogMessage($"Total files processed: {_uiTotalFiles}");
+        _logger.LogMessage($"Successfully {ConvertToPastTense.GetPastTense(operationType)}: {_uiSuccessCount} files");
+        _logger.LogMessage($"Skipped: {_uiSkippedCount} files");
+        if (_uiFailedCount > 0) _logger.LogMessage($"Failed to {operationType.ToLowerInvariant()}: {_uiFailedCount} files");
+
+        Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            // Show warning if high rate of invalid ISOs detected
+            if (_totalProcessedFiles > 5 && (double)_invalidIsoErrorCount / _totalProcessedFiles > 0.5)
+            {
+                _messageBoxService.ShowWarning($"Many files ({_invalidIsoErrorCount} out of {_totalProcessedFiles}) were not valid Xbox ISOs. " +
+                                               "Please ensure you are selecting the correct ISO files from Xbox or Xbox 360 games, " +
+                                               "not from other consoles like PlayStation.", "High Rate of Invalid ISOs Detected");
+            }
+
+            _messageBoxService.Show($"Batch {operationType.ToLowerInvariant()} completed.\n\n" +
+                                    $"Total files processed: {_uiTotalFiles}\n" +
+                                    $"Successfully {ConvertToPastTense.GetPastTense(operationType)}: {_uiSuccessCount} files\n" +
+                                    $"Skipped: {_uiSkippedCount} files\n" +
+                                    $"Failed: {_uiFailedCount} files",
+                $"{operationType} Complete", MessageBoxButton.OK,
+                _uiFailedCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        });
+    }
+
+    private async Task TryDeleteFileAsync(string filePath)
+    {
+        try
+        {
+            if (!File.Exists(filePath)) return;
+
+            await Task.Run(() => File.Delete(filePath));
+            _logger.LogMessage($"Deleted: {Path.GetFileName(filePath)}");
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignore
+        }
+        catch (Exception ex)
+        {
+            _logger.LogMessage($"Error deleting file {Path.GetFileName(filePath)}: {ex.Message}");
+        }
+    }
+
+    private async Task CleanupTempFoldersAsync(List<string> tempFolders)
+    {
+        if (tempFolders.Count == 0) return;
+
+        _logger.LogMessage("Cleaning up remaining temporary extraction folders...");
+        foreach (var folder in tempFolders.ToList())
+        {
+            try
+            {
+                if (!Directory.Exists(folder)) continue;
+
+                await Task.Run(() => Directory.Delete(folder, true));
+                tempFolders.Remove(folder);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogMessage($"Error cleaning temp folder {folder}: {ex.Message}");
+            }
+        }
+
+        if (tempFolders.Count == 0) _logger.LogMessage("Temporary folder cleanup complete.");
+        else _logger.LogMessage("Some temporary folders could not be cleaned automatically.");
+    }
+
+    private void ProcessingTimer_Tick(object? sender, EventArgs e)
+    {
+        var elapsedTime = DateTime.Now - _operationStartTime;
+        ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+
+        if (_diskWriteSpeedCounter == null || string.IsNullOrEmpty(_activeMonitoringDriveLetter)) return;
+
+        try
+        {
+            var writeSpeedBytes = _diskWriteSpeedCounter.NextValue();
+            Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                if (WriteSpeedValue != null)
+                {
+                    WriteSpeedValue.Text = Formatter.FormatBytesPerSecond(writeSpeedBytes);
+                }
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogMessage($"Error reading write speed for drive {_activeMonitoringDriveLetter}: {ex.Message}. Stopping monitoring.");
+            _ = ReportBugAsync($"PerfCounter Read InvalidOpExc for {_activeMonitoringDriveLetter}", ex);
+            StopPerformanceCounter();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogMessage($"Unexpected error reading write speed for drive {_activeMonitoringDriveLetter}: {ex.Message}. Stopping monitoring.");
+            _ = ReportBugAsync($"PerfCounter Read GenericExc for {_activeMonitoringDriveLetter}", ex);
+            StopPerformanceCounter();
+        }
+    }
+
     private void SetControlsState(bool enabled)
     {
         // Conversion Tab
@@ -583,12 +722,6 @@ public partial class MainWindow
         }
     }
 
-    private static string? SelectFolder(string description)
-    {
-        var dialog = new OpenFolderDialog { Title = description };
-        return dialog.ShowDialog() == true ? dialog.FolderName : null;
-    }
-
     private void ResetSummaryStats()
     {
         _uiTotalFiles = 0;
@@ -607,261 +740,12 @@ public partial class MainWindow
         }
     }
 
-    private void ProcessingTimer_Tick(object? sender, EventArgs e)
-    {
-        var elapsedTime = DateTime.Now - _operationStartTime;
-        ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
-
-        if (_diskWriteSpeedCounter == null || string.IsNullOrEmpty(_activeMonitoringDriveLetter)) return;
-
-        try
-        {
-            var writeSpeedBytes = _diskWriteSpeedCounter.NextValue();
-            Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                if (WriteSpeedValue != null)
-                {
-                    WriteSpeedValue.Text = Formatter.FormatBytesPerSecond(writeSpeedBytes);
-                }
-            });
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogMessage($"Error reading write speed for drive {_activeMonitoringDriveLetter}: {ex.Message}. Stopping monitoring.");
-            _ = ReportBugAsync($"PerfCounter Read InvalidOpExc for {_activeMonitoringDriveLetter}", ex);
-            StopPerformanceCounter();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogMessage($"Unexpected error reading write speed for drive {_activeMonitoringDriveLetter}: {ex.Message}. Stopping monitoring.");
-            _ = ReportBugAsync($"PerfCounter Read GenericExc for {_activeMonitoringDriveLetter}", ex);
-            StopPerformanceCounter();
-        }
-    }
-
-    private void UpdateSummaryStatsUi()
-    {
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            TotalFilesValue.Text = _uiTotalFiles.ToString(CultureInfo.InvariantCulture);
-            SuccessValue.Text = _uiSuccessCount.ToString(CultureInfo.InvariantCulture);
-            FailedValue.Text = _uiFailedCount.ToString(CultureInfo.InvariantCulture);
-            SkippedValue.Text = _uiSkippedCount.ToString(CultureInfo.InvariantCulture);
-        });
-    }
-
-    private void UpdateProgressUi(int current, int total)
-    {
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            if (ProgressBar == null || ProgressTextBlock == null) return;
-
-            ProgressBar.Maximum = total > 0 ? total : 1;
-            ProgressBar.Value = current;
-
-            if (total > 0 && ProgressBar.Visibility == Visibility.Visible)
-            {
-                var percentage = ((double)current / total) * 100;
-                ProgressTextBlock.Text = $"{current} of {total} ({percentage:F0}%)";
-            }
-            else
-            {
-                ProgressTextBlock.Text = "";
-            }
-        });
-    }
-
-    private static string GenerateSimpleFilename(int fileIndex)
-    {
-        return $"iso_{fileIndex:D6}.iso";
-    }
-
-    private async Task CleanupTempFoldersAsync(List<string> tempFolders)
-    {
-        if (tempFolders.Count == 0) return;
-
-        _logger.LogMessage("Cleaning up remaining temporary extraction folders...");
-        foreach (var folder in tempFolders.ToList())
-        {
-            try
-            {
-                if (!Directory.Exists(folder)) continue;
-
-                await Task.Run(() => Directory.Delete(folder, true));
-                tempFolders.Remove(folder);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"Error cleaning temp folder {folder}: {ex.Message}");
-            }
-        }
-
-        if (tempFolders.Count == 0) _logger.LogMessage("Temporary folder cleanup complete.");
-        else _logger.LogMessage("Some temporary folders could not be cleaned automatically.");
-    }
-
-    private async Task TryDeleteFileAsync(string filePath)
-    {
-        try
-        {
-            if (!File.Exists(filePath)) return;
-
-            await Task.Run(() => File.Delete(filePath));
-            _logger.LogMessage($"Deleted: {Path.GetFileName(filePath)}");
-        }
-        catch (OperationCanceledException)
-        {
-            // Ignore
-        }
-        catch (Exception ex)
-        {
-            _logger.LogMessage($"Error deleting file {Path.GetFileName(filePath)}: {ex.Message}");
-        }
-    }
-
-    private void LogOperationSummary(string operationType)
-    {
-        _logger.LogMessage("");
-        _logger.LogMessage($"--- Batch {operationType.ToLowerInvariant()} completed. ---");
-        _logger.LogMessage($"Total files processed: {_uiTotalFiles}");
-        _logger.LogMessage($"Successfully {GetPastTense(operationType)}: {_uiSuccessCount} files");
-        _logger.LogMessage($"Skipped: {_uiSkippedCount} files");
-        if (_uiFailedCount > 0) _logger.LogMessage($"Failed to {operationType.ToLowerInvariant()}: {_uiFailedCount} files");
-
-        Application.Current.Dispatcher.InvokeAsync(() =>
-        {
-            // Show warning if high rate of invalid ISOs detected
-            if (_totalProcessedFiles > 5 && (double)_invalidIsoErrorCount / _totalProcessedFiles > 0.5)
-            {
-                _messageBoxService.ShowWarning($"Many files ({_invalidIsoErrorCount} out of {_totalProcessedFiles}) were not valid Xbox ISOs. " +
-                                               "Please ensure you are selecting the correct ISO files from Xbox or Xbox 360 games, " +
-                                               "not from other consoles like PlayStation.", "High Rate of Invalid ISOs Detected");
-            }
-
-            _messageBoxService.Show($"Batch {operationType.ToLowerInvariant()} completed.\n\n" +
-                                    $"Total files processed: {_uiTotalFiles}\n" +
-                                    $"Successfully {GetPastTense(operationType)}: {_uiSuccessCount} files\n" +
-                                    $"Skipped: {_uiSkippedCount} files\n" +
-                                    $"Failed: {_uiFailedCount} files",
-                $"{operationType} Complete", MessageBoxButton.OK,
-                _uiFailedCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
-        });
-    }
-
-    private static string GetPastTense(string verb)
-    {
-        return verb.ToLowerInvariant() switch
-        {
-            "conversion" => "converted",
-            "test" => "tested",
-            _ => verb.ToLowerInvariant() + "ed"
-        };
-    }
-
-    private async Task<long> CalculateTotalInputFileSizeAsync(List<string> filePaths)
-    {
-        long totalSize = 0;
-        foreach (var filePath in filePaths)
-        {
-            _cts.Token.ThrowIfCancellationRequested();
-            try
-            {
-                totalSize += await Task.Run(() => new FileInfo(filePath).Length);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"Warning: Could not get size of file {Path.GetFileName(filePath)} for disk space calculation: {ex.Message}");
-                // Continue, but the totalSize might be underestimated.
-            }
-        }
-
-        return totalSize;
-    }
-
-    /// <summary>
-    /// Calculates the maximum temporary disk space required for a single item (ISO, CUE/BIN, or archive)
-    /// during either a conversion or test operation, including a buffer.
-    /// </summary>
-    /// <param name="filePaths">List of file paths to consider.</param>
-    /// <param name="isConversionOperation">True if calculating for conversion, false for testing.</param>
-    /// <returns>The estimated maximum required temporary space in bytes.</returns>
-    private async Task<long> CalculateMaxTempSpaceForSingleOperation(List<string> filePaths, bool isConversionOperation)
-    {
-        long maxRequiredSpace = 0;
-        foreach (var filePath in filePaths)
-        {
-            _cts.Token.ThrowIfCancellationRequested();
-            try
-            {
-                var fileExtension = Path.GetExtension(filePath).ToLowerInvariant();
-                long currentItemSize = 0;
-
-                if (fileExtension == ".iso")
-                {
-                    currentItemSize = await Task.Run(() => new FileInfo(filePath).Length);
-                }
-                else if (isConversionOperation && fileExtension == ".cue")
-                {
-                    // For CUE, we need space for the resulting ISO. Assume it's roughly the size of the largest BIN.
-                    var binPath = await ParseCueForBinFileAsync(filePath);
-                    if (!string.IsNullOrEmpty(binPath)) // ParseCueForBinFileAsync already checks File.Exists
-                    {
-                        currentItemSize = await Task.Run(() => new FileInfo(binPath).Length);
-                    }
-                }
-                else if (isConversionOperation && (fileExtension == ".zip" || fileExtension == ".7z" || fileExtension == ".rar"))
-                {
-                    // For archives, we need space for the extracted contents.
-                    try
-                    {
-                        currentItemSize = await _fileExtractor.GetUncompressedArchiveSizeAsync(filePath, _cts.Token);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogMessage($"Warning: Could not get uncompressed size of archive {Path.GetFileName(filePath)} for disk space calculation: {ex.Message}. Using heuristic.");
-                        currentItemSize = new FileInfo(filePath).Length * 3; // Fallback heuristic: 3x compressed size
-                    }
-                }
-
-                maxRequiredSpace = Math.Max(maxRequiredSpace, currentItemSize);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"Warning: Could not get size of file {Path.GetFileName(filePath)} for disk space calculation: {ex.Message}");
-            }
-        }
-
-        return isConversionOperation ? (long)(maxRequiredSpace * 1.5) : (long)(maxRequiredSpace * 2.1);
-    }
-
-    private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var aboutWindow = _serviceProvider.GetRequiredService<AboutWindow>();
-            aboutWindow.Owner = this;
-            aboutWindow.ShowDialog();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogMessage($"Error opening About window: {ex.Message}");
-            _ = ReportBugAsync("Error opening About window", ex);
-        }
-    }
-
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         _processingTimer.Tick -= ProcessingTimer_Tick;
         _processingTimer.Stop();
         StopPerformanceCounter();
+
         _cts?.Cancel();
         base.OnClosing(e);
     }

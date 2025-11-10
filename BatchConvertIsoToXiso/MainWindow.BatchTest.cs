@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Windows;
 using BatchConvertIsoToXiso.Models;
+using BatchConvertIsoToXiso.Services;
 
 namespace BatchConvertIsoToXiso;
 
@@ -125,7 +126,7 @@ public partial class MainWindow
             }
 
             // Always rename to a simple filename for testing
-            var simpleFilename = GenerateSimpleFilename(fileIndex);
+            var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
             simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
 
             _logger.LogMessage($"  Copying '{isoFileName}' to simple filename '{simpleFilename}' for testing");

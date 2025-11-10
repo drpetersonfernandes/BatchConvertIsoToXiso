@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using BatchConvertIsoToXiso.Models;
+using BatchConvertIsoToXiso.Services;
 using SevenZip;
 
 namespace BatchConvertIsoToXiso;
@@ -352,7 +353,7 @@ public partial class MainWindow
             _logger.LogMessage($"{logPrefix} Created local temporary working directory: {localTempWorkingDir}");
 
             // 2. Generate a simple filename for the local copy
-            var simpleFilename = GenerateSimpleFilename(fileIndex);
+            var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
             localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);
 
             // 3. Copy the original file from source (potentially UNC) to local temp
