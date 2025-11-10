@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using BatchConvertIsoToXiso.Models;
 
-namespace BatchConvertIsoToXiso;
+namespace BatchConvertIsoToXiso.Services;
 
 public interface IUpdateChecker
 {

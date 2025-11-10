@@ -1,7 +1,7 @@
 using System.Net.Http;
 using System.Net.Http.Json;
 
-namespace BatchConvertIsoToXiso;
+namespace BatchConvertIsoToXiso.Services;
 
 public interface IBugReportService
 {
