@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 
@@ -16,6 +16,12 @@ public partial class MainWindow
         try
         {
             // Ensure the path is absolute to get a root.
+            if (string.IsNullOrEmpty(path) || path.StartsWith(@"\\", StringComparison.Ordinal))
+            {
+                _logger.LogMessage($"Cannot determine drive letter for UNC path: {path}");
+                return null;
+            }
+
             var fullPath = Path.GetFullPath(path);
             var pathRoot = Path.GetPathRoot(fullPath);
 
@@ -83,10 +89,11 @@ public partial class MainWindow
             }
 
             // If both category and instance exist, proceed with creating the counter.
-            _diskWriteSpeedCounter = new PerformanceCounter("LogicalDisk", "Disk Write Bytes/sec", perfCounterInstanceName, true);
-            _diskWriteSpeedCounter.NextValue(); // Initial call to prime the counter, ignore the first value
+            var counter = new PerformanceCounter("LogicalDisk", "Disk Write Bytes/sec", perfCounterInstanceName, true);
+            counter.NextValue(); // Initial call to prime the counter, ignore the first value
             // Second call to get a valid initial value, though it might still be 0
-            _diskWriteSpeedCounter.NextValue();
+            counter.NextValue();
+            _diskWriteSpeedCounter = counter;
             _activeMonitoringDriveLetter = driveLetter;
             _logger.LogMessage($"Monitoring write speed for drive: {perfCounterInstanceName}");
             Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "Calculating...");

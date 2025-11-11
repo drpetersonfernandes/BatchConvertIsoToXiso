@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -18,7 +18,7 @@ public partial class MainWindow
 
         try
         {
-            Directory.CreateDirectory(tempExtractionDir);
+            await Task.Run(() => Directory.CreateDirectory(tempExtractionDir), _cts.Token);
 
             using var process = new Process();
             processRef = process;
@@ -37,7 +37,10 @@ public partial class MainWindow
             {
                 try
                 {
-                    processRef?.Kill(true);
+                    if (processRef != null && !processRef.HasExited)
+                    {
+                        processRef.Kill(true);
+                    }
                 }
                 catch
                 {

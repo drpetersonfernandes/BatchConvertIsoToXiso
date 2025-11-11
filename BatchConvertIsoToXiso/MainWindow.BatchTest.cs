@@ -92,7 +92,7 @@ public partial class MainWindow
 
         try
         {
-            await Task.Run(() => Directory.CreateDirectory(tempExtractionDir));
+            await Task.Run(() => Directory.CreateDirectory(tempExtractionDir), _cts.Token);
             _logger.LogMessage($"  Comprehensive Test for '{isoFileName}'");
 
             if (!File.Exists(isoFilePath))
@@ -127,7 +127,7 @@ public partial class MainWindow
             simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
 
             _logger.LogMessage($"  Copying '{isoFileName}' to simple filename '{simpleFilename}' for testing");
-            await Task.Run(() => File.Copy(isoFilePath, simpleFilePath, true));
+            await Task.Run(() => File.Copy(isoFilePath, simpleFilePath, true), _cts.Token);
 
             var extractionSuccess = await RunIsoExtractionToTempAsync(extractXisoPath, simpleFilePath, tempExtractionDir);
 
@@ -151,7 +151,7 @@ public partial class MainWindow
             {
                 if (Directory.Exists(tempExtractionDir))
                 {
-                    await Task.Run(() => Directory.Delete(tempExtractionDir, true));
+                    await Task.Run(() => Directory.Delete(tempExtractionDir, true), _cts.Token);
                 }
             }
             catch (Exception ex)

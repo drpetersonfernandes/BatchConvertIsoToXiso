@@ -46,6 +46,26 @@ public partial class App
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Dispose registered services that implement IDisposable
+        if (ServiceProvider != null)
+        {
+            var disposableServices = ServiceProvider.GetServices<object>()
+                .Where(s => s is IDisposable)
+                .Cast<IDisposable>();
+
+            foreach (var service in disposableServices)
+            {
+                try
+                {
+                    service.Dispose();
+                }
+                catch
+                {
+                    /* Ignore disposal errors */
+                }
+            }
+        }
+
         if (ServiceProvider is IDisposable disposable)
         {
             disposable.Dispose();
@@ -56,11 +76,22 @@ public partial class App
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton<IBugReportService>(new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
+        services.AddSingleton<IBugReportService>(provider =>
+        {
+            var service = new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName);
+            provider.GetService<ILogger>(); // Ensure logger is created
+            return service;
+        });
         services.AddSingleton<IUpdateChecker, UpdateChecker>();
         services.AddSingleton<ILogger, LoggerService>();
         services.AddSingleton<IMessageBoxService, MessageBoxService>();
         services.AddSingleton<IUrlOpener, UrlOpenerService>();
+        services.AddSingleton<IFileExtractor, FileExtractorService>(provider =>
+            new FileExtractorService(provider.GetRequiredService<ILogger>(),
+                provider.GetRequiredService<IBugReportService>()));
+        services.AddSingleton<IFileMover, FileMoverService>(provider =>
+            new FileMoverService(provider.GetRequiredService<ILogger>(),
+                provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<IFileExtractor, FileExtractorService>();
         services.AddTransient<IFileMover, FileMoverService>();
         services.AddTransient<AboutWindow>();
