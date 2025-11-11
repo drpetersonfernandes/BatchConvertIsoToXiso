@@ -39,6 +39,7 @@ public partial class MainWindow
             if (testStatus == IsoTestResultStatus.Passed)
             {
                 _uiSuccessCount++;
+                UpdateSummaryStatsUi(); // Update UI after incrementing success count
                 _logger.LogMessage($"  SUCCESS: '{isoFileName}' passed test.");
 
                 if (moveSuccessful && !string.IsNullOrEmpty(successFolder))
@@ -50,6 +51,7 @@ public partial class MainWindow
             else // IsoTestResultStatus.Failed
             {
                 _uiFailedCount++;
+                UpdateSummaryStatsUi(); // Update UI after incrementing failed count
                 _failedConversionFilePaths.Add(isoFilePath); // Use the general failed paths list
                 _logger.LogMessage($"  FAILURE: '{isoFileName}' failed test.");
 

@@ -36,13 +36,6 @@ public partial class MainWindow
         {
             await Task.Run(() => Directory.CreateDirectory(tempOutputDir), _cts.Token);
 
-            var createdIso = await Task.Run(() => Directory.GetFiles(tempOutputDir, "*.iso").FirstOrDefault(), _cts.Token);
-            if (createdIso == null)
-            {
-                _logger.LogMessage("  bchunk.exe finished, but no ISO file was found in the output directory.");
-                return null;
-            }
-
             using var process = new Process();
             processRef = process;
             process.StartInfo = new ProcessStartInfo
@@ -96,6 +89,14 @@ public partial class MainWindow
             if (process.ExitCode != 0)
             {
                 _logger.LogMessage($"  bchunk.exe failed with exit code {process.ExitCode}.");
+                return null;
+            }
+
+            // CORRECTED PLACEMENT: Check for the created ISO *after* bchunk.exe has finished.
+            var createdIso = await Task.Run(() => Directory.GetFiles(tempOutputDir, "*.iso").FirstOrDefault(), _cts.Token);
+            if (createdIso == null)
+            {
+                _logger.LogMessage("  bchunk.exe finished, but no ISO file was found in the output directory.");
                 return null;
             }
 
