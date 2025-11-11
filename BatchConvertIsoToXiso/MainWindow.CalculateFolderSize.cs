@@ -40,7 +40,7 @@ public partial class MainWindow
 
                             break;
                         }
-                        case true when (fileExtension == ".zip" || fileExtension == ".7z" || fileExtension == ".rar"):
+                        case true when fileExtension is ".zip" or ".7z" or ".rar":
                             // For archives, we need space for the extracted contents.
                             try
                             {

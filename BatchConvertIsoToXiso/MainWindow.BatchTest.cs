@@ -1,5 +1,4 @@
-﻿using System.IO;
-using System.Windows;
+using System.IO;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
 
@@ -9,7 +8,7 @@ public partial class MainWindow
 {
     private async Task PerformBatchIsoTestAsync(string extractXisoPath, string inputFolder, bool moveSuccessful, string? successFolder, bool moveFailed, string? failedFolder, List<string> isoFilesToTest)
     {
-        var actualIsosProcessedForProgress = 0;
+        var topLevelItemsProcessed = 0;
 
         _uiSuccessCount = 0;
         _uiFailedCount = 0;
@@ -18,7 +17,6 @@ public partial class MainWindow
         _logger.LogMessage($"Found {isoFilesToTest.Count} .iso files for testing.");
         UpdateSummaryStatsUi(); // Use _uiTotalFiles which is set to isoFilesToTest.Count
         UpdateProgressUi(0, _uiTotalFiles);
-        Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
         _logger.LogMessage($"Starting test... Total .iso files to test: {isoFilesToTest.Count}.");
 
         var testFileIndex = 1; // Counter for simple test filenames
@@ -28,6 +26,7 @@ public partial class MainWindow
             _cts.Token.ThrowIfCancellationRequested();
             var isoFileName = Path.GetFileName(isoFilePath);
 
+            UpdateProgressUi(topLevelItemsProcessed, _uiTotalFiles); // Update progress at start of each file
             UpdateStatus($"Testing: {isoFileName}");
             _logger.LogMessage($"Testing ISO: {isoFileName}...");
 
@@ -36,8 +35,6 @@ public partial class MainWindow
 
             var testStatus = await TestSingleIsoAsync(extractXisoPath, isoFilePath, testFileIndex);
             testFileIndex++;
-            actualIsosProcessedForProgress++; // Increment for each ISO tested
-            _totalProcessedFiles++; // Increment for each ISO tested
 
             if (testStatus == IsoTestResultStatus.Passed)
             {
@@ -63,13 +60,13 @@ public partial class MainWindow
                 }
             }
 
-            UpdateSummaryStatsUi();
-            UpdateProgressUi(actualIsosProcessedForProgress, _uiTotalFiles);
+            topLevelItemsProcessed++; // Increment after processing each top-level ISO
+            UpdateProgressUi(topLevelItemsProcessed, _uiTotalFiles);
         }
 
-        if (!_cts.Token.IsCancellationRequested && actualIsosProcessedForProgress >= _uiTotalFiles)
+        if (!_cts.Token.IsCancellationRequested)
         {
-            UpdateProgressUi(_uiTotalFiles, _uiTotalFiles);
+            UpdateProgressUi(topLevelItemsProcessed, _uiTotalFiles);
         }
 
         if (_failedConversionFilePaths.Count > 0 && _uiFailedCount > 0)

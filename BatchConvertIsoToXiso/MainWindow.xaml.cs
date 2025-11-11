@@ -185,7 +185,6 @@ public partial class MainWindow
                     return;
                 }
 
-                // Calculate required temporary space dynamically based on the largest single item being processed
                 List<string> topLevelEntries;
                 try
                 {
@@ -207,10 +206,6 @@ public partial class MainWindow
                         _isOperationRunning = false;
                         return;
                     }
-
-                    // Set the total file count for the progress bar to the number of top-level entries.
-                    _uiTotalFiles = topLevelEntries.Count;
-                    _logger.LogMessage($"Scan complete. Found {_uiTotalFiles} top-level files/archives to process.");
                 }
                 catch (Exception ex)
                 {
@@ -220,6 +215,8 @@ public partial class MainWindow
                     return;
                 }
 
+                _uiTotalFiles = topLevelEntries.Count;
+                _logger.LogMessage($"Scan complete. Found {_uiTotalFiles} top-level files/archives to process.");
                 var maxTempSpaceNeededForConversion = await CalculateMaxTempSpaceForSingleOperation(topLevelEntries, true);
                 if (tempDriveInfo.AvailableFreeSpace < maxTempSpaceNeededForConversion)
                 {
@@ -233,10 +230,6 @@ public partial class MainWindow
 
                 _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required for conversion: {Formatter.FormatBytes(maxTempSpaceNeededForConversion)}).");
 
-                // --- Count total processable files ---
-
-
-                // Calculate the total size of input files for output drive space check
                 var totalInputSize = await CalculateTotalInputFileSizeAsync(topLevelEntries);
                 var requiredOutputSpace = (long)(totalInputSize * 1.1); // 10% buffer for potential slight size increase or temporary files
                 if (!CheckDriveSpace(outputFolder, requiredOutputSpace, "output"))
@@ -245,7 +238,7 @@ public partial class MainWindow
                     return;
                 }
 
-                ResetSummaryStats();
+                // ResetSummaryStats();
 
                 // Start with the output drive but allow dynamic switching
                 var outputDrive = GetDriveLetter(outputFolder);
@@ -730,7 +723,7 @@ public partial class MainWindow
         _uiSkippedCount = 0;
         _invalidIsoErrorCount = 0; // Reset invalid ISO count
         _totalProcessedFiles = 0; // Reset total processed count
-        _failedConversionFilePaths.Clear(); // Clear failed paths
+        _failedConversionFilePaths.Clear(); // Clear failed files list
         UpdateSummaryStatsUi();
         UpdateProgressUi(0, 0);
         ProcessingTimeValue.Text = "00:00:00";

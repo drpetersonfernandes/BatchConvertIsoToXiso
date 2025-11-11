@@ -11,27 +11,25 @@ namespace BatchConvertIsoToXiso;
 
 public partial class MainWindow
 {
-    private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals, bool skipSystemUpdate, List<string> topLevelEntries) // Renamed initialEntriesToProcess to topLevelEntries
+    private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals, bool skipSystemUpdate, List<string> topLevelEntries)
     {
         var tempFoldersToCleanUpAtEnd = new List<string>();
         var archivesFailedToExtractOrProcess = 0;
-        var topLevelEntriesProcessed = 0;
 
-        // _uiTotalFiles is now the count of topLevelEntries
-        UpdateSummaryStatsUi(); // Ensure UI reflects the initial _uiTotalFiles
+        UpdateSummaryStatsUi();
         UpdateProgressUi(0, _uiTotalFiles);
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
         _logger.LogMessage($"Starting conversion... Total top-level files/archives to process: {_uiTotalFiles}.");
 
         var globalFileIndex = 1; // Global counter for simple filenames
+        var topLevelItemsProcessed = 0; // Counter for progress bar
 
         foreach (var currentEntryPath in topLevelEntries)
         {
-            // --- Increment _totalProcessedFiles here for each actual ISO/CUE processed ---
-            // This counter will be incremented for each ISO or CUE file that is *attempted* to be converted.
             _cts.Token.ThrowIfCancellationRequested();
 
             var entryFileName = Path.GetFileName(currentEntryPath);
+            UpdateProgressUi(topLevelItemsProcessed, _uiTotalFiles); // Update progress at start of each file
             UpdateStatus($"Processing: {entryFileName}");
             var entryExtension = Path.GetExtension(currentEntryPath).ToLowerInvariant();
 
@@ -40,8 +38,7 @@ public partial class MainWindow
                 case ".iso":
                 {
                     _logger.LogMessage($"Processing standalone ISO: {entryFileName}...");
-                    var status = await ConvertFileAsync(extractXisoPath, currentEntryPath, outputFolder, deleteOriginals, globalFileIndex, skipSystemUpdate); // Pass new option
-                    _totalProcessedFiles++; // Increment for each ISO processed
+                    var status = await ConvertFileAsync(extractXisoPath, currentEntryPath, outputFolder, deleteOriginals, globalFileIndex, skipSystemUpdate);
                     globalFileIndex++;
                     switch (status)
                     {
@@ -57,6 +54,7 @@ public partial class MainWindow
                             break;
                     }
 
+                    topLevelItemsProcessed++; // Increment for top-level item
                     UpdateSummaryStatsUi();
                     break;
                 }
@@ -64,8 +62,10 @@ public partial class MainWindow
                 {
                     _logger.LogMessage($"Processing archive: {entryFileName}...");
                     string? currentArchiveTempExtractionDir = null;
-                    var archiveExtractedSuccessfully = false; // <--- Declare here, initialize to false
-                    var archiveContainedFailures = false;
+                    var archiveExtractedSuccessfully = false;
+                    var archiveHadInternalFailures = false;
+                    var archiveHadInternalSuccesses = false;
+                    var archiveHadInternalSkips = false;
 
                     try
                     {
@@ -97,9 +97,10 @@ public partial class MainWindow
                             var extractedCueFiles = await Task.Run(() => Directory.GetFiles(currentArchiveTempExtractionDir, "*.cue", SearchOption.AllDirectories), _cts.Token);
                             var totalFoundFiles = extractedIsoFiles.Length + extractedCueFiles.Length;
 
-                            if (totalFoundFiles == 0)
+                            if (totalFoundFiles == 0) // No relevant files found in archive
                             {
-                                _logger.LogMessage($"No ISO or CUE files found in archive: {entryFileName}. Skipping archive.");
+                                _logger.LogMessage($"No ISO or CUE files found in archive: {entryFileName}. Marking archive as skipped.");
+                                archiveHadInternalSkips = true; // Mark as skipped if no relevant files found
                             }
 
                             _logger.LogMessage($"Found {extractedIsoFiles.Length} ISO(s) and {extractedCueFiles.Length} CUE file(s) in {entryFileName}. Processing them now...");
@@ -109,21 +110,20 @@ public partial class MainWindow
                                 _cts.Token.ThrowIfCancellationRequested();
                                 var extractedIsoName = Path.GetFileName(extractedIsoPath);
                                 _logger.LogMessage($"  Converting ISO from archive: {extractedIsoName}...");
-                                var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
-                                _totalProcessedFiles++; // Increment for each ISO processed from the archive
+                                var status = await ConvertFileAsync(extractXisoPath, extractedIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate); // Pass new option
+                                // DO NOT increment _totalProcessedFiles, _uiSuccessCount, _uiFailedCount, _uiSkippedCount here for internal files
                                 globalFileIndex++;
                                 switch (status)
                                 {
                                     case FileProcessingStatus.Converted:
-                                        _uiSuccessCount++;
+                                        archiveHadInternalSuccesses = true;
                                         break;
                                     case FileProcessingStatus.Skipped:
-                                        _uiSkippedCount++;
+                                        archiveHadInternalSkips = true;
                                         break;
                                     case FileProcessingStatus.Failed:
-                                        _uiFailedCount++;
-                                        _failedConversionFilePaths.Add(extractedIsoPath);
-                                        archiveContainedFailures = true;
+                                        archiveHadInternalFailures = true;
+                                        _failedConversionFilePaths.Add(extractedIsoPath); // Still log internal failures for detailed report
                                         break;
                                 }
 
@@ -146,45 +146,44 @@ public partial class MainWindow
                                     if (tempIsoPath != null && await Task.Run(() => File.Exists(tempIsoPath)))
                                     {
                                         var status = await ConvertFileAsync(extractXisoPath, tempIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
-                                        _totalProcessedFiles++; // Increment for each ISO processed from CUE/BIN
+                                        // DO NOT increment _totalProcessedFiles, _uiSuccessCount, _uiFailedCount, _uiSkippedCount here for internal files
                                         globalFileIndex++;
                                         switch (status)
                                         {
                                             case FileProcessingStatus.Converted:
-                                                _uiSuccessCount++;
+                                                archiveHadInternalSuccesses = true;
                                                 break;
                                             case FileProcessingStatus.Skipped:
-                                                _uiSkippedCount++;
+                                                archiveHadInternalSkips = true;
                                                 break;
                                             case FileProcessingStatus.Failed:
-                                                _uiFailedCount++;
+                                                archiveHadInternalFailures = true;
                                                 _failedConversionFilePaths.Add(extractedCuePath); // Log the original CUE path as the failure source
-                                                archiveContainedFailures = true;
+                                                // _failedConversionFilePaths.Add(extractedCuePath); // Still log internal failures for detailed report
                                                 break;
                                         }
                                     }
                                     else
                                     {
-                                        archiveContainedFailures = true;
+                                        archiveHadInternalFailures = true;
                                         _logger.LogMessage($"Failed to convert CUE/BIN to ISO: {extractedCueName}. It will be skipped.");
-                                        _uiFailedCount++;
+                                        // _uiFailedCount++; // No direct UI increment for internal files
                                         _failedConversionFilePaths.Add(extractedCuePath);
-                                        _totalProcessedFiles++; // Increment for failed CUE/BIN conversion attempt
+                                        // _totalProcessedFiles++; // No direct UI increment for internal files
                                     }
                                 }
                                 finally
                                 {
                                     if (tempCueBinDir != null) await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
-                                    UpdateSummaryStatsUi();
+                                    // UpdateSummaryStatsUi(); // No need to update UI for internal files
                                 }
                             }
                         }
                         else
                         {
                             _logger.LogMessage($"Failed to extract archive: {entryFileName}. It will be skipped.");
-                            archiveContainedFailures = true;
+                            archiveHadInternalFailures = true; // Mark archive as failed due to extraction failure
                             archivesFailedToExtractOrProcess++;
-                            UpdateSummaryStatsUi();
                         }
                     }
                     catch (OperationCanceledException)
@@ -195,12 +194,9 @@ public partial class MainWindow
                     {
                         _logger.LogMessage($"Error processing archive {entryFileName}: {ex.Message}");
                         _ = ReportBugAsync($"Error during processing of archive {entryFileName}", ex);
-                        archiveContainedFailures = true;
+                        archiveHadInternalFailures = true; // Mark archive as failed due to exception
                         archivesFailedToExtractOrProcess++;
                         _failedConversionFilePaths.Add(currentEntryPath);
-                        _totalProcessedFiles++; // Increment for the archive itself as a failed item
-                        _uiFailedCount++;
-                        UpdateSummaryStatsUi();
                     }
                     finally
                     {
@@ -219,13 +215,30 @@ public partial class MainWindow
                         }
                     }
 
-                    // MOVED THIS BLOCK HERE, AFTER THE TRY-CATCH-FINALLY
+                    // After processing the entire archive (or failing to extract it), update top-level archive status
+                    if (archiveHadInternalFailures || !archiveExtractedSuccessfully)
+                    {
+                        _uiFailedCount++;
+                        _failedConversionFilePaths.Add(currentEntryPath); // Add the archive itself to failed list
+                    }
+                    else if (archiveHadInternalSuccesses)
+                    {
+                        _uiSuccessCount++;
+                    }
+                    else if (archiveHadInternalSkips) // All internal were skipped, or no relevant files found
+                    {
+                        _uiSkippedCount++;
+                    }
+
+                    topLevelItemsProcessed++; // Increment for top-level item (archive)
+                    UpdateSummaryStatsUi(); // Update UI after processing the entire archive
+
                     switch (deleteOriginals)
                     {
                         case true when archiveExtractedSuccessfully:
                         {
-                            // Only delete the original archive if it was successfully extracted AND all its contents were processed without failure.
-                            if (!archiveContainedFailures)
+                            // Only delete the original archive if it was successfully extracted AND all its internal contents were processed without failure.
+                            if (!archiveHadInternalFailures)
                             {
                                 _logger.LogMessage($"All contents of archive {entryFileName} processed successfully. Deleting original archive.");
                                 await TryDeleteFileAsync(currentEntryPath);
@@ -264,7 +277,6 @@ public partial class MainWindow
                             // We pass 'false' for deleteOriginalIsoFile because we handle deletion of cue/bin separately
                             var status = await ConvertFileAsync(extractXisoPath, tempIsoPath, outputFolder, false, globalFileIndex, skipSystemUpdate);
                             globalFileIndex++;
-                            _totalProcessedFiles++; // Increment for CUE/BIN processed to ISO
 
                             switch (status)
                             {
@@ -287,7 +299,6 @@ public partial class MainWindow
                             _logger.LogMessage($"Failed to convert CUE/BIN to ISO: {entryFileName}. It will be skipped.");
                             _uiFailedCount++;
                             _failedConversionFilePaths.Add(currentEntryPath);
-                            _totalProcessedFiles++; // Increment for failed CUE/BIN conversion attempt
                         }
                     }
                     catch (OperationCanceledException)
@@ -300,11 +311,11 @@ public partial class MainWindow
                         _ = ReportBugAsync($"Error during processing of CUE/BIN {entryFileName}", ex);
                         _uiFailedCount++;
                         _failedConversionFilePaths.Add(currentEntryPath);
-                        _totalProcessedFiles++; // Increment for CUE/BIN processing error
                     }
                     finally
                     {
                         if (tempCueBinDir != null) await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
+                        topLevelItemsProcessed++; // Increment for top-level item (CUE)
                         UpdateSummaryStatsUi();
                     }
 
@@ -312,13 +323,12 @@ public partial class MainWindow
                 }
             }
 
-            topLevelEntriesProcessed++;
-            UpdateProgressUi(topLevelEntriesProcessed, _uiTotalFiles);
+            UpdateProgressUi(topLevelItemsProcessed, _uiTotalFiles); // Update progress based on top-level items processed
         }
 
         if (!_cts.Token.IsCancellationRequested)
         {
-            UpdateProgressUi(_uiTotalFiles, _uiTotalFiles);
+            UpdateProgressUi(topLevelItemsProcessed, _uiTotalFiles);
         }
 
         if (archivesFailedToExtractOrProcess > 0)
