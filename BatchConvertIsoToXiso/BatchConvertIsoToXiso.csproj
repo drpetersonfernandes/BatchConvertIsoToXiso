@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net9.0-windows</TargetFramework>
+        <TargetFramework>net10.0-windows</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <UseWPF>true</UseWPF>
@@ -14,7 +14,7 @@
         <NeutralLanguage>en-US</NeutralLanguage>
         <DebugType>embedded</DebugType>
         <DebugSymbols>true</DebugSymbols>
-        <LangVersion>13</LangVersion>
+        <LangVersion>14</LangVersion>
         <PublishSingleFile>true</PublishSingleFile>
         <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     </PropertyGroup>
@@ -28,18 +28,18 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="extract-xiso.exe">
+        <None Include="extract-xiso.exe">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
             <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-        </Content>
-        <Content Include="7z_x64.dll">
+        </None>
+        <None Include="7z_x64.dll">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
             <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-        </Content>
-        <Content Include="bchunk.exe">
+        </None>
+        <None Include="bchunk.exe">
           <CopyToOutputDirectory>Always</CopyToOutputDirectory>
           <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-        </Content>
+        </None>
     </ItemGroup>
 
     <ItemGroup>
