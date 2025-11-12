@@ -30,7 +30,7 @@ public partial class MainWindow
             if (LogViewer != null)
             {
                 var logContent = string.Empty;
-                await Dispatcher.InvokeAsync(() => { logContent = LogViewer.Text; });
+                Dispatcher.Invoke(() => { logContent = LogViewer.Text; });
                 if (!string.IsNullOrEmpty(logContent))
                 {
                     fullReport.AppendLine();
