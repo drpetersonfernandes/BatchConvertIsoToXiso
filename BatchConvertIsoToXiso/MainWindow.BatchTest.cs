@@ -26,7 +26,6 @@ public partial class MainWindow
             _cts.Token.ThrowIfCancellationRequested();
             var isoFileName = Path.GetFileName(isoFilePath);
 
-            UpdateProgressUi(topLevelItemsProcessed, _uiTotalFiles); // Update progress at start of each file
             UpdateStatus($"Testing: {isoFileName}");
             _logger.LogMessage($"Testing ISO: {isoFileName}...");
 

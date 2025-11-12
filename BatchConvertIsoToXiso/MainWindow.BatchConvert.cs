@@ -9,7 +9,7 @@ using SevenZip;
 
 namespace BatchConvertIsoToXiso;
 
-public partial class MainWindow
+public partial class MainWindow : IDisposable
 {
     private async Task PerformBatchConversionAsync(string extractXisoPath, string inputFolder, string outputFolder, bool deleteOriginals, bool skipSystemUpdate, List<string> topLevelEntries)
     {
@@ -26,11 +26,9 @@ public partial class MainWindow
 
         foreach (var currentEntryPath in topLevelEntries)
         {
-            // Line 17 (approximate, based on context)
             _cts.Token.ThrowIfCancellationRequested();
 
             var entryFileName = Path.GetFileName(currentEntryPath);
-            UpdateProgressUi(topLevelItemsProcessed, _uiTotalFiles); // Update progress at start of each file
             UpdateStatus($"Processing: {entryFileName}");
             var entryExtension = Path.GetExtension(currentEntryPath).ToLowerInvariant();
 
@@ -281,7 +279,17 @@ public partial class MainWindow
         }
         finally
         {
-            if (tempCueBinDir != null) await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
+            if (tempCueBinDir != null)
+            {
+                try
+                {
+                    await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogMessage($"Error during cleanup of temp CUE/BIN directory: {cleanupEx.Message}");
+                }
+            }
         }
 
         return (globalFileIndex + 1, archiveHadInternalFailures, archiveHadInternalSuccesses, archiveHadInternalSkips);
@@ -412,7 +420,18 @@ public partial class MainWindow
         }
         finally
         {
-            if (tempCueBinDir != null) await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
+            if (tempCueBinDir != null)
+            {
+                try
+                {
+                    await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogMessage($"Error during cleanup of temp CUE/BIN directory: {cleanupEx.Message}");
+                }
+            }
+
             UpdateSummaryStatsUi();
         }
 
@@ -437,13 +456,13 @@ public partial class MainWindow
             var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
             localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);
 
-            // 3. Copy the original file from source (potentially UNC) to local temp
-            _logger.LogMessage($"{logPrefix} Copying from '{inputFile}' to local temp '{localTempIsoPath}'...");
-            SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Monitor temp drive for copy write
-            await Task.Run(() => File.Copy(inputFile, localTempIsoPath, true), _cts.Token);
-            _logger.LogMessage($"{logPrefix} Successfully copied to local temp.");
+            // 3. Move the original file from source (potentially UNC) to local temp
+            _logger.LogMessage($"{logPrefix} Moving from '{inputFile}' to local temp '{localTempIsoPath}'...");
+            SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Monitor temp drive for move write
+            await Task.Run(() => File.Move(inputFile, localTempIsoPath, true), _cts.Token);
+            _logger.LogMessage($"{logPrefix} Successfully moved to local temp.");
 
-            // 4. Run extract-xiso on the local temporary copy
+            // 4. Run extract-xiso on the local temporary file
             SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Still monitoring temp drive for in-place rewrite
             var toolResult = await RunConversionToolAsync(extractXisoPath, localTempIsoPath, originalFileName, skipSystemUpdate);
 
@@ -555,6 +574,7 @@ public partial class MainWindow
         var outputForUiLog = new StringBuilder();
 
         Process? processRef;
+        string? outputFilePath = null;
         CancellationTokenRegistration cancellationRegistration = default;
 
         try
@@ -572,18 +592,43 @@ public partial class MainWindow
                 WorkingDirectory = Path.GetDirectoryName(inputFile) ?? AppDomain.CurrentDomain.BaseDirectory
             };
 
+            // Track the output file for cleanup if needed
+            outputFilePath = inputFile; // extract-xiso modifies in-place
+
             cancellationRegistration = _cts.Token.Register(() =>
             {
                 try
                 {
                     if (processRef != null && !processRef.HasExited)
                     {
-                        processRef.Kill(true);
+                        _logger.LogMessage($"Attempting graceful termination of extract-xiso for {originalFileName}...");
+
+                        // Try graceful shutdown first
+                        try
+                        {
+                            processRef.CloseMainWindow();
+                            if (!processRef.WaitForExit(3000)) // Wait 3 seconds for graceful exit
+                            {
+                                _logger.LogMessage($"Graceful termination failed, forcing process kill for {originalFileName}");
+                                processRef.Kill(true);
+                            }
+                        }
+                        catch
+                        {
+                            // If graceful close fails, force kill
+                            processRef.Kill(true);
+                        }
+
+                        // Wait for process to fully exit and release file handles
+                        if (!processRef.WaitForExit(5000))
+                        {
+                            _logger.LogMessage($"Warning: Process for {originalFileName} did not exit within timeout.");
+                        }
                     }
                 }
                 catch
                 {
-                    // Ignore
+                    // Ignore kill errors - process may have already exited
                 }
             });
 
@@ -672,6 +717,35 @@ public partial class MainWindow
         catch (OperationCanceledException)
         {
             _logger.LogMessage($"extract-xiso -r operation for {originalFileName} was canceled.");
+
+            // Clean up partial output file if cancellation occurred
+            if (outputFilePath != null)
+            {
+                try
+                {
+                    // Wait a moment for file handles to be released
+                    await Task.Delay(500, CancellationToken.None);
+
+                    if (File.Exists(outputFilePath))
+                    {
+                        // Check if file is locked before attempting deletion
+                        if (await IsFileLockedAsync(outputFilePath))
+                        {
+                            _logger.LogMessage($"Output file {Path.GetFileName(outputFilePath)} is still locked after cancellation. Will retry cleanup later.");
+                        }
+                        else
+                        {
+                            File.Delete(outputFilePath);
+                            _logger.LogMessage($"Cleaned up partial output file: {Path.GetFileName(outputFilePath)}");
+                        }
+                    }
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogMessage($"Warning: Could not clean up partial output file after cancellation: {cleanupEx.Message}");
+                }
+            }
+
             throw;
         }
         catch (Exception ex)
@@ -684,5 +758,10 @@ public partial class MainWindow
         {
             await cancellationRegistration.DisposeAsync();
         }
+    }
+
+    public void Dispose()
+    {
+        GC.SuppressFinalize(this);
     }
 }

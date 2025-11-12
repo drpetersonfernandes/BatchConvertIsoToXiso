@@ -1,4 +1,9 @@
 @echo off
+echo.
+echo ===================================
+echo Building BatchConvertIsoToXiso
+echo ===================================
+echo.
 
 rmdir /s /q ./bin/Publish 2>nul
 

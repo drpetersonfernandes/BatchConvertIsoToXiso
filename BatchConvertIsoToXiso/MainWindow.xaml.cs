@@ -12,7 +12,7 @@ namespace BatchConvertIsoToXiso;
 
 public partial class MainWindow
 {
-    private CancellationTokenSource _cts;
+    private CancellationTokenSource _cts = new();
     private readonly IUpdateChecker _updateChecker;
     private readonly ILogger _logger;
     private readonly IBugReportService _bugReportService;
@@ -54,8 +54,6 @@ public partial class MainWindow
         _serviceProvider = serviceProvider;
 
         _logger.Initialize(LogViewer);
-
-        _cts = new CancellationTokenSource();
 
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _processingTimer.Tick += ProcessingTimer_Tick;
@@ -130,9 +128,9 @@ public partial class MainWindow
             {
                 LogViewer.Clear();
 
-                // Reset the flag if we exit early due to validation errors
-                _cts?.Dispose();
-                _cts = new CancellationTokenSource();
+                // Thread-safe cancellation token replacement
+                var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+                oldCts?.Dispose();
 
                 var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
@@ -141,10 +139,9 @@ public partial class MainWindow
                 {
                     _logger.LogMessage("Error: extract-xiso.exe not found.");
                     _messageBoxService.ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
-                    _isOperationRunning = false; // Reset flag before early return
                     _ = ReportBugAsync("extract-xiso.exe not found at start of conversion.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
-                    _isOperationRunning = false; // Reset flag before early return
-                    StopPerformanceCounter();
+                    SetControlsState(true);
+                    _isOperationRunning = false;
                     return;
                 }
 
@@ -157,15 +154,14 @@ public partial class MainWindow
                 if (string.IsNullOrEmpty(inputFolder) || string.IsNullOrEmpty(outputFolder))
                 {
                     _messageBoxService.ShowError("Please select both input and output folders for conversion.");
-                    _isOperationRunning = false; // Reset flag before early return
-                    StopPerformanceCounter();
-                    _isOperationRunning = false; // Reset flag before early return
+                    SetControlsState(true);
+                    _isOperationRunning = false;
                     return;
                 }
 
                 if (!ValidateInputOutputFolders(inputFolder, outputFolder))
                 {
-                    StopPerformanceCounter();
+                    SetControlsState(true);
                     _isOperationRunning = false; // Reset flag before early return
                     return;
                 }
@@ -176,10 +172,9 @@ public partial class MainWindow
                 if (string.IsNullOrEmpty(tempDriveLetter))
                 {
                     _messageBoxService.ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with conversion.");
-                    StopPerformanceCounter();
-                    _isOperationRunning = false; // Reset flag before early return
+                    SetControlsState(true);
+                    _isOperationRunning = false;
                     _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of conversion.");
-                    _isOperationRunning = false; // Reset flag before early return
                     return;
                 }
 
@@ -187,10 +182,9 @@ public partial class MainWindow
                 if (!tempDriveInfo.IsReady)
                 {
                     _messageBoxService.ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with conversion.");
-                    StopPerformanceCounter();
-                    _isOperationRunning = false; // Reset flag before early return
+                    SetControlsState(true);
+                    _isOperationRunning = false;
                     _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of conversion.");
-                    _isOperationRunning = false; // Reset flag before early return
                     return;
                 }
 
@@ -211,10 +205,8 @@ public partial class MainWindow
                         _logger.LogMessage("No compatible files found in the input folder for conversion.");
                         var subfolderHint = searchSubfolders ? "" : " Please note this tool is currently configured not to search in subfolders.";
                         _messageBoxService.ShowError($"No compatible files (.iso, .zip, .7z, .rar, .cue) were found in the selected folder.{subfolderHint}");
-                        _isOperationRunning = false; // Reset flag before early return
                         SetControlsState(true);
                         _isOperationRunning = false;
-                        _isOperationRunning = false; // Reset flag before early return
                         return;
                     }
                 }
@@ -222,9 +214,8 @@ public partial class MainWindow
                 {
                     _logger.LogMessage($"Error scanning input folder for conversion: {ex.Message}");
                     _ = ReportBugAsync("Error scanning input folder", ex);
-                    StopPerformanceCounter();
-                    _isOperationRunning = false; // Reset flag before early return
-                    _isOperationRunning = false; // Reset flag before early return
+                    SetControlsState(true);
+                    _isOperationRunning = false;
                     return;
                 }
 
@@ -236,9 +227,9 @@ public partial class MainWindow
                     _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
                                                  $"Required (estimated for largest item): {Formatter.FormatBytes(maxTempSpaceNeededForConversion)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
                                                  "Please free up space or choose a different temporary drive if possible (via system settings).");
-                    StopPerformanceCounter();
+
+                    SetControlsState(true);
                     _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for conversion. Available: {tempDriveInfo.AvailableFreeSpace}, Required: {maxTempSpaceNeededForConversion}");
-                    _isOperationRunning = false; // Reset flag before early return
                     _isOperationRunning = false; // Reset flag before early return
                     return;
                 }
@@ -249,13 +240,12 @@ public partial class MainWindow
                 var requiredOutputSpace = (long)(totalInputSize * 1.1); // 10% buffer for potential slight size increase or temporary files
                 if (!CheckDriveSpace(outputFolder, requiredOutputSpace, "output"))
                 {
-                    _isOperationRunning = false; // Reset flag before early return
-                    StopPerformanceCounter();
-                    _isOperationRunning = false; // Reset flag before early return
+                    SetControlsState(true);
+                    _isOperationRunning = false;
                     return;
                 }
 
-                // ResetSummaryStats();
+                ResetSummaryStats();
 
                 // Start with the output drive but allow dynamic switching
                 var outputDrive = GetDriveLetter(outputFolder);
@@ -296,25 +286,24 @@ public partial class MainWindow
                     SetControlsState(true);
                     UpdateStatus("Conversion complete. Ready.");
                     _isOperationRunning = false;
+                    LogOperationSummary("Conversion");
                 }
             }
             catch (Exception ex)
             {
                 _ = ReportBugAsync($"Error during batch conversion process: {ex.Message}", ex);
                 _logger.LogMessage($"Error during batch conversion process: {ex.Message}");
-                StopPerformanceCounter();
                 _isOperationRunning = false;
-                LogOperationSummary("Conversion");
+                SetControlsState(true);
             }
         }
         catch (Exception ex)
         {
             _ = ReportBugAsync($"Error during batch conversion process: {ex.Message}", ex);
+            _logger.LogMessage($"Error during batch conversion process: {ex.Message}");
+            _isOperationRunning = false;
+            SetControlsState(true);
         }
-        finally
-        {
-            LogOperationSummary("Conversion");
-        } // Ensure summary is always logged
     }
 
     private async void StartTestButton_Click(object sender, RoutedEventArgs e)
@@ -329,9 +318,9 @@ public partial class MainWindow
             {
                 Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
 
-                // Reset the flag if we exit early due to validation errors
-                _cts?.Dispose();
-                _cts = new CancellationTokenSource();
+                // Thread-safe cancellation token replacement
+                var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+                oldCts?.Dispose();
 
                 var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
@@ -340,9 +329,9 @@ public partial class MainWindow
                 {
                     _logger.LogMessage("Error: extract-xiso.exe not found.");
                     _messageBoxService.ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
+                    SetControlsState(true);
                     _ = ReportBugAsync("extract-xiso.exe not found at start of ISO test.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
-                    _isOperationRunning = false; // Reset flag before early return
-                    StopPerformanceCounter();
+                    _isOperationRunning = false;
                     return;
                 }
 
@@ -356,7 +345,7 @@ public partial class MainWindow
                 if (string.IsNullOrEmpty(inputFolder))
                 {
                     _messageBoxService.ShowError("Please select the input folder for testing.");
-                    StopPerformanceCounter();
+                    SetControlsState(true);
                     _isOperationRunning = false; // Reset flag before early return
                     return;
                 }
@@ -364,7 +353,7 @@ public partial class MainWindow
                 if (moveSuccessful && moveFailed && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(failedFolder, StringComparison.OrdinalIgnoreCase))
                 {
                     _messageBoxService.ShowError("Success Folder and Failed Folder cannot be the same.");
-                    StopPerformanceCounter();
+                    SetControlsState(true);
                     _isOperationRunning = false; // Reset flag before early return
                     return;
                 }
@@ -373,7 +362,7 @@ public partial class MainWindow
                     (moveFailed && !string.IsNullOrEmpty(failedFolder) && failedFolder.Equals(inputFolder, StringComparison.OrdinalIgnoreCase)))
                 {
                     _messageBoxService.ShowError("Success/Failed folder cannot be the same as the Input folder.");
-                    StopPerformanceCounter();
+                    SetControlsState(true);
                     _isOperationRunning = false; // Reset flag before early return
                     return;
                 }
@@ -384,7 +373,7 @@ public partial class MainWindow
                 if (string.IsNullOrEmpty(tempDriveLetter))
                 {
                     _messageBoxService.ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with ISO test.");
-                    StopPerformanceCounter();
+                    SetControlsState(true);
                     _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of ISO test.");
                     _isOperationRunning = false; // Reset flag before early return
                     return;
@@ -394,7 +383,7 @@ public partial class MainWindow
                 if (!tempDriveInfo.IsReady)
                 {
                     _messageBoxService.ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with ISO test.");
-                    StopPerformanceCounter();
+                    SetControlsState(true);
                     _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of ISO test.");
                     _isOperationRunning = false; // Reset flag before early return
                     return;
@@ -411,7 +400,7 @@ public partial class MainWindow
                 {
                     _logger.LogMessage($"Error scanning input folder for .iso files: {ex.Message}");
                     _ = ReportBugAsync("Error scanning input folder for .iso files for testing", ex);
-                    StopPerformanceCounter();
+                    SetControlsState(true);
                     _isOperationRunning = false; // Reset flag before early return
                     return;
                 }
@@ -422,7 +411,6 @@ public partial class MainWindow
                     _messageBoxService.ShowError($"No .iso files were found in the selected folder for testing. {(searchSubfolders ? "" : "Please note this tool is currently configured not to search in subfolders.")}");
                     SetControlsState(true);
                     _isOperationRunning = false;
-                    _isOperationRunning = false; // Reset flag before early return
                     return;
                 }
 
@@ -433,7 +421,8 @@ public partial class MainWindow
                     _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
                                                  $"Required (estimated for largest item): {Formatter.FormatBytes(maxTempSpaceNeededForTest)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
                                                  "Please free up space or choose a different temporary drive if possible (via system settings).");
-                    StopPerformanceCounter();
+
+                    SetControlsState(true);
                     _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for ISO test. Available: {tempDriveInfo.AvailableFreeSpace}, Required: {maxTempSpaceNeededForTest}");
                     _isOperationRunning = false; // Reset flag before early return
                     return;
@@ -457,7 +446,7 @@ public partial class MainWindow
                         {
                             if (!CheckDriveSpace(successFolder, totalIsoSize, "success destination"))
                             {
-                                StopPerformanceCounter();
+                                SetControlsState(true);
                                 _isOperationRunning = false; // Reset flag before early return
                                 return;
                             }
@@ -473,7 +462,7 @@ public partial class MainWindow
                         {
                             if (!CheckDriveSpace(failedFolder, totalIsoSize, "failed destination"))
                             {
-                                StopPerformanceCounter();
+                                SetControlsState(true);
                                 _isOperationRunning = false; // Reset flag before early return
                                 return;
                             }
@@ -525,30 +514,37 @@ public partial class MainWindow
                     SetControlsState(true);
                     UpdateStatus("Test complete. Ready.");
                     _isOperationRunning = false;
+                    LogOperationSummary("Test");
                 }
             }
             catch (Exception ex)
             {
                 _ = ReportBugAsync($"Error during batch ISO test process: {ex.Message}", ex);
                 _logger.LogMessage($"Error during batch ISO test process: {ex.Message}");
-                StopPerformanceCounter();
                 _isOperationRunning = false;
-                LogOperationSummary("Test");
+                SetControlsState(true);
             }
-            finally
-            {
-                LogOperationSummary("Test");
-            } // Ensure summary is always logged
         }
         catch (Exception ex)
         {
             _ = ReportBugAsync($"Error during batch ISO test process: {ex.Message}", ex);
+            _logger.LogMessage($"Error during batch ISO test process: {ex.Message}");
+            _isOperationRunning = false;
+            SetControlsState(true);
         }
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
-        _cts.Cancel();
+        try
+        {
+            _cts?.Cancel();
+        }
+        catch
+        {
+            /* Ignore if already disposed */
+        }
+
         _logger.LogMessage("Cancellation requested. Finishing current file/archive...");
     }
 
@@ -683,10 +679,22 @@ public partial class MainWindow
         {
             try
             {
-                if (!Directory.Exists(folder)) continue;
+                if (!Directory.Exists(folder))
+                {
+                    tempFolders.Remove(folder);
+                    continue;
+                }
 
-                await Task.Run(() => Directory.Delete(folder, true), _cts.Token);
-                tempFolders.Remove(folder);
+                // Try cleanup with retries for locked files
+                var deleted = await TryDeleteDirectoryWithRetryAsync(folder, 3, 1000);
+                if (deleted)
+                {
+                    tempFolders.Remove(folder);
+                }
+                else
+                {
+                    _logger.LogMessage($"Could not delete temp folder {folder} after multiple attempts. It may contain locked files.");
+                }
             }
             catch (Exception ex)
             {
@@ -696,6 +704,36 @@ public partial class MainWindow
 
         if (tempFolders.Count == 0) _logger.LogMessage("Temporary folder cleanup complete.");
         else _logger.LogMessage("Some temporary folders could not be cleaned automatically.");
+    }
+
+    /// <summary>
+    /// Attempts to delete a directory with retry logic for locked files
+    /// </summary>
+    private async Task<bool> TryDeleteDirectoryWithRetryAsync(string directoryPath, int maxRetries, int delayMs)
+    {
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                if (!Directory.Exists(directoryPath))
+                    return true;
+
+                await Task.Run(() => Directory.Delete(directoryPath, true), CancellationToken.None);
+                return true;
+            }
+            catch (IOException) when (attempt < maxRetries)
+            {
+                _logger.LogMessage($"Temp folder deletion attempt {attempt}/{maxRetries} failed (files may be locked). Retrying in {delayMs}ms...");
+                await Task.Delay(delayMs, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogMessage($"Error deleting directory {directoryPath}: {ex.Message}");
+                return false;
+            }
+        }
+
+        return false;
     }
 
     private void ProcessingTimer_Tick(object? sender, EventArgs e)
@@ -808,5 +846,35 @@ public partial class MainWindow
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
     {
         Application.Current.Shutdown();
+    }
+
+    /// <summary>
+    /// Checks if a file is currently locked by another process
+    /// </summary>
+    private static async Task<bool> IsFileLockedAsync(string filePath)
+    {
+        if (!File.Exists(filePath))
+            return false;
+
+        return await Task.Run(() =>
+        {
+            try
+            {
+                using var stream = new FileStream(
+                    filePath,
+                    FileMode.Open,
+                    FileAccess.ReadWrite,
+                    FileShare.None);
+                return false; // File is not locked
+            }
+            catch (IOException)
+            {
+                return true; // File is locked
+            }
+            catch
+            {
+                return false; // Other errors, assume not locked
+            }
+        });
     }
 }

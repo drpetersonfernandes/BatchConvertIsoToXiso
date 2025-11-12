@@ -14,6 +14,7 @@ public partial class MainWindow
 
         var processOutputCollector = new StringBuilder();
         Process? processRef;
+        var extractionStarted = false;
         CancellationTokenRegistration cancellationRegistration = default;
 
         try
@@ -33,18 +34,40 @@ public partial class MainWindow
                 WorkingDirectory = tempExtractionDir
             };
 
+            var isoNameWithoutExtension = Path.GetFileNameWithoutExtension(isoFileName);
+            var expectedExtractionSubDir = Path.Combine(tempExtractionDir, isoNameWithoutExtension);
+
             cancellationRegistration = _cts.Token.Register(() =>
             {
                 try
                 {
                     if (processRef != null && !processRef.HasExited)
                     {
-                        processRef.Kill(true);
+                        _logger.LogMessage($"    Attempting graceful termination of extract-xiso for {isoFileName}...");
+
+                        try
+                        {
+                            processRef.CloseMainWindow();
+                            if (!processRef.WaitForExit(3000))
+                            {
+                                _logger.LogMessage("    Graceful termination failed, forcing process kill");
+                                processRef.Kill(true);
+                            }
+                        }
+                        catch
+                        {
+                            processRef.Kill(true);
+                        }
+
+                        if (!processRef.WaitForExit(5000))
+                        {
+                            _logger.LogMessage("    Warning: extract-xiso process did not exit within timeout.");
+                        }
                     }
                 }
                 catch
                 {
-                    // Ignore
+                    // Ignore kill errors - process may have already exited
                 }
             });
 
@@ -71,6 +94,8 @@ public partial class MainWindow
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
+            extractionStarted = true;
+
             await process.WaitForExitAsync(_cts.Token);
             _cts.Token.ThrowIfCancellationRequested();
 
@@ -78,8 +103,6 @@ public partial class MainWindow
             _logger.LogMessage($"    Process Exit Code for '{isoFileName}': {process.ExitCode}");
             _logger.LogMessage($"    Full Output Log from extract-xiso -x for '{isoFileName}':\n{collectedOutput}");
 
-            var isoNameWithoutExtension = Path.GetFileNameWithoutExtension(isoFileName);
-            var expectedExtractionSubDir = Path.Combine(tempExtractionDir, isoNameWithoutExtension);
 
             var filesWereExtracted = false;
             if (Directory.Exists(expectedExtractionSubDir))
@@ -149,6 +172,28 @@ public partial class MainWindow
         catch (OperationCanceledException)
         {
             _logger.LogMessage($"    Extraction for {isoFileName} was canceled.");
+
+            // Clean up partial extraction
+            if (extractionStarted && Directory.Exists(Path.Combine(tempExtractionDir, Path.GetFileNameWithoutExtension(isoFileName))))
+            {
+                var expectedExtractionSubDir = Path.Combine(tempExtractionDir, Path.GetFileNameWithoutExtension(isoFileName));
+                try
+                {
+                    await Task.Delay(500, CancellationToken.None);
+
+                    // Attempt to delete the partial extraction directory
+                    if (Directory.Exists(expectedExtractionSubDir))
+                    {
+                        Directory.Delete(expectedExtractionSubDir, true);
+                        _logger.LogMessage($"    Cleaned up partial extraction directory for {isoFileName}");
+                    }
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogMessage($"    Warning: Could not clean up partial extraction: {cleanupEx.Message}");
+                }
+            }
+
             throw;
         }
         catch (Exception ex)

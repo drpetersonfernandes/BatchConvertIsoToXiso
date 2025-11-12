@@ -30,6 +30,7 @@ public partial class MainWindow
 
         var processOutputCollector = new StringBuilder();
         Process? processRef;
+        string? outputIsoPath = null;
         CancellationTokenRegistration cancellationRegistration = default;
 
         try
@@ -49,18 +50,42 @@ public partial class MainWindow
                 WorkingDirectory = tempOutputDir
             };
 
+            // Track expected output file
+            outputIsoPath = Path.Combine(tempOutputDir, $"{outputBaseName}01.iso");
+
             cancellationRegistration = _cts.Token.Register(() =>
             {
                 try
                 {
                     if (processRef != null && !processRef.HasExited)
                     {
-                        processRef.Kill(true);
+                        _logger.LogMessage($"  Attempting graceful termination of bchunk for {Path.GetFileName(cuePath)}...");
+
+                        // Try graceful shutdown first
+                        try
+                        {
+                            processRef.CloseMainWindow();
+                            if (!processRef.WaitForExit(3000))
+                            {
+                                _logger.LogMessage("  Graceful termination failed, forcing process kill for bchunk");
+                                processRef.Kill(true);
+                            }
+                        }
+                        catch
+                        {
+                            processRef.Kill(true);
+                        }
+
+                        // Wait for process to fully exit
+                        if (!processRef.WaitForExit(5000))
+                        {
+                            _logger.LogMessage("  Warning: bchunk process did not exit within timeout.");
+                        }
                     }
                 }
                 catch
                 {
-                    // Ignore
+                    // Ignore kill errors - process may have already exited
                 }
             });
             process.OutputDataReceived += (_, args) =>
@@ -106,6 +131,26 @@ public partial class MainWindow
         catch (OperationCanceledException)
         {
             _logger.LogMessage($"  CUE/BIN conversion for {Path.GetFileName(cuePath)} was canceled.");
+
+            // Clean up partial ISO file
+            if (outputIsoPath != null)
+            {
+                try
+                {
+                    await Task.Delay(500, CancellationToken.None);
+
+                    if (File.Exists(outputIsoPath) && !await IsFileLockedAsync(outputIsoPath))
+                    {
+                        File.Delete(outputIsoPath);
+                        _logger.LogMessage($"  Cleaned up partial ISO from bchunk: {Path.GetFileName(outputIsoPath)}");
+                    }
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogMessage($"  Warning: Could not clean up partial bchunk output: {cleanupEx.Message}");
+                }
+            }
+
             throw;
         }
         catch (Exception ex)

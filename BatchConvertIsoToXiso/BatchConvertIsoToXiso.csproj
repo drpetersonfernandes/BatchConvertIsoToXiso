@@ -15,6 +15,8 @@
         <DebugType>embedded</DebugType>
         <DebugSymbols>true</DebugSymbols>
         <LangVersion>14</LangVersion>
+        <PublishSingleFile>true</PublishSingleFile>
+        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     </PropertyGroup>
 
     <ItemGroup>
@@ -26,15 +28,18 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Update="extract-xiso.exe">
+        <Content Include="extract-xiso.exe">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
-        <None Update="7z_x64.dll">
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+        <Content Include="7z_x64.dll">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
-        <None Update="bchunk.exe">
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+        <Content Include="bchunk.exe">
           <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
+          <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>
