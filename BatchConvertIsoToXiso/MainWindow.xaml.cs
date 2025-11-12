@@ -219,8 +219,7 @@ public partial class MainWindow
                     return;
                 }
 
-                _uiTotalFiles = topLevelEntries.Count;
-                _logger.LogMessage($"Scan complete. Found {_uiTotalFiles} top-level files/archives to process.");
+                _logger.LogMessage($"Scan complete. Found {topLevelEntries.Count} top-level files/archives to process.");
                 var maxTempSpaceNeededForConversion = await CalculateMaxTempSpaceForSingleOperation(topLevelEntries, true);
                 if (tempDriveInfo.AvailableFreeSpace < maxTempSpaceNeededForConversion)
                 {
@@ -246,6 +245,9 @@ public partial class MainWindow
                 }
 
                 ResetSummaryStats();
+
+                _uiTotalFiles = topLevelEntries.Count;
+                UpdateSummaryStatsUi();
 
                 // Start with the output drive but allow dynamic switching
                 var outputDrive = GetDriveLetter(outputFolder);
@@ -471,7 +473,8 @@ public partial class MainWindow
                 }
 
                 ResetSummaryStats();
-                _uiTotalFiles = isoFilesToTest.Count; // Set total files for testing
+
+                _uiTotalFiles = isoFilesToTest.Count;
                 UpdateSummaryStatsUi();
 
                 // Initial drive for monitoring is the temp path, as the test involves extraction to temp.

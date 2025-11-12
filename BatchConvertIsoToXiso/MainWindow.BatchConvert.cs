@@ -16,7 +16,6 @@ public partial class MainWindow : IDisposable
         var tempFoldersToCleanUpAtEnd = new List<string>();
         var archivesFailedToExtractOrProcess = 0;
 
-        UpdateSummaryStatsUi();
         UpdateProgressUi(0, _uiTotalFiles);
         Application.Current.Dispatcher.Invoke(() => ProgressBar.IsIndeterminate = false);
         _logger.LogMessage($"Starting conversion... Total top-level files/archives to process: {_uiTotalFiles}.");

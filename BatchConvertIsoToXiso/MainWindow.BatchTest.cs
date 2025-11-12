@@ -10,14 +10,9 @@ public partial class MainWindow
     {
         var topLevelItemsProcessed = 0;
 
-        _uiSuccessCount = 0;
-        _uiFailedCount = 0;
-        _uiSkippedCount = 0;
-
         _logger.LogMessage($"Found {isoFilesToTest.Count} .iso files for testing.");
-        UpdateSummaryStatsUi(); // Use _uiTotalFiles which is set to isoFilesToTest.Count
         UpdateProgressUi(0, _uiTotalFiles);
-        _logger.LogMessage($"Starting test... Total .iso files to test: {isoFilesToTest.Count}.");
+        _logger.LogMessage($"Starting test... Total .iso files to test: {_uiTotalFiles}.");
 
         var testFileIndex = 1; // Counter for simple test filenames
 
