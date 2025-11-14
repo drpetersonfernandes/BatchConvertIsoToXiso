@@ -843,7 +843,7 @@ public partial class MainWindow
         _processingTimer.Tick -= ProcessingTimer_Tick;
         _processingTimer.Stop();
         StopPerformanceCounter();
-        base.OnClosing(e);
+        // No call to base.OnClosing(e); needed here.
     }
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
