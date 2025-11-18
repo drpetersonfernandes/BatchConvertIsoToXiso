@@ -166,28 +166,6 @@ public partial class MainWindow
                     return;
                 }
 
-                // Check for sufficient temporary disk space
-                var tempPath = Path.GetTempPath(); // This is the base temp path, not the specific working dir
-                var tempDriveLetter = GetDriveLetter(tempPath);
-                if (string.IsNullOrEmpty(tempDriveLetter))
-                {
-                    _messageBoxService.ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with conversion.");
-                    SetControlsState(true);
-                    _isOperationRunning = false;
-                    _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of conversion.");
-                    return;
-                }
-
-                var tempDriveInfo = new DriveInfo(tempDriveLetter);
-                if (!tempDriveInfo.IsReady)
-                {
-                    _messageBoxService.ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with conversion.");
-                    SetControlsState(true);
-                    _isOperationRunning = false;
-                    _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of conversion.");
-                    return;
-                }
-
                 List<string> topLevelEntries;
                 try
                 {
@@ -219,32 +197,6 @@ public partial class MainWindow
                     return;
                 }
 
-                _logger.LogMessage($"Scan complete. Found {topLevelEntries.Count} top-level files/archives to process.");
-                var maxTempSpaceNeededForConversion = await CalculateMaxTempSpaceForSingleOperation(topLevelEntries, true);
-                if (tempDriveInfo.AvailableFreeSpace < maxTempSpaceNeededForConversion)
-                {
-                    _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
-                                                 $"Required (estimated for largest item): {Formatter.FormatBytes(maxTempSpaceNeededForConversion)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
-                                                 "Please free up space or choose a different temporary drive if possible (via system settings).");
-
-                    SetControlsState(true);
-                    _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for conversion. Available: {tempDriveInfo.AvailableFreeSpace}, Required: {maxTempSpaceNeededForConversion}");
-                    _isOperationRunning = false; // Reset flag before early return
-                    return;
-                }
-
-                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required for conversion: {Formatter.FormatBytes(maxTempSpaceNeededForConversion)}).");
-
-                var totalInputSize = await CalculateTotalInputFileSizeAsync(topLevelEntries);
-                // Buffer for output space (20%)
-                var requiredOutputSpace = (long)(totalInputSize * 1.2);
-                if (!CheckDriveSpace(outputFolder, requiredOutputSpace, "output"))
-                {
-                    SetControlsState(true);
-                    _isOperationRunning = false;
-                    return;
-                }
-
                 ResetSummaryStats();
 
                 _uiTotalFiles = topLevelEntries.Count;
@@ -260,14 +212,21 @@ public partial class MainWindow
 
                 UpdateStatus("Starting batch conversion...");
                 _logger.LogMessage("--- Starting batch conversion process... ---");
+                _logger.LogMessage($"Found {topLevelEntries.Count} top-level files/archives to process.");
                 _logger.LogMessage($"Input folder: {inputFolder}");
-                _logger.LogMessage($"Output folder: {outputFolder} (Estimated required space: {Formatter.FormatBytes(requiredOutputSpace)})");
+                _logger.LogMessage($"Output folder: {outputFolder}");
                 _logger.LogMessage($"Search in subfolders: {searchSubfolders}");
                 _logger.LogMessage($"Skip $SystemUpdate folder: {skipSystemUpdate}. Delete originals: {deleteFiles}");
 
                 try
                 {
                     await PerformBatchConversionAsync(extractXisoPath, inputFolder, outputFolder, deleteFiles, skipSystemUpdate, topLevelEntries);
+                }
+                catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // ERROR_DISK_FULL
+                {
+                    _logger.LogMessage($"Operation stopped due to insufficient disk space: {ex.Message}");
+                    _messageBoxService.ShowError("The operation was stopped because the disk is full. Please free up some space and try again.");
+                    UpdateStatus("Operation failed: Disk full.");
                 }
                 catch (OperationCanceledException)
                 {
@@ -370,28 +329,6 @@ public partial class MainWindow
                     return;
                 }
 
-                // Check for sufficient temporary disk space
-                var tempPath = Path.GetTempPath();
-                var tempDriveLetter = GetDriveLetter(tempPath);
-                if (string.IsNullOrEmpty(tempDriveLetter))
-                {
-                    _messageBoxService.ShowError($"Could not determine drive for temporary path '{tempPath}'. Cannot proceed with ISO test.");
-                    SetControlsState(true);
-                    _ = ReportBugAsync($"Could not determine drive for temporary path '{tempPath}' at start of ISO test.");
-                    _isOperationRunning = false; // Reset flag before early return
-                    return;
-                }
-
-                var tempDriveInfo = new DriveInfo(tempDriveLetter);
-                if (!tempDriveInfo.IsReady)
-                {
-                    _messageBoxService.ShowError($"Temporary drive '{tempDriveLetter}' is not ready. Cannot proceed with ISO test.");
-                    SetControlsState(true);
-                    _ = ReportBugAsync($"Temporary drive '{tempDriveLetter}' not ready at start of ISO test.");
-                    _isOperationRunning = false; // Reset flag before early return
-                    return;
-                }
-
                 // Scan the input folder to get .iso files for size calculation and count
                 List<string> isoFilesToTest;
                 try
@@ -417,62 +354,6 @@ public partial class MainWindow
                     return;
                 }
 
-                // Calculate required temporary space dynamically based on the largest ISO being tested
-                var maxTempSpaceNeededForTest = await CalculateMaxTempSpaceForSingleOperation(isoFilesToTest, false);
-                if (tempDriveInfo.AvailableFreeSpace < maxTempSpaceNeededForTest)
-                {
-                    _messageBoxService.ShowError($"Insufficient free space on temporary drive ({tempDriveLetter}). " +
-                                                 $"Required (estimated for largest item): {Formatter.FormatBytes(maxTempSpaceNeededForTest)}, Available: {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)}. " +
-                                                 "Please free up space or choose a different temporary drive if possible (via system settings).");
-
-                    SetControlsState(true);
-                    _ = ReportBugAsync($"Insufficient temp space on drive {tempDriveLetter} for ISO test. Available: {tempDriveInfo.AvailableFreeSpace}, Required: {maxTempSpaceNeededForTest}");
-                    _isOperationRunning = false; // Reset flag before early return
-                    return;
-                }
-
-                _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required: {Formatter.FormatBytes(maxTempSpaceNeededForTest)}).");
-
-
-                var totalIsoSize = await CalculateTotalInputFileSizeAsync(isoFilesToTest);
-
-                // Check destination drive space for moving files (if cross-drive move)
-                if (moveSuccessful || moveFailed)
-                {
-                    var inputDriveLetter = GetDriveLetter(inputFolder);
-                    var checkedDrives = new HashSet<string>();
-
-                    if (moveSuccessful && successFolder != null)
-                    {
-                        var successDriveLetter = GetDriveLetter(successFolder);
-                        if (successDriveLetter != null && !successDriveLetter.Equals(inputDriveLetter, StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (!CheckDriveSpace(successFolder, totalIsoSize, "success destination"))
-                            {
-                                SetControlsState(true);
-                                _isOperationRunning = false; // Reset flag before early return
-                                return;
-                            }
-
-                            checkedDrives.Add(successDriveLetter);
-                        }
-                    }
-
-                    if (moveFailed && failedFolder != null)
-                    {
-                        var failedDriveLetter = GetDriveLetter(failedFolder);
-                        if (failedDriveLetter != null && !failedDriveLetter.Equals(inputDriveLetter, StringComparison.OrdinalIgnoreCase) && !checkedDrives.Contains(failedDriveLetter))
-                        {
-                            if (!CheckDriveSpace(failedFolder, totalIsoSize, "failed destination"))
-                            {
-                                SetControlsState(true);
-                                _isOperationRunning = false; // Reset flag before early return
-                                return;
-                            }
-                        }
-                    }
-                }
-
                 ResetSummaryStats();
 
                 _uiTotalFiles = isoFilesToTest.Count;
@@ -489,7 +370,7 @@ public partial class MainWindow
                 UpdateStatus("Starting batch ISO test...");
                 _logger.LogMessage("--- Starting batch ISO test process... ---");
                 _logger.LogMessage($"Input folder: {inputFolder}");
-                _logger.LogMessage($"Total ISOs to test: {isoFilesToTest.Count}. Total size: {Formatter.FormatBytes(totalIsoSize)}");
+                _logger.LogMessage($"Total ISOs to test: {isoFilesToTest.Count}.");
                 _logger.LogMessage($"Search in subfolders: {searchSubfolders}");
                 if (moveSuccessful) _logger.LogMessage($"Moving successful files to: {successFolder}"); // This is a subfolder, so it's fine.
                 if (moveFailed) _logger.LogMessage($"Moving failed files to: {failedFolder}");
@@ -497,6 +378,12 @@ public partial class MainWindow
                 try
                 {
                     await PerformBatchIsoTestAsync(extractXisoPath, inputFolder, moveSuccessful, successFolder, moveFailed, failedFolder, isoFilesToTest);
+                }
+                catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // ERROR_DISK_FULL
+                {
+                    _logger.LogMessage($"Operation stopped due to insufficient disk space: {ex.Message}");
+                    _messageBoxService.ShowError("The operation was stopped because the disk is full. Please free up some space and try again.");
+                    UpdateStatus("Operation failed: Disk full.");
                 }
                 catch (OperationCanceledException)
                 {
