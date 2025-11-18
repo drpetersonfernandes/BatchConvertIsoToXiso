@@ -1,6 +1,6 @@
 # Batch Convert ISO to XISO
 
-A GUI application for **extract-xiso** that provides a simple Windows WPF interface for batch converting Xbox ISO files to the optimized XISO format and testing their integrity. This application supports both **Xbox 360 ISOs** and **original Xbox ISOs**. It also supports extracting and converting ISO files contained within ZIP, 7Z, and RAR archives using the SevenZipExtractor library.
+A GUI application for **extract-xiso** that provides a simple Windows WPF interface for batch converting Xbox ISO files to the optimized XISO format and testing their integrity. This application supports both **Xbox 360 ISOs** and **original Xbox ISOs**. It also supports extracting and converting ISO files contained within ZIP, 7Z, and RAR archives using the SevenZipExtractor library, and converting CUE/BIN disc images.
 
 ⭐ **If you find this tool useful, please give us a Star on GitHub!** ⭐
 
@@ -8,12 +8,12 @@ A GUI application for **extract-xiso** that provides a simple Windows WPF interf
 
 ## Overview
 
-Batch Convert ISO to XISO is a Windows application, that provides a user-friendly interface for:
+Batch Convert ISO to XISO is a Windows application that provides a user-friendly interface for:
 1.  Converting multiple Xbox ISO files to the XISO format.
 2.  Testing the integrity of Xbox ISO files.
 
 It leverages the functionality of the `extract-xiso` command-line tool for both conversion and testing.
-For conversions, it uses the SevenZipExtractor library to handle ISOs packaged within common archive formats (ZIP, 7Z, RAR), providing a streamlined batch processing experience.
+For conversions, it uses the SevenZipExtractor library to handle ISOs packaged within common archive formats (ZIP, 7Z, RAR), and `bchunk.exe` for CUE/BIN disc images, providing a streamlined batch processing experience.
 The application features real-time progress tracking, detailed summary statistics, and disk write speed monitoring.
 
 ## Features
@@ -35,9 +35,9 @@ The application features real-time progress tracking, detailed summary statistic
     *   Real-time disk write speed monitoring.
 *   **File Management Options**:
     *   **Conversion**: Option to **delete original files after successful conversion** (applies to standalone ISOs or archives if all contained ISOs processed successfully). **Use with caution!**
-    *   **Testing**: Options to move successfully tested ISOs to a specified "Success Folder" and/or move failed ISOs to a "Failed" subfolder in the input folder.
+    *   **Testing**: Options to move successfully tested ISOs to a `_success` subfolder and/or move failed ISOs to a `_failed` subfolder, both created within the source input folder.
+*   **Temporary Folder Restriction**: Prevents selection of system temporary folders or their subfolders as input or output directories to avoid conflicts with internal temporary operations.
 *   **Global Error Reporting**: Includes a feature to automatically send silent bug reports to the developer with comprehensive error details to aid in improving the application.
-*   **Testing**: Options to move successfully tested ISOs to a `_success` subfolder and/or move failed ISOs to a `_failed` subfolder, both created within the source input folder.
 
 ## Supported File Formats
 
@@ -51,7 +51,7 @@ The application features real-time progress tracking, detailed summary statistic
 ## Requirements
 
 *   Windows 7 or later
-*   [.NET 9.0 Runtime](https://dotnet.microsoft.com/download/dotnet/9.0) (or newer)
+*   [.NET 10.0 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (or newer)
 *   **Bundled Tools**: This application includes `extract-xiso.exe` (for ISO processing), `bchunk.exe` (for CUE/BIN conversion), and `7z_x64.dll` (for archive extraction) in its release package. No separate downloads for these tools are required.
 
 ## Installation
@@ -63,16 +63,17 @@ The application features real-time progress tracking, detailed summary statistic
 ## Usage
 
 1.  **Launch the Application**.
-2.  **Select Input Folder**: Click the "Browse" button next to "Source Files Folder" (for conversion) or "ISO Files Folder" (for testing). Choose the folder containing your ISO files. For conversion, this folder can also contain archives (ZIP, 7Z, RAR) with ISOs. For testing, only direct `.iso` files in this folder will be processed.
-3.  **Select Output Folder (for Conversion)**: Click the "Browse" button next to "Output XISO Folder".
-    This is where converted XISO files will be saved. (Note: For the "Test ISO Integrity" tab, successfully or failed tested ISOs are moved to subfolders *within the source input folder*, not to this output folder.)
+2.  **Select Input Folder**: Click the "Browse" button next to "Source Files Folder" (for conversion) or "ISO Files Folder" (for testing). Choose the folder containing your ISO files. For conversion, this folder can also contain archives (ZIP, 7Z, RAR) with ISOs or CUE/BIN files. For testing, only direct `.iso` files in this folder will be processed.
+3.  **Select Output Folder (for Conversion)**: Click the "Browse" button next to "Output XISO Folder". This is where converted XISO files will be saved. (Note: For the "Test ISO Integrity" tab, successfully or failed tested ISOs are moved to subfolders *within the source input folder*, not to this output folder.)
 4.  **Configure Options**:
     *   **For Conversion**:
         *   Check "Delete original files after successful conversion" if you want standalone ISOs or archive files (if all contained ISOs processed successfully) to be deleted. **Use with caution!**
         *   Check `Skip $SystemUpdate folder during conversion` if you want to omit this folder from the XISO output. This is often useful for game ISOs to save space and avoid unnecessary data.
+        *   Check `Search for files in subfolders` to include files in subdirectories of your input folder.
     *   **For Testing**:
         *   Check/uncheck "Move successfully tested ISOs to a `_success` subfolder within the source folder".
         *   Check/uncheck "Move failed tested ISOs to a `_failed` subfolder within the source folder".
+        *   Check `Search for files in subfolders` to include files in subdirectories of your input folder.
 5.  **Choose Action**:
     *   Click **"Start Conversion"** to convert ISOs to XISO format.
     *   Click **"Start Test"** to test the integrity of ISO files.
@@ -101,9 +102,11 @@ XISO is the native disk image format used by Xbox consoles. It is essentially an
 ## Troubleshooting
 
 *   **`extract-xiso.exe` or `bchunk.exe` Missing**: Ensure `extract-xiso.exe` and `bchunk.exe` are present in the same directory as the application. They are bundled with the release, so if one is missing, re-extract the application. `extract-xiso.exe` is crucial for both conversion and testing. `bchunk.exe` is required for converting CUE/BIN files.
+*   **`7z_x64.dll` Missing**: If you encounter errors related to archive extraction (ZIP, 7Z, RAR) and the log mentions `7z_x64.dll` not being found, ensure that `7z_x64.dll` is present in the same directory as the application executable. This library is essential for archive processing.
+*   **Temporary Folder Restriction**: The application prevents selecting the system's temporary folder or its subfolders as input or output directories. This is to avoid conflicts with the application's internal temporary file operations. Please choose a different location for your source and destination files.
 *   **Archive Extraction Failed (e.g., "File is corrupted")**: If you encounter errors like "File is corrupted. Data error has occurred." when processing `.zip`, `.7z`, or `.rar` files, it indicates that the archive itself is damaged or incomplete. This application cannot repair corrupted archives. Please verify the integrity of your source archive files.
 *   **"Not enough space on the disk"**: This error occurs when the drive where files are being processed (input, output, or temporary extraction folders) runs out of space. Ensure you have sufficient free disk space, especially when converting or testing many large files, as temporary files can consume significant space during the process.
-*   **Invalid ISO**: If `extract-xiso` reports that an ISO is "not a valid xbox iso image", the file may be corrupted or not a true Xbox/Xbox 360 ISO. Review the application log for detailed error messages from `extract-xiso`.
+*   **Invalid ISO / `extract-xiso` Errors**: If `extract-xiso` reports that an ISO is "not a valid xbox iso image" or exits with an unexpected code (e.g., 1), the file may be corrupted, from a different console (like PlayStation), or not a true Xbox/Xbox 360 ISO. The application attempts to log detailed output from `extract-xiso`. Review the application log for specific messages. Some exit code 1 scenarios are handled as 'skipped' or 'success' if `extract-xiso`'s output indicates it (e.g., 'already optimized').
 *   **Permissions**: Make sure you have appropriate read permissions for the input folder and write permissions for the output folder and temporary extraction folders.
 *   **Review Logs**: Always review the application's log window for detailed error messages during any operation.
 *   **Automatic Error Reports**: Automatic error reports will be sent to the developer if unexpected issues occur, helping to improve the application.
@@ -112,6 +115,7 @@ XISO is the native disk image format used by Xbox consoles. It is essentially an
 
 *   This application is a **GUI wrapper for extract-xiso**. We extend our heartfelt thanks and acknowledgment to the **XboxDev team** for creating and maintaining the powerful `extract-xiso` command-line tool that makes this application possible. Without their excellent work, this GUI interface would not exist.
 *   Uses **extract-xiso** for the core ISO to XISO conversion and ISO integrity testing. [Find more information or source here (on GitHub)](https://github.com/XboxDev/extract-xiso).
+*   Uses **bchunk** for CUE/BIN to ISO conversion. [Find more information or source here (on GitHub)](https://github.com/psx-tools/bchunk).
 *   Uses **SevenZipSharp** for archive extraction. [Find more information or source here (on GitHub)](https://github.com/squid-box/SevenZipSharp).
 *   Developed by [Pure Logic Code](https://www.purelogiccode.com).
 
