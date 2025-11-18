@@ -236,7 +236,8 @@ public partial class MainWindow
                 _logger.LogMessage($"INFO: Temporary drive '{tempDriveLetter}' has {Formatter.FormatBytes(tempDriveInfo.AvailableFreeSpace)} free space (required for conversion: {Formatter.FormatBytes(maxTempSpaceNeededForConversion)}).");
 
                 var totalInputSize = await CalculateTotalInputFileSizeAsync(topLevelEntries);
-                var requiredOutputSpace = (long)(totalInputSize * 1.1); // 10% buffer for potential slight size increase or temporary files
+                // Buffer for output space (20%)
+                var requiredOutputSpace = (long)(totalInputSize * 1.2);
                 if (!CheckDriveSpace(outputFolder, requiredOutputSpace, "output"))
                 {
                     SetControlsState(true);
