@@ -86,10 +86,10 @@ public partial class App
         services.AddSingleton<ILogger, LoggerService>();
         services.AddSingleton<IMessageBoxService, MessageBoxService>();
         services.AddSingleton<IUrlOpener, UrlOpenerService>();
-        services.AddSingleton<IFileExtractor, FileExtractorService>(provider =>
+        services.AddSingleton<IFileExtractor, FileExtractorService>(static provider =>
             new FileExtractorService(provider.GetRequiredService<ILogger>(),
                 provider.GetRequiredService<IBugReportService>()));
-        services.AddSingleton<IFileMover, FileMoverService>(provider =>
+        services.AddSingleton<IFileMover, FileMoverService>(static provider =>
             new FileMoverService(provider.GetRequiredService<ILogger>(),
                 provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<IFileExtractor, FileExtractorService>();
