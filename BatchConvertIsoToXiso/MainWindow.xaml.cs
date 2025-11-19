@@ -6,7 +6,6 @@ using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Threading;
 using BatchConvertIsoToXiso.Services;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace BatchConvertIsoToXiso;
 
@@ -20,7 +19,6 @@ public partial class MainWindow
     private readonly IFileExtractor _fileExtractor;
     private readonly IFileMover _fileMover;
     private readonly IUrlOpener _urlOpener;
-    private readonly IServiceProvider _serviceProvider;
 
     // Summary Stats
     private DateTime _operationStartTime;
@@ -40,7 +38,9 @@ public partial class MainWindow
     private int _totalProcessedFiles;
     private readonly List<string> _failedConversionFilePaths = new();
 
-    public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService, IMessageBoxService messageBoxService, IFileExtractor fileExtractor, IFileMover fileMover, IUrlOpener urlOpener, IServiceProvider serviceProvider)
+    public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
+        IMessageBoxService messageBoxService, IFileExtractor fileExtractor,
+        IFileMover fileMover, IUrlOpener urlOpener)
     {
         InitializeComponent();
 
@@ -51,7 +51,6 @@ public partial class MainWindow
         _fileExtractor = fileExtractor;
         _fileMover = fileMover;
         _urlOpener = urlOpener;
-        _serviceProvider = serviceProvider;
 
         _logger.Initialize(LogViewer);
 
@@ -443,8 +442,10 @@ public partial class MainWindow
     {
         try
         {
-            var aboutWindow = _serviceProvider.GetRequiredService<AboutWindow>();
-            aboutWindow.Owner = this;
+            var aboutWindow = new AboutWindow(_urlOpener, _messageBoxService)
+            {
+                Owner = this
+            };
             aboutWindow.ShowDialog();
         }
         catch (Exception ex)

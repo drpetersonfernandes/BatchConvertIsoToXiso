@@ -455,11 +455,11 @@ public partial class MainWindow : IDisposable
             var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
             localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);
 
-            // 3. Move the original file from source (potentially UNC) to local temp
-            _logger.LogMessage($"{logPrefix} Moving from '{inputFile}' to local temp '{localTempIsoPath}'...");
+            // 3. Copy the original file from source (potentially UNC) to local temp
+            _logger.LogMessage($"{logPrefix} Copying from '{inputFile}' to local temp '{localTempIsoPath}'...");
             SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Monitor temp drive for move write
-            await Task.Run(() => File.Move(inputFile, localTempIsoPath, true), _cts.Token);
-            _logger.LogMessage($"{logPrefix} Successfully moved to local temp.");
+            await Task.Run(() => File.Copy(inputFile, localTempIsoPath, true), _cts.Token);
+            _logger.LogMessage($"{logPrefix} Successfully copied to local temp.");
 
             // 4. Run extract-xiso on the local temporary file
             SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Still monitoring temp drive for in-place rewrite

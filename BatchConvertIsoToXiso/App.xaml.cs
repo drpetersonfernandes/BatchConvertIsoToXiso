@@ -11,12 +11,12 @@ namespace BatchConvertIsoToXiso;
 
 public partial class App
 {
-    public const string BugReportApiUrl = "https://www.purelogiccode.com/bugreport/api/send-bug-report";
-    public const string BugReportApiKey = "hjh7yu6t56tyr540o9u8767676r5674534453235264c75b6t7ggghgg76trf564e";
+    private const string BugReportApiUrl = "https://www.purelogiccode.com/bugreport/api/send-bug-report";
+    private const string BugReportApiKey = "hjh7yu6t56tyr540o9u8767676r5674534453235264c75b6t7ggghgg76trf564e";
     public const string ApplicationName = "BatchConvertIsoToXiso";
 
     private IBugReportService? _bugReportService;
-    public static IServiceProvider? ServiceProvider { get; private set; }
+    private static IServiceProvider? ServiceProvider { get; set; }
     private IMessageBoxService? _messageBoxService;
 
     public App()
@@ -40,7 +40,9 @@ public partial class App
         CleanupTemporaryFolders();
         InitializeSevenZipSharp();
 
-        var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
+        // Create and show the main window
+        using var scope = ServiceProvider.CreateScope();
+        var mainWindow = scope.ServiceProvider.GetRequiredService<MainWindow>();
         mainWindow.Show();
     }
 
@@ -50,7 +52,7 @@ public partial class App
         if (ServiceProvider != null)
         {
             var disposableServices = ServiceProvider.GetServices<object>()
-                .Where(s => s is IDisposable)
+                .Where(static s => s is IDisposable)
                 .Cast<IDisposable>();
 
             foreach (var service in disposableServices)
@@ -76,7 +78,7 @@ public partial class App
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton<IBugReportService>(provider =>
+        services.AddSingleton<IBugReportService>(static provider =>
         {
             var service = new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName);
             provider.GetService<ILogger>(); // Ensure logger is created
@@ -86,16 +88,13 @@ public partial class App
         services.AddSingleton<ILogger, LoggerService>();
         services.AddSingleton<IMessageBoxService, MessageBoxService>();
         services.AddSingleton<IUrlOpener, UrlOpenerService>();
-        services.AddSingleton<IFileExtractor, FileExtractorService>(static provider =>
-            new FileExtractorService(provider.GetRequiredService<ILogger>(),
-                provider.GetRequiredService<IBugReportService>()));
-        services.AddSingleton<IFileMover, FileMoverService>(static provider =>
-            new FileMoverService(provider.GetRequiredService<ILogger>(),
-                provider.GetRequiredService<IBugReportService>()));
-        services.AddTransient<IFileExtractor, FileExtractorService>();
-        services.AddTransient<IFileMover, FileMoverService>();
+
+        services.AddTransient<IFileExtractor, FileExtractorService>(static provider => new FileExtractorService(provider.GetRequiredService<ILogger>(),
+            provider.GetRequiredService<IBugReportService>()));
+        services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(),
+            provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<AboutWindow>();
-        services.AddSingleton<MainWindow>();
+        services.AddTransient<MainWindow>();
     }
 
     private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
