@@ -15,20 +15,7 @@ public interface ISettingsService
 
 public class SettingsService : ISettingsService
 {
-    private readonly string _settingsFilePath;
-
-    public SettingsService()
-    {
-        var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var appFolder = Path.Combine(appDataPath, "BatchConvertIsoToXiso");
-
-        if (!Directory.Exists(appFolder))
-        {
-            Directory.CreateDirectory(appFolder);
-        }
-
-        _settingsFilePath = Path.Combine(appFolder, "settings.xml");
-    }
+    private readonly string _settingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.xml");
 
     public ApplicationSettings LoadSettings()
     {
