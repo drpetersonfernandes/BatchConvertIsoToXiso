@@ -598,7 +598,7 @@ public partial class MainWindow : IDisposable
             {
                 try
                 {
-                    if (processRef != null && !processRef.HasExited)
+                    if (processRef is { HasExited: false })
                     {
                         _logger.LogMessage($"Attempting graceful termination of extract-xiso for {originalFileName}...");
 
