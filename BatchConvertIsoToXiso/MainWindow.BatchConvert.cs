@@ -540,17 +540,14 @@ public partial class MainWindow : IDisposable
             // Clean up the local temporary working directory and its contents
             if (!string.IsNullOrEmpty(localTempWorkingDir))
             {
-                try
+                var success = await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(localTempWorkingDir, 5, 2000, _logger);
+                if (success)
                 {
-                    if (Directory.Exists(localTempWorkingDir))
-                    {
-                        await Task.Run(() => Directory.Delete(localTempWorkingDir, true), _cts.Token);
-                        _logger.LogMessage($"{logPrefix} Cleaned up local temporary working directory: {localTempWorkingDir}");
-                    }
+                    _logger.LogMessage($"{logPrefix} Cleaned up local temporary working directory: {localTempWorkingDir}");
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogMessage($"{logPrefix} Error cleaning up local temporary working directory {localTempWorkingDir}: {ex.Message}");
+                    _logger.LogMessage($"{logPrefix} WARNING: Failed to clean up local temporary working directory: {localTempWorkingDir}");
                 }
             }
         }
@@ -596,38 +593,15 @@ public partial class MainWindow : IDisposable
 
             cancellationRegistration = _cts.Token.Register(() =>
             {
-                try
+                if (processRef != null)
                 {
-                    if (processRef is { HasExited: false })
+                    _logger.LogMessage($"Cancellation requested for extract-xiso processing {originalFileName}.");
+                    var success = ProcessTerminatorHelper.TerminateProcess(processRef, $"extract-xiso ({originalFileName})", _logger);
+
+                    if (!success)
                     {
-                        _logger.LogMessage($"Attempting graceful termination of extract-xiso for {originalFileName}...");
-
-                        // Try graceful shutdown first
-                        try
-                        {
-                            processRef.CloseMainWindow();
-                            if (!processRef.WaitForExit(3000)) // Wait 3 seconds for graceful exit
-                            {
-                                _logger.LogMessage($"Graceful termination failed, forcing process kill for {originalFileName}");
-                                processRef.Kill(true);
-                            }
-                        }
-                        catch
-                        {
-                            // If graceful close fails, force kill
-                            processRef.Kill(true);
-                        }
-
-                        // Wait for process to fully exit and release file handles
-                        if (!processRef.WaitForExit(5000))
-                        {
-                            _logger.LogMessage($"Warning: Process for {originalFileName} did not exit within timeout.");
-                        }
+                        _logger.LogMessage($"WARNING: Failed to terminate extract-xiso process for {originalFileName}. File locks may persist.");
                     }
-                }
-                catch
-                {
-                    // Ignore kill errors - process may have already exited
                 }
             });
 

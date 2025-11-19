@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Threading;
+using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
 
 namespace BatchConvertIsoToXiso;
@@ -19,6 +20,7 @@ public partial class MainWindow
     private readonly IFileExtractor _fileExtractor;
     private readonly IFileMover _fileMover;
     private readonly IUrlOpener _urlOpener;
+    private readonly ISettingsService _settingsService;
 
     // Summary Stats
     private DateTime _operationStartTime;
@@ -40,7 +42,7 @@ public partial class MainWindow
 
     public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
         IMessageBoxService messageBoxService, IFileExtractor fileExtractor,
-        IFileMover fileMover, IUrlOpener urlOpener)
+        IFileMover fileMover, IUrlOpener urlOpener, ISettingsService settingsService)
     {
         InitializeComponent();
 
@@ -51,8 +53,11 @@ public partial class MainWindow
         _fileExtractor = fileExtractor;
         _fileMover = fileMover;
         _urlOpener = urlOpener;
+        _settingsService = settingsService;
 
         _logger.Initialize(LogViewer);
+
+        LoadSettings();
 
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _processingTimer.Tick += ProcessingTimer_Tick;
@@ -65,6 +70,46 @@ public partial class MainWindow
     private void UpdateStatus(string status)
     {
         StatusTextBlock.Text = status;
+    }
+
+    private void LoadSettings()
+    {
+        var settings = _settingsService.LoadSettings();
+
+        ConversionInputFolderTextBox.Text = settings.ConversionInputFolder;
+        ConversionOutputFolderTextBox.Text = settings.ConversionOutputFolder;
+        TestInputFolderTextBox.Text = settings.TestInputFolder;
+        DeleteOriginalsCheckBox.IsChecked = settings.DeleteOriginals;
+        SearchSubfoldersConversionCheckBox.IsChecked = settings.SearchSubfoldersConversion;
+        SkipSystemUpdateCheckBox.IsChecked = settings.SkipSystemUpdate;
+        MoveSuccessFilesCheckBox.IsChecked = settings.MoveSuccessFiles;
+        MoveFailedFilesCheckBox.IsChecked = settings.MoveFailedFiles;
+        SearchSubfoldersTestCheckBox.IsChecked = settings.SearchSubfoldersTest;
+    }
+
+    private void SaveSettings()
+    {
+        var settings = new ApplicationSettings
+        {
+            ConversionInputFolder = ConversionInputFolderTextBox.Text,
+            ConversionOutputFolder = ConversionOutputFolderTextBox.Text,
+            TestInputFolder = TestInputFolderTextBox.Text,
+            DeleteOriginals = DeleteOriginalsCheckBox.IsChecked ?? false,
+            SearchSubfoldersConversion = SearchSubfoldersConversionCheckBox.IsChecked ?? false,
+            SkipSystemUpdate = SkipSystemUpdateCheckBox.IsChecked ?? false,
+            MoveSuccessFiles = MoveSuccessFilesCheckBox.IsChecked ?? false,
+            MoveFailedFiles = MoveFailedFilesCheckBox.IsChecked ?? false,
+            SearchSubfoldersTest = SearchSubfoldersTestCheckBox.IsChecked ?? false
+        };
+
+        _settingsService.SaveSettings(settings);
+    }
+
+    private async Task PreOperationCleanupAsync()
+    {
+        _logger.LogMessage("Performing pre-operation cleanup of temporary folders...");
+        await TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_logger);
+        _logger.LogMessage("Pre-operation cleanup completed.");
     }
 
     private void BrowseConversionInputButton_Click(object sender, RoutedEventArgs e)
@@ -123,6 +168,9 @@ public partial class MainWindow
 
             _isOperationRunning = true; // Set immediately
             SetControlsState(false); // Disable controls immediately
+
+            await PreOperationCleanupAsync();
+
             try
             {
                 LogViewer.Clear();
@@ -275,6 +323,9 @@ public partial class MainWindow
 
             _isOperationRunning = true;
             SetControlsState(false); // Disable controls immediately
+
+            await PreOperationCleanupAsync();
+
             try
             {
                 Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
@@ -569,33 +620,17 @@ public partial class MainWindow
         _logger.LogMessage("Cleaning up remaining temporary extraction folders...");
         foreach (var folder in tempFolders.ToList())
         {
-            try
+            var success = await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(folder, 5, 2000, _logger);
+            if (success)
             {
-                if (!Directory.Exists(folder))
-                {
-                    tempFolders.Remove(folder);
-                    continue;
-                }
-
-                // Try cleanup with retries for locked files
-                var deleted = await TryDeleteDirectoryWithRetryAsync(folder, 3, 1000);
-                if (deleted)
-                {
-                    tempFolders.Remove(folder);
-                }
-                else
-                {
-                    _logger.LogMessage($"Could not delete temp folder {folder} after multiple attempts. It may contain locked files.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"Error cleaning temp folder {folder}: {ex.Message}");
+                tempFolders.Remove(folder);
             }
         }
 
-        if (tempFolders.Count == 0) _logger.LogMessage("Temporary folder cleanup complete.");
-        else _logger.LogMessage("Some temporary folders could not be cleaned automatically.");
+        if (tempFolders.Count == 0)
+            _logger.LogMessage("Temporary folder cleanup complete.");
+        else
+            _logger.LogMessage($"WARNING: {tempFolders.Count} temporary folders could not be cleaned automatically.");
     }
 
     /// <summary>
@@ -717,6 +752,8 @@ public partial class MainWindow
 
     private void Window_Closing(object sender, CancelEventArgs e)
     {
+        SaveSettings();
+
         if (_isOperationRunning)
         {
             var result = _messageBoxService.Show("An operation is still running. Do you want to cancel and exit?", "Operation in Progress", MessageBoxButton.YesNo, MessageBoxImage.Warning);

@@ -40,6 +40,9 @@ public partial class App
         CleanupTemporaryFolders();
         InitializeSevenZipSharp();
 
+        // Startup cleanup
+        _ = TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_messageBoxService as ILogger ?? new LoggerService());
+
         // Create and show the main window
         using var scope = ServiceProvider.CreateScope();
         var mainWindow = scope.ServiceProvider.GetRequiredService<MainWindow>();
@@ -48,6 +51,9 @@ public partial class App
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Exit cleanup
+        _ = TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_messageBoxService as ILogger ?? new LoggerService());
+
         // Dispose registered services that implement IDisposable
         if (ServiceProvider != null)
         {
@@ -78,12 +84,9 @@ public partial class App
 
     private static void ConfigureServices(IServiceCollection services)
     {
+        services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IBugReportService>(static provider =>
-        {
-            var service = new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName);
-            provider.GetService<ILogger>(); // Ensure logger is created
-            return service;
-        });
+            new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
         services.AddSingleton<IUpdateChecker, UpdateChecker>();
         services.AddSingleton<ILogger, LoggerService>();
         services.AddSingleton<IMessageBoxService, MessageBoxService>();

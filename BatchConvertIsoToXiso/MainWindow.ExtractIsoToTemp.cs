@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using BatchConvertIsoToXiso.Services;
 
 namespace BatchConvertIsoToXiso;
 
@@ -39,35 +40,15 @@ public partial class MainWindow
 
             cancellationRegistration = _cts.Token.Register(() =>
             {
-                try
+                if (processRef != null)
                 {
-                    if (processRef != null && !processRef.HasExited)
+                    _logger.LogMessage($"    Cancellation requested for extract-xiso extraction of {isoFileName}.");
+                    var success = ProcessTerminatorHelper.TerminateProcess(processRef, $"extract-xiso extraction ({isoFileName})", _logger);
+
+                    if (!success)
                     {
-                        _logger.LogMessage($"    Attempting graceful termination of extract-xiso for {isoFileName}...");
-
-                        try
-                        {
-                            processRef.CloseMainWindow();
-                            if (!processRef.WaitForExit(3000))
-                            {
-                                _logger.LogMessage("    Graceful termination failed, forcing process kill");
-                                processRef.Kill(true);
-                            }
-                        }
-                        catch
-                        {
-                            processRef.Kill(true);
-                        }
-
-                        if (!processRef.WaitForExit(5000))
-                        {
-                            _logger.LogMessage("    Warning: extract-xiso process did not exit within timeout.");
-                        }
+                        _logger.LogMessage($"    WARNING: Failed to terminate extract-xiso extraction process for {isoFileName}. File locks may persist.");
                     }
-                }
-                catch
-                {
-                    // Ignore kill errors - process may have already exited
                 }
             });
 
@@ -204,6 +185,16 @@ public partial class MainWindow
         }
         finally
         {
+            // Clean up temp extraction directory
+            if (Directory.Exists(tempExtractionDir))
+            {
+                var success = await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(tempExtractionDir, 5, 2000, _logger);
+                if (!success)
+                {
+                    _logger.LogMessage($"    WARNING: Failed to clean up temp extraction directory: {Path.GetFileName(tempExtractionDir)}");
+                }
+            }
+
             await cancellationRegistration.DisposeAsync();
         }
     }
