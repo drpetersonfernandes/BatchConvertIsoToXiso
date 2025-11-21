@@ -529,6 +529,12 @@ public partial class MainWindow : IDisposable
             _logger.LogMessage($"{logPrefix} Operation canceled during processing.");
             throw;
         }
+        catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // ERROR_DISK_FULL
+        {
+            _logger.LogMessage($"{logPrefix} Error processing: {ex.Message}");
+            _ = ReportBugAsync($"Error processing file: {originalFileName}", ex);
+            throw; // Re-throw to stop the operation due to insufficient disk space
+        }
         catch (Exception ex)
         {
             _logger.LogMessage($"{logPrefix} Error processing: {ex.Message}");
