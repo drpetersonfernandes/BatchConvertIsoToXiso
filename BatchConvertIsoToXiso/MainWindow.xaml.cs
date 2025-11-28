@@ -353,7 +353,6 @@ public partial class MainWindow
                     _logger.LogMessage("Error: extract-xiso.exe not found.");
                     _messageBoxService.ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
                     SetControlsState(true);
-                    _ = ReportBugAsync("extract-xiso.exe not found at start of ISO test.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
                     _isOperationRunning = false;
                     return;
                 }

@@ -13,7 +13,6 @@ public partial class MainWindow
         if (!File.Exists(bchunkPath))
         {
             _logger.LogMessage("  Error: bchunk.exe not found. Cannot convert CUE/BIN files.");
-            _ = ReportBugAsync("bchunk.exe not found for CUE/BIN conversion.");
             return null;
         }
 
