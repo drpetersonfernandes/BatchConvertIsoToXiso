@@ -102,7 +102,6 @@ public partial class MainWindow
         {
             // This catch block should now primarily handle issues during counter-creation/access after existence checks.
             _logger.LogMessage($"Error initializing performance counter for drive {perfCounterInstanceName}: {ex.Message}. Write speed monitoring disabled.");
-            _ = ReportBugAsync($"PerfCounter Init InvalidOpExc for {perfCounterInstanceName}", ex);
             _diskWriteSpeedCounter?.Dispose();
             _diskWriteSpeedCounter = null;
             _activeMonitoringDriveLetter = null;

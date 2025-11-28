@@ -57,35 +57,46 @@ public partial class MainWindow
             {
                 try
                 {
-                    if (processRef != null && !processRef.HasExited)
+                    if (processRef != null)
                     {
-                        _logger.LogMessage($"  Attempting graceful termination of bchunk for {Path.GetFileName(cuePath)}...");
-
-                        // Try graceful shutdown first
                         try
                         {
-                            processRef.CloseMainWindow();
-                            if (!processRef.WaitForExit(3000))
+                            if (!processRef.HasExited)
                             {
-                                _logger.LogMessage("  Graceful termination failed, forcing process kill for bchunk");
-                                processRef.Kill(true);
+                                _logger.LogMessage($"  Attempting graceful termination of bchunk for {Path.GetFileName(cuePath)}...");
+
+                                // Try graceful shutdown first
+                                try
+                                {
+                                    processRef.CloseMainWindow();
+                                    if (!processRef.WaitForExit(3000))
+                                    {
+                                        _logger.LogMessage("  Graceful termination failed, forcing process kill for bchunk");
+                                        processRef.Kill(true);
+                                    }
+                                }
+                                catch
+                                {
+                                    processRef.Kill(true);
+                                }
+
+                                // Wait for process to fully exit
+                                if (!processRef.WaitForExit(5000))
+                                {
+                                    _logger.LogMessage("  Warning: bchunk process did not exit within timeout.");
+                                }
                             }
                         }
-                        catch
+                        catch (InvalidOperationException)
                         {
-                            processRef.Kill(true);
-                        }
-
-                        // Wait for process to fully exit
-                        if (!processRef.WaitForExit(5000))
-                        {
-                            _logger.LogMessage("  Warning: bchunk process did not exit within timeout.");
+                            // Process already exited
+                            _logger.LogMessage($"  bchunk process for {Path.GetFileName(cuePath)} already exited.");
                         }
                     }
                 }
                 catch
                 {
-                    // Ignore kill errors - process may have already exited
+                    // Ignore errors - process may have already exited or been disposed
                 }
             });
             process.OutputDataReceived += (_, args) =>

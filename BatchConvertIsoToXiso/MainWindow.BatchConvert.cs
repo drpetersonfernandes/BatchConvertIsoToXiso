@@ -599,15 +599,22 @@ public partial class MainWindow : IDisposable
 
             cancellationRegistration = _cts.Token.Register(() =>
             {
-                if (processRef != null)
+                try
                 {
-                    _logger.LogMessage($"Cancellation requested for extract-xiso processing {originalFileName}.");
-                    var success = ProcessTerminatorHelper.TerminateProcess(processRef, $"extract-xiso ({originalFileName})", _logger);
-
-                    if (!success)
+                    if (processRef != null)
                     {
-                        _logger.LogMessage($"WARNING: Failed to terminate extract-xiso process for {originalFileName}. File locks may persist.");
+                        _logger.LogMessage($"Cancellation requested for extract-xiso processing {originalFileName}.");
+                        var success = ProcessTerminatorHelper.TerminateProcess(processRef, $"extract-xiso ({originalFileName})", _logger);
+
+                        if (!success)
+                        {
+                            _logger.LogMessage($"WARNING: Failed to terminate extract-xiso process for {originalFileName}. File locks may persist.");
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogMessage($"Error during cancellation of {originalFileName}: {ex.Message}");
                 }
             });
 

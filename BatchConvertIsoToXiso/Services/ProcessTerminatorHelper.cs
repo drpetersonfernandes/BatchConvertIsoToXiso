@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 
 namespace BatchConvertIsoToXiso.Services;
@@ -10,9 +10,26 @@ public static class ProcessTerminatorHelper
     /// </summary>
     public static bool TerminateProcess(Process process, string processName, ILogger logger)
     {
-        if (process.HasExited)
+        try
         {
-            logger.LogMessage($"Process {processName} has already exited.");
+            // Check if process is null or already disposed
+            if (process == null)
+            {
+                logger.LogMessage($"Process {processName} is null, nothing to terminate.");
+                return true;
+            }
+
+            // Safely check if process has exited
+            if (process.HasExited)
+            {
+                logger.LogMessage($"Process {processName} has already exited.");
+                return true;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Process was never started or already disposed
+            logger.LogMessage($"Process {processName} was not running or already disposed.");
             return true;
         }
 
@@ -47,7 +64,7 @@ public static class ProcessTerminatorHelper
         }
         catch (InvalidOperationException ex)
         {
-            logger.LogMessage($"Process {processName} already exited: {ex.Message}");
+            logger.LogMessage($"Process {processName} already exited during termination: {ex.Message}");
             return true;
         }
         catch (Win32Exception ex)

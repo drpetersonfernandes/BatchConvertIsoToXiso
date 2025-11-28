@@ -31,7 +31,6 @@ public partial class MainWindow
         else
         {
             _logger.LogMessage("WARNING: extract-xiso.exe not found. ISO conversion and testing will fail.");
-            _ = ReportBugAsync("extract-xiso.exe not found.");
         }
 
         var bchunkPath = Path.Combine(appDirectory, "bchunk.exe");
@@ -42,7 +41,6 @@ public partial class MainWindow
         else
         {
             _logger.LogMessage("WARNING: bchunk.exe not found. CUE/BIN conversion will fail.");
-            _ = ReportBugAsync("bchunk.exe not found.");
         }
 
         _logger.LogMessage("INFO: Archive extraction uses the SevenZipExtractor library.");

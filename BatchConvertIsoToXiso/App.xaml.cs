@@ -18,6 +18,7 @@ public partial class App
     private IBugReportService? _bugReportService;
     private static IServiceProvider? ServiceProvider { get; set; }
     private IMessageBoxService? _messageBoxService;
+    private ILogger? _logger;
 
     public App()
     {
@@ -36,12 +37,16 @@ public partial class App
 
         _bugReportService = ServiceProvider.GetRequiredService<IBugReportService>();
         _messageBoxService = ServiceProvider.GetRequiredService<IMessageBoxService>();
+        _logger = ServiceProvider.GetRequiredService<ILogger>();
 
         CleanupTemporaryFolders();
         InitializeSevenZipSharp();
 
         // Startup cleanup
-        _ = TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_messageBoxService as ILogger ?? new LoggerService());
+        if (_logger != null)
+        {
+            _ = TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_logger);
+        }
 
         // Create and show the main window
         using var scope = ServiceProvider.CreateScope();
@@ -52,7 +57,12 @@ public partial class App
     protected override void OnExit(ExitEventArgs e)
     {
         // Exit cleanup
-        _ = TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_messageBoxService as ILogger ?? new LoggerService());
+        // Ensure _logger is not null before using it, though it should be initialized by OnStartup
+        if (_logger != null)
+        {
+            _ = TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_logger);
+        }
+
 
         // Dispose registered services that implement IDisposable
         if (ServiceProvider != null)
@@ -85,17 +95,13 @@ public partial class App
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<ISettingsService, SettingsService>();
-        services.AddSingleton<IBugReportService>(static provider =>
-            new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
+        services.AddSingleton<IBugReportService>(static provider => new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
         services.AddSingleton<IUpdateChecker, UpdateChecker>();
         services.AddSingleton<ILogger, LoggerService>();
         services.AddSingleton<IMessageBoxService, MessageBoxService>();
         services.AddSingleton<IUrlOpener, UrlOpenerService>();
-
-        services.AddTransient<IFileExtractor, FileExtractorService>(static provider => new FileExtractorService(provider.GetRequiredService<ILogger>(),
-            provider.GetRequiredService<IBugReportService>()));
-        services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(),
-            provider.GetRequiredService<IBugReportService>()));
+        services.AddTransient<IFileExtractor, FileExtractorService>(static provider => new FileExtractorService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
+        services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<AboutWindow>();
         services.AddTransient<MainWindow>();
     }
@@ -167,18 +173,10 @@ public partial class App
             }
             else
             {
+                // Inform the user about the issue.
                 const string userErrorMessage = $"Could not find the required 7-Zip x64 library: {dllName}. " +
                                                 "This application is designed for x64 systems only. Please ensure '7z_x64.dll' is in the same folder as the application. " +
                                                 "Archive extraction features (.zip, .7z, .rar) will not work.";
-
-                var bugReportMessage = $"Could not find the required 7-Zip library: {dllName} in {AppDomain.CurrentDomain.BaseDirectory}";
-
-                if (_bugReportService != null)
-                {
-                    _ = _bugReportService.SendBugReportAsync(bugReportMessage);
-                }
-
-                // Inform the user about the issue.
                 _messageBoxService?.ShowError(userErrorMessage);
             }
         }

@@ -186,7 +186,6 @@ public partial class MainWindow
                 {
                     _logger.LogMessage("Error: extract-xiso.exe not found.");
                     _messageBoxService.ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
-                    _ = ReportBugAsync("extract-xiso.exe not found at start of conversion.", new FileNotFoundException("extract-xiso.exe missing", extractXisoPath));
                     SetControlsState(true);
                     _isOperationRunning = false;
                     return;
@@ -244,6 +243,13 @@ public partial class MainWindow
                     return;
                 }
 
+                if (!await ValidateDiskSpaceAsync(topLevelEntries, outputFolder))
+                {
+                    SetControlsState(true);
+                    _isOperationRunning = false;
+                    return;
+                }
+
                 ResetSummaryStats();
 
                 _uiTotalFiles = topLevelEntries.Count;
@@ -272,7 +278,12 @@ public partial class MainWindow
                 catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // ERROR_DISK_FULL
                 {
                     _logger.LogMessage($"Operation stopped due to insufficient disk space: {ex.Message}");
-                    _messageBoxService.ShowError("The operation was stopped because the disk is full. Please free up some space and try again.");
+
+                    var tempDrive = new DriveInfo(Path.GetPathRoot(Path.GetTempPath()) ?? "C:\\");
+                    _messageBoxService.ShowError(
+                        $"The operation was stopped because the disk is full.\n\n" +
+                        $"Drive {tempDrive.Name} has only {Formatter.FormatBytes(tempDrive.AvailableFreeSpace)} free.\n\n" +
+                        $"Please free up space and try again. Large ISO files require temporary space on your system drive.");
                     UpdateStatus("Operation failed: Disk full.");
                 }
                 catch (OperationCanceledException)
@@ -805,5 +816,72 @@ public partial class MainWindow
                 return false; // Other errors, assume not locked
             }
         });
+    }
+
+    private async Task<bool> ValidateDiskSpaceAsync(List<string> topLevelEntries, string outputFolder)
+    {
+        try
+        {
+            // Check temp drive space
+            var tempPath = Path.GetTempPath();
+            var tempRoot = Path.GetPathRoot(tempPath);
+            if (string.IsNullOrEmpty(tempRoot))
+            {
+                _logger.LogMessage("Warning: Could not determine temp drive root.");
+                return true;
+            }
+
+            var tempDrive = new DriveInfo(tempRoot);
+
+            var outputRoot = Path.GetPathRoot(outputFolder);
+            if (string.IsNullOrEmpty(outputRoot))
+            {
+                _logger.LogMessage("Warning: Could not determine output drive root.");
+                return true;
+            }
+
+            var outputDrive = new DriveInfo(outputRoot);
+
+            // Calculate approximate space needed (largest file * 3 for safety margin)
+            long maxFileSize = 0;
+            foreach (var file in topLevelEntries.Where(f => Path.GetExtension(f).Equals(".iso", StringComparison.OrdinalIgnoreCase)))
+            {
+                var fileInfo = await Task.Run(() => new FileInfo(file));
+                if (fileInfo.Length > maxFileSize)
+                {
+                    maxFileSize = fileInfo.Length;
+                }
+            }
+
+            // Need space for: temp copy + conversion output
+            var requiredTempSpace = maxFileSize * 2; // Safety margin
+            var requiredOutputSpace = maxFileSize;
+
+            if (tempDrive.AvailableFreeSpace < requiredTempSpace)
+            {
+                _messageBoxService.ShowError(
+                    $"Insufficient disk space on {tempDrive.Name}\n\n" +
+                    $"Available: {Formatter.FormatBytes(tempDrive.AvailableFreeSpace)}\n" +
+                    $"Required: ~{Formatter.FormatBytes(requiredTempSpace)}\n\n" +
+                    $"Please free up space on your system drive or change your TEMP folder location.");
+                return false;
+            }
+
+            if (outputDrive.AvailableFreeSpace < requiredOutputSpace)
+            {
+                _messageBoxService.ShowError(
+                    $"Insufficient disk space on output drive {outputDrive.Name}\n\n" +
+                    $"Available: {Formatter.FormatBytes(outputDrive.AvailableFreeSpace)}\n" +
+                    $"Required: ~{Formatter.FormatBytes(requiredOutputSpace)}");
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogMessage($"Warning: Could not validate disk space: {ex.Message}");
+            return true; // Don't block operation if check fails
+        }
     }
 }

@@ -40,15 +40,22 @@ public partial class MainWindow
 
             cancellationRegistration = _cts.Token.Register(() =>
             {
-                if (processRef != null)
+                try
                 {
-                    _logger.LogMessage($"    Cancellation requested for extract-xiso extraction of {isoFileName}.");
-                    var success = ProcessTerminatorHelper.TerminateProcess(processRef, $"extract-xiso extraction ({isoFileName})", _logger);
-
-                    if (!success)
+                    if (processRef != null)
                     {
-                        _logger.LogMessage($"    WARNING: Failed to terminate extract-xiso extraction process for {isoFileName}. File locks may persist.");
+                        _logger.LogMessage($"    Cancellation requested for extract-xiso extraction of {isoFileName}.");
+                        var success = ProcessTerminatorHelper.TerminateProcess(processRef, $"extract-xiso extraction ({isoFileName})", _logger);
+
+                        if (!success)
+                        {
+                            _logger.LogMessage($"    WARNING: Failed to terminate extract-xiso extraction process for {isoFileName}. File locks may persist.");
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogMessage($"    Error during cancellation of extraction for {isoFileName}: {ex.Message}");
                 }
             });
 
