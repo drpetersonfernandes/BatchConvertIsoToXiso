@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace BatchConvertIsoToXiso;
 
@@ -193,12 +194,20 @@ public partial class MainWindow
             var lines = await File.ReadAllLinesAsync(cuePath, _cts.Token);
             foreach (var line in lines)
             {
-                if (!line.Trim().StartsWith("FILE", StringComparison.OrdinalIgnoreCase)) continue;
+                var trimmedLine = line.Trim();
+                if (!trimmedLine.StartsWith("FILE", StringComparison.OrdinalIgnoreCase)) continue;
 
-                var parts = line.Split('"');
-                if (parts.Length < 2) continue;
+                // Regex to handle both quoted ("filename.bin") and unquoted (filename.bin) formats
+                // Pattern: FILE + whitespace + (quoted group OR unquoted group) + whitespace + type
+                var match = Regex.Match(trimmedLine, """^FILE\s+(?:"(.+)"|(\S+))\s+\S+""", RegexOptions.IgnoreCase);
 
-                var binFileName = parts[1];
+                if (!match.Success) continue;
+
+                // Group 1 is the quoted content, Group 2 is the unquoted content
+                var binFileName = !string.IsNullOrEmpty(match.Groups[1].Value)
+                    ? match.Groups[1].Value
+                    : match.Groups[2].Value;
+
                 var binPath = Path.Combine(cueDir, binFileName);
                 if (await Task.Run(() => File.Exists(binPath), _cts.Token))
                 {

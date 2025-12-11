@@ -76,7 +76,7 @@ public partial class MainWindow
             if (!PerformanceCounterCategory.Exists("LogicalDisk"))
             {
                 _logger.LogMessage($"Performance counter category 'LogicalDisk' does not exist. Cannot monitor write speed for drive {perfCounterInstanceName}.");
-                Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A (Category Missing)");
+                Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A");
                 return;
             }
 
@@ -84,7 +84,7 @@ public partial class MainWindow
             if (!PerformanceCounterCategory.InstanceExists(perfCounterInstanceName, "LogicalDisk"))
             {
                 _logger.LogMessage($"Performance counter instance '{perfCounterInstanceName}' not found for 'LogicalDisk'. Cannot monitor write speed for this drive.");
-                Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A (Instance Missing)");
+                Application.Current.Dispatcher.Invoke(() => WriteSpeedValue.Text = "N/A");
                 return;
             }
 
@@ -105,7 +105,7 @@ public partial class MainWindow
             _diskWriteSpeedCounter?.Dispose();
             _diskWriteSpeedCounter = null;
             _activeMonitoringDriveLetter = null;
-            WriteSpeedValue.Text = "N/A (Error)";
+            WriteSpeedValue.Text = "N/A";
         }
         catch (Exception ex)
         {
@@ -114,7 +114,7 @@ public partial class MainWindow
             _diskWriteSpeedCounter?.Dispose();
             _diskWriteSpeedCounter = null;
             _activeMonitoringDriveLetter = null;
-            WriteSpeedValue.Text = "N/A (Error)";
+            WriteSpeedValue.Text = "N/A";
         }
         finally
         {

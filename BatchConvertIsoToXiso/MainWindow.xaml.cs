@@ -169,6 +169,7 @@ public partial class MainWindow
             _isOperationRunning = true; // Set immediately
             SetControlsState(false); // Disable controls immediately
 
+            UpdateStatus("Cleaning up temporary files...");
             await PreOperationCleanupAsync();
 
             try
@@ -340,6 +341,7 @@ public partial class MainWindow
             _isOperationRunning = true;
             SetControlsState(false); // Disable controls immediately
 
+            UpdateStatus("Cleaning up temporary files...");
             await PreOperationCleanupAsync();
 
             try
@@ -855,10 +857,17 @@ public partial class MainWindow
             long maxFileSize = 0;
             foreach (var file in topLevelEntries.Where(f => Path.GetExtension(f).Equals(".iso", StringComparison.OrdinalIgnoreCase)))
             {
-                var fileInfo = await Task.Run(() => new FileInfo(file));
-                if (fileInfo.Length > maxFileSize)
+                try
                 {
-                    maxFileSize = fileInfo.Length;
+                    var fileInfo = await Task.Run(() => new FileInfo(file));
+                    if (fileInfo.Length > maxFileSize)
+                    {
+                        maxFileSize = fileInfo.Length;
+                    }
+                }
+                catch (FileNotFoundException)
+                {
+                    continue;
                 }
             }
 

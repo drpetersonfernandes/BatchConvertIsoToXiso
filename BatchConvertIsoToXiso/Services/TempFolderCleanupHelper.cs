@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -15,9 +15,6 @@ public static class TempFolderCleanupHelper
             {
                 if (!Directory.Exists(directoryPath))
                     return true;
-
-                // Attempt to release any stale file locks
-                await TryReleaseFileLocksAsync(directoryPath, logger);
 
                 Directory.Delete(directoryPath, true);
                 logger.LogMessage($"Successfully deleted temp folder: {Path.GetFileName(directoryPath)}");
@@ -42,34 +39,6 @@ public static class TempFolderCleanupHelper
 
         logger.LogMessage($"WARNING: Could not delete '{Path.GetFileName(directoryPath)}' after {maxRetries} attempts. Manual cleanup may be needed.");
         return false;
-    }
-
-    private static Task TryReleaseFileLocksAsync(string directoryPath, ILogger logger)
-    {
-        try
-        {
-            var files = Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories);
-            foreach (var file in files)
-            {
-                try
-                {
-                    // Attempt to open file to clear stale locks
-                    using (File.Open(file, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-                    {
-                    }
-                }
-                catch
-                {
-                    // Ignore - file is legitimately locked
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogMessage($"Error during lock release for '{Path.GetFileName(directoryPath)}': {ex.Message}");
-        }
-
-        return Task.CompletedTask;
     }
 
     /// <summary>

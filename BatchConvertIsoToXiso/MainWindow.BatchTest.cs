@@ -118,6 +118,50 @@ public partial class MainWindow
                 return IsoTestResultStatus.Failed;
             }
 
+            // ---------------------------------------------------------
+            // ATTEMPT 1: Direct Extraction (Saves Temp Space & Time)
+            // ---------------------------------------------------------
+            _logger.LogMessage($"  Attempting direct extraction test on '{isoFileName}'...");
+            bool directSuccess;
+            try
+            {
+                // Try extracting directly from source.
+                // This avoids copying the 8GB+ ISO to temp if the path is accessible.
+                directSuccess = await RunIsoExtractionToTempAsync(extractXisoPath, isoFilePath, tempExtractionDir);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogMessage($"  Direct extraction encountered an error: {ex.Message}. Proceeding to fallback.");
+                directSuccess = false;
+            }
+
+            if (directSuccess)
+            {
+                return IsoTestResultStatus.Passed;
+            }
+
+            // ---------------------------------------------------------
+            // ATTEMPT 2: Fallback (Copy to Temp -> Extract)
+            // ---------------------------------------------------------
+            // If direct extraction failed (e.g. network path issues, weird characters, permissions),
+            // we fall back to the original logic: Copy to temp with a simple name.
+            _logger.LogMessage($"  Direct extraction failed. Falling back to copy-to-temp strategy for '{isoFileName}'...");
+
+            // Clean up temp dir from the failed direct attempt to ensure a clean slate
+            try
+            {
+                if (Directory.Exists(tempExtractionDir))
+                {
+                    await Task.Run(() => Directory.Delete(tempExtractionDir, true), _cts.Token);
+                }
+
+                await Task.Run(() => Directory.CreateDirectory(tempExtractionDir), _cts.Token);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogMessage($"  Warning: Could not clean temp dir before fallback: {ex.Message}");
+            }
+
             // Always rename to a simple filename for testing
             var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
             simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
