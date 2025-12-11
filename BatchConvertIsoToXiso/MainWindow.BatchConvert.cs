@@ -532,7 +532,6 @@ public partial class MainWindow : IDisposable
         catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // ERROR_DISK_FULL
         {
             _logger.LogMessage($"{logPrefix} Error processing: {ex.Message}");
-            _ = ReportBugAsync($"Error processing file: {originalFileName}", ex);
             throw; // Re-throw to stop the operation due to insufficient disk space
         }
         catch (Exception ex)
@@ -695,6 +694,14 @@ public partial class MainWindow : IDisposable
                     _logger.LogMessage($"extract-xiso -r for {originalFileName} exited with 1 but no 'skipped' or 'success' message. Treating as failure.");
                     _ = ReportBugAsync($"extract-xiso -r for {originalFileName} exited 1 without skip/success message. Output: {string.Join(Environment.NewLine, localProcessOutputLines)}");
                     return ConversionToolResultStatus.Failed;
+
+                case -1073741701: // 0xC000007B (STATUS_INVALID_IMAGE_FORMAT)
+                case -1073741515: // 0xC0000135 (STATUS_DLL_NOT_FOUND)
+                    _logger.LogMessage($"ERROR: extract-xiso failed to start (Exit Code: {process.ExitCode}).");
+                    _logger.LogMessage("This usually indicates missing Visual C++ Redistributables or a corrupted system file.");
+                    _logger.LogMessage("Please ensure you have the 'Visual C++ Redistributable for Visual Studio 2015-2022' (x86 and x64) installed.");
+                    return ConversionToolResultStatus.Failed;
+
                 default:
                     _ = ReportBugAsync($"extract-xiso -r failed for {originalFileName} with exit code {process.ExitCode}. Output: {string.Join(Environment.NewLine, localProcessOutputLines)}");
                     return ConversionToolResultStatus.Failed;

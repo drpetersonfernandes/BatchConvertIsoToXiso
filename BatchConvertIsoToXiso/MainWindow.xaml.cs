@@ -215,8 +215,13 @@ public partial class MainWindow
                 List<string> topLevelEntries;
                 try
                 {
-                    var searchOption = searchSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                    topLevelEntries = await Task.Run(() => Directory.GetFiles(inputFolder, "*.*", searchOption)
+                    var enumOptions = new EnumerationOptions
+                    {
+                        IgnoreInaccessible = true,
+                        RecurseSubdirectories = searchSubfolders
+                    };
+
+                    topLevelEntries = await Task.Run(() => Directory.GetFiles(inputFolder, "*.*", enumOptions)
                             .Where(static f =>
                             {
                                 var ext = Path.GetExtension(f).ToLowerInvariant();
@@ -393,8 +398,13 @@ public partial class MainWindow
                 List<string> isoFilesToTest;
                 try
                 {
-                    var searchOption = searchSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                    isoFilesToTest = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", searchOption).ToList(), _cts.Token);
+                    var enumOptions = new EnumerationOptions
+                    {
+                        IgnoreInaccessible = true,
+                        RecurseSubdirectories = searchSubfolders
+                    };
+
+                    isoFilesToTest = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", enumOptions).ToList(), _cts.Token);
                 }
                 catch (Exception ex)
                 {

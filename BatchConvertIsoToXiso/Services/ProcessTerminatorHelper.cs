@@ -20,9 +20,17 @@ public static class ProcessTerminatorHelper
             }
 
             // Safely check if process has exited
-            if (process.HasExited)
+            try
             {
-                logger.LogMessage($"Process {processName} has already exited.");
+                if (process.HasExited)
+                {
+                    logger.LogMessage($"Process {processName} has already exited.");
+                    return true;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                logger.LogMessage($"Process {processName} is not associated with a running process or has been disposed.");
                 return true;
             }
         }
