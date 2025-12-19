@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Text;
 using BatchConvertIsoToXiso.Services;
 
@@ -10,6 +11,25 @@ public partial class MainWindow
     {
         try
         {
+            // --- Filter out common environmental exceptions ---
+            if (exception != null)
+            {
+                switch (exception)
+                {
+                    case DirectoryNotFoundException:
+                    case FileNotFoundException:
+                    case OperationCanceledException:
+                    // Filter out specific IOExceptions related to disconnected drives/network
+                    // "The specified network resource or device is no longer available"
+                    // "The device is not ready"
+                    case IOException ioEx when ioEx.Message.Contains("network resource", StringComparison.OrdinalIgnoreCase) ||
+                                               ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+                                               ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase):
+                        // Do not report these as bugs
+                        return;
+                }
+            }
+
             var fullReport = new StringBuilder();
             fullReport.AppendLine("=== Bug Report ===");
             fullReport.AppendLine($"Application: {App.ApplicationName}");

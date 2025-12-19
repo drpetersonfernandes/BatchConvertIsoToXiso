@@ -27,6 +27,26 @@ public partial class MainWindow : IDisposable
         {
             _cts.Token.ThrowIfCancellationRequested();
 
+            // --- Check if source file still exists before processing ---
+            if (!File.Exists(currentEntryPath))
+            {
+                var root = Path.GetPathRoot(currentEntryPath);
+                if (!string.IsNullOrEmpty(root) && !Directory.Exists(root))
+                {
+                    _logger.LogMessage($"CRITICAL: Source drive/path '{root}' is no longer accessible. Aborting batch operation.");
+                    _messageBoxService.ShowError($"The source drive '{root}' appears to have been disconnected. The operation will stop.");
+                    break; // Stop the loop immediately
+                }
+
+                _logger.LogMessage($"Error: Source file not found: {currentEntryPath}. Skipping.");
+                _uiFailedCount++;
+                _failedConversionFilePaths.Add(currentEntryPath);
+                topLevelItemsProcessed++;
+                UpdateProgressUi(topLevelItemsProcessed, _uiTotalFiles);
+                UpdateSummaryStatsUi();
+                continue;
+            }
+
             var entryFileName = Path.GetFileName(currentEntryPath);
             UpdateStatus($"Processing: {entryFileName}");
             var entryExtension = Path.GetExtension(currentEntryPath).ToLowerInvariant();
@@ -529,10 +549,30 @@ public partial class MainWindow : IDisposable
             _logger.LogMessage($"{logPrefix} Operation canceled during processing.");
             throw;
         }
-        catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // ERROR_DISK_FULL
+        // --- Handle IO/Drive errors without reporting bugs ---
+        catch (DirectoryNotFoundException ex)
         {
-            _logger.LogMessage($"{logPrefix} Error processing: {ex.Message}");
-            throw; // Re-throw to stop the operation due to insufficient disk space
+            _logger.LogMessage($"{logPrefix} Error processing: Could not find path (Drive disconnected?): {ex.Message}");
+            return FileProcessingStatus.Failed;
+        }
+        catch (FileNotFoundException ex)
+        {
+            _logger.LogMessage($"{logPrefix} Error processing: File not found: {ex.Message}");
+            return FileProcessingStatus.Failed;
+        }
+        catch (IOException ex)
+        {
+            // Check for Disk Full (112) or Network/Device lost
+            var hr = ex.HResult & 0xFFFF;
+            if (hr == 112) // ERROR_DISK_FULL
+            {
+                _logger.LogMessage($"{logPrefix} Error processing: Disk Full: {ex.Message}");
+                throw; // Re-throw to stop operation
+            }
+
+            _logger.LogMessage($"{logPrefix} IO Error processing (Drive/Network issue?): {ex.Message}");
+            // Do NOT report bug for generic IO errors during copy/move, usually environmental
+            return FileProcessingStatus.Failed;
         }
         catch (Exception ex)
         {
