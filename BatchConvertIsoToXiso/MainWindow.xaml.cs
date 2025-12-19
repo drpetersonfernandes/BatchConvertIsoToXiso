@@ -243,7 +243,12 @@ public partial class MainWindow
                 catch (Exception ex)
                 {
                     _logger.LogMessage($"Error scanning input folder for conversion: {ex.Message}");
-                    _ = ReportBugAsync("Error scanning input folder", ex);
+                    // Only report unexpected errors, not missing directories/files
+                    if (ex is not DirectoryNotFoundException && ex is not FileNotFoundException)
+                    {
+                        _ = ReportBugAsync("Error scanning input folder", ex);
+                    }
+
                     SetControlsState(true);
                     _isOperationRunning = false;
                     return;
@@ -411,7 +416,12 @@ public partial class MainWindow
                 catch (Exception ex)
                 {
                     _logger.LogMessage($"Error scanning input folder for .iso files: {ex.Message}");
-                    _ = ReportBugAsync("Error scanning input folder for .iso files for testing", ex);
+                    // Only report unexpected errors, not missing directories/files
+                    if (ex is not DirectoryNotFoundException && ex is not FileNotFoundException)
+                    {
+                        _ = ReportBugAsync("Error scanning input folder for .iso files for testing", ex);
+                    }
+
                     SetControlsState(true);
                     _isOperationRunning = false; // Reset flag before early return
                     return;

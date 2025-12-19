@@ -66,6 +66,7 @@ public class FileExtractorService : IFileExtractor
             var exType = ex.GetType().Name;
             if (!exType.Contains("SevenZipArchiveException") &&
                 !exType.Contains("ExtractionFailedException") &&
+                !exType.Contains("FileNotFoundException") &&
                 !ex.Message.Contains("Data error") &&
                 !ex.Message.Contains("Invalid archive"))
             {

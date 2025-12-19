@@ -110,7 +110,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             _logger.LogMessage($"Unexpected error initializing performance counter for drive {perfCounterInstanceName}: {ex.Message}. Write speed monitoring disabled.");
-            _ = ReportBugAsync($"PerfCounter Init GenericExc for {perfCounterInstanceName}", ex);
+            // Do not report bugs for performance counter initialization failures as they are often system-specific (e.g. corrupted registry)
             _diskWriteSpeedCounter?.Dispose();
             _diskWriteSpeedCounter = null;
             _activeMonitoringDriveLetter = null;
