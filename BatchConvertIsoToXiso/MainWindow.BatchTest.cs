@@ -167,7 +167,13 @@ public partial class MainWindow
             simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
 
             _logger.LogMessage($"  Copying '{isoFileName}' to simple filename '{simpleFilename}' for testing");
-            await Task.Run(() => File.Copy(isoFilePath, simpleFilePath, true), _cts.Token);
+            var copySuccess = await CopyFileWithCloudRetryAsync(isoFilePath, simpleFilePath);
+            if (!copySuccess)
+            {
+                _logger.LogMessage($"  Copy for testing failed or was skipped by user for '{isoFileName}'.");
+                // No need to clean up simpleFilePath as it was never created.
+                return IsoTestResultStatus.Failed;
+            }
 
             var extractionSuccess = await RunIsoExtractionToTempAsync(extractXisoPath, simpleFilePath, tempExtractionDir);
 

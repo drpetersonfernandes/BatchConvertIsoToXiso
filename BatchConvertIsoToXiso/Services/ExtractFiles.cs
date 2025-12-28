@@ -63,12 +63,9 @@ public class FileExtractorService : IFileExtractor
             _logger.LogMessage($"Error extracting {archiveFileName}: {ex.Message}");
 
             // Filter out common archive errors (corruption, wrong password, etc.) from bug reports
-            var exType = ex.GetType().Name;
-            if (!exType.Contains("SevenZipArchiveException") &&
-                !exType.Contains("ExtractionFailedException") &&
-                !exType.Contains("FileNotFoundException") &&
-                !ex.Message.Contains("Data error") &&
-                !ex.Message.Contains("Invalid archive"))
+            if (ex is not (SevenZipArchiveException or ExtractionFailedException or FileNotFoundException) &&
+                !ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase))
             {
                 _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. Exception: {ex}");
             }

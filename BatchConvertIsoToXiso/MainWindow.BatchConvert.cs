@@ -478,7 +478,13 @@ public partial class MainWindow : IDisposable
             // 3. Copy the original file from source (potentially UNC) to local temp
             _logger.LogMessage($"{logPrefix} Copying from '{inputFile}' to local temp '{localTempIsoPath}'...");
             SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Monitor temp drive for move write
-            await Task.Run(() => File.Copy(inputFile, localTempIsoPath, true), _cts.Token);
+            var copySuccess = await CopyFileWithCloudRetryAsync(inputFile, localTempIsoPath);
+            if (!copySuccess)
+            {
+                _logger.LogMessage($"{logPrefix} Failed to copy file to local temp (skipped by user or error).");
+                return FileProcessingStatus.Failed;
+            }
+
             _logger.LogMessage($"{logPrefix} Successfully copied to local temp.");
 
             // 4. Run extract-xiso on the local temporary file

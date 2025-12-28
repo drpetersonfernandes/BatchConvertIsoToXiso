@@ -912,4 +912,58 @@ public partial class MainWindow
             return true; // Don't block operation if check fails
         }
     }
+
+    private async Task<bool> CopyFileWithCloudRetryAsync(string sourcePath, string destinationPath)
+    {
+        while (true)
+        {
+            try
+            {
+                await Task.Run(() => File.Copy(sourcePath, destinationPath, true), _cts.Token);
+                return true; // Success
+            }
+            catch (IOException ex) when (ex.Message.Contains("cloud operation", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogMessage($"Cloud file detected: '{Path.GetFileName(sourcePath)}' needs to be downloaded.");
+
+                var result = MessageBoxResult.None;
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    result = _messageBoxService.Show(
+                        $"The file '{Path.GetFileName(sourcePath)}' is stored in the cloud and needs to be downloaded before it can be processed.\n\n" +
+                        "Please wait for your cloud sync client (e.g., OneDrive) to finish downloading the file.\n\n" +
+                        "• Click 'Yes' to Retry the operation.\n" +
+                        "• Click 'No' to Skip this file.\n" +
+                        "• Click 'Cancel' to stop the entire batch process.",
+                        "Cloud File Download Required",
+                        MessageBoxButton.YesNoCancel,
+                        MessageBoxImage.Information);
+                });
+
+                switch (result)
+                {
+                    case MessageBoxResult.Yes: // Retry
+                        _logger.LogMessage("User chose to retry. Re-attempting copy...");
+                        continue; // Loop back to the try block
+                    case MessageBoxResult.No: // Skip
+                        _logger.LogMessage($"User chose to skip file: {Path.GetFileName(sourcePath)}");
+                        return false;
+                    case MessageBoxResult.Cancel: // Cancel
+                        _logger.LogMessage("User chose to cancel the entire operation.");
+                        _cts.Cancel();
+                        return false;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Propagate cancellation
+                throw;
+            }
+            catch (Exception)
+            {
+                // Any other exception during copy is a failure
+                return false;
+            }
+        }
+    }
 }
