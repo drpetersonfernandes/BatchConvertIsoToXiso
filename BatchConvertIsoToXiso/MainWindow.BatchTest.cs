@@ -84,7 +84,6 @@ public partial class MainWindow
     {
         var isoFileName = Path.GetFileName(isoFilePath);
         var tempExtractionDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_TestExtract", Guid.NewGuid().ToString());
-        string? simpleFilePath;
 
         try
         {
@@ -164,7 +163,7 @@ public partial class MainWindow
 
             // Always rename to a simple filename for testing
             var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
-            simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
+            var simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
 
             _logger.LogMessage($"  Copying '{isoFileName}' to simple filename '{simpleFilename}' for testing");
             var copySuccess = await CopyFileWithCloudRetryAsync(isoFilePath, simpleFilePath);
