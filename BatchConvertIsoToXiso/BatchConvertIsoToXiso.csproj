@@ -8,8 +8,8 @@
         <UseWPF>true</UseWPF>
         <ApplicationIcon>icon\icon.ico</ApplicationIcon>
         <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
-        <AssemblyVersion>1.8.3</AssemblyVersion>
-        <FileVersion>1.8.3</FileVersion>
+        <AssemblyVersion>1.8.4</AssemblyVersion>
+        <FileVersion>1.8.4</FileVersion>
         <IsPackable>false</IsPackable>
         <NeutralLanguage>en-US</NeutralLanguage>
         <DebugType>embedded</DebugType>

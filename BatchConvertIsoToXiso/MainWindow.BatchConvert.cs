@@ -720,12 +720,12 @@ public partial class MainWindow : IDisposable
                     var outputString = string.Join(Environment.NewLine, localProcessOutputLines);
                     if (outputString.Contains("does not appear to be a valid xbox iso image", StringComparison.OrdinalIgnoreCase) ||
                         outputString.Contains("failed to rewrite xbox iso image", StringComparison.OrdinalIgnoreCase) ||
-                        outputString.Contains("read error: No error", StringComparison.OrdinalIgnoreCase))
+                        outputString.Contains("read error: No error", StringComparison.OrdinalIgnoreCase) ||
+                        outputString.Contains("contains invalid character(s)", StringComparison.OrdinalIgnoreCase))
                     {
                         // --- Increment _invalidIsoErrorCount only for these specific messages ---
-                        _logger.LogMessage($"SKIPPED: '{originalFileName}' is not a valid Xbox ISO image. " +
-                                           $"This file appears to be from a different console (e.g., PlayStation). " +
-                                           $"Please ensure you are processing Xbox or Xbox 360 ISO files only.");
+                        _logger.LogMessage($"SKIPPED: '{originalFileName}' may not be a valid Xbox ISO image, or the file might be corrupted or contain invalid data. " +
+                                           "Please ensure you are processing valid Xbox or Xbox 360 ISO files.");
                         _invalidIsoErrorCount++; // Track invalid ISO errors
                         return ConversionToolResultStatus.Failed; // Don't send the bug report for expected errors
                     }
