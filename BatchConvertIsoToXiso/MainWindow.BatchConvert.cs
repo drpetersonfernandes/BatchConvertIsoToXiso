@@ -461,7 +461,6 @@ public partial class MainWindow : IDisposable
     {
         var originalFileName = Path.GetFileName(inputFile);
         var logPrefix = $"File '{originalFileName}':";
-        string? localTempIsoPath; // Path to the ISO in the local temp directory
         string? localTempWorkingDir = null; // Directory for local temp operations
 
         try
@@ -473,7 +472,7 @@ public partial class MainWindow : IDisposable
 
             // 2. Generate a simple filename for the local copy
             var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
-            localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);
+            var localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename); // Path to the ISO in the local temp directory
 
             // 3. Copy the original file from source (potentially UNC) to local temp
             _logger.LogMessage($"{logPrefix} Copying from '{inputFile}' to local temp '{localTempIsoPath}'...");
@@ -507,8 +506,8 @@ public partial class MainWindow : IDisposable
             if (toolResult == ConversionToolResultStatus.Skipped)
             {
                 _logger.LogMessage($"{logPrefix} Already optimized. Moving local copy to output with original filename.");
-                SetCurrentOperationDrive(GetDriveLetter(outputFolder)); // Monitor output drive for move write
-                await Task.Run(() => File.Move(localTempIsoPath, destinationPath, true), _cts.Token);
+                SetCurrentOperationDrive(GetDriveLetter(outputFolder));
+                await RobustMoveFileAsync(localTempIsoPath, destinationPath, logPrefix);
 
                 if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
                 {
@@ -530,8 +529,8 @@ public partial class MainWindow : IDisposable
 
             // If toolResult is Success
             _logger.LogMessage($"{logPrefix} Moving converted local file to output with original filename: {destinationPath}");
-            SetCurrentOperationDrive(GetDriveLetter(outputFolder)); // Monitor output drive for move write
-            await Task.Run(() => File.Move(localTempIsoPath, destinationPath, true), _cts.Token);
+            SetCurrentOperationDrive(GetDriveLetter(outputFolder));
+            await RobustMoveFileAsync(localTempIsoPath, destinationPath, logPrefix);
 
             if (deleteOriginalIsoFile && !isTemporaryFileFromArchive)
             {
@@ -602,6 +601,46 @@ public partial class MainWindow : IDisposable
                 }
             }
         }
+    }
+
+    // Add this helper method to MainWindow.BatchConvert.cs
+    private async Task RobustMoveFileAsync(string sourcePath, string destinationPath, string logPrefix)
+    {
+        const int maxRetries = 3;
+        const int delayMs = 500;
+
+        for (var i = 1; i <= maxRetries; i++)
+        {
+            try
+            {
+                if (File.Exists(destinationPath))
+                {
+                    // Clear Read-Only attribute if it exists on the destination
+                    var attributes = File.GetAttributes(destinationPath);
+                    if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                    {
+                        _logger.LogMessage($"{logPrefix} Destination file is Read-Only. Removing attribute...");
+                        File.SetAttributes(destinationPath, attributes & ~FileAttributes.ReadOnly);
+                    }
+                }
+
+                await Task.Run(() => File.Move(sourcePath, destinationPath, true), _cts.Token);
+                return; // Success
+            }
+            catch (UnauthorizedAccessException) when (i < maxRetries)
+            {
+                _logger.LogMessage($"{logPrefix} Access denied moving file. Retry {i}/{maxRetries} in {delayMs}ms...");
+                await Task.Delay(delayMs, _cts.Token);
+            }
+            catch (IOException ex) when ((ex.HResult & 0xFFFF) == 32 && i < maxRetries) // Sharing violation / File in use
+            {
+                _logger.LogMessage($"{logPrefix} File in use during move. Retry {i}/{maxRetries} in {delayMs}ms...");
+                await Task.Delay(delayMs, _cts.Token);
+            }
+        }
+
+        // Final attempt without catching to propagate the error if all retries fail
+        await Task.Run(() => File.Move(sourcePath, destinationPath, true), _cts.Token);
     }
 
     private async Task<ConversionToolResultStatus> RunConversionToolAsync(string extractXisoPath, string inputFile, string originalFileName, bool skipSystemUpdate)

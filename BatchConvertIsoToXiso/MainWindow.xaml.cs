@@ -560,8 +560,25 @@ public partial class MainWindow
             return false;
         }
 
+        try
+        {
+            var pathRoot = Path.GetPathRoot(outputFolder);
+            if (!string.IsNullOrEmpty(pathRoot) &&
+                outputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Equals(pathRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            {
+                _messageBoxService.ShowError("Selecting the root of a drive (e.g., C:\\) as an output folder is not allowed due to Windows permission restrictions. Please select or create a subfolder.");
+                return false;
+            }
+        }
+        catch
+        {
+            /* Ignore parsing errors here */
+        }
+
         if (IsSubdirectory(inputFolder, outputFolder) || IsSubdirectory(outputFolder, inputFolder))
             _messageBoxService.ShowWarning("Input and output folders are in the same directory tree. This may cause unexpected behavior.", "Folder Path Warning");
+
         return true;
     }
 
