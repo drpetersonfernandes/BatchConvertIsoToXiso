@@ -826,6 +826,13 @@ public partial class MainWindow : IDisposable
 
             throw;
         }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            var msg = $"The execution of 'extract-xiso.exe' failed (Error: {ex.NativeErrorCode}). " +
+                      "The file may have been deleted, moved, or blocked by Antivirus software mid-operation.";
+            _logger.LogMessage($"CRITICAL: {msg}");
+            throw new ExceptionFormatter.CriticalToolFailureException(msg, ex);
+        }
         catch (Exception ex)
         {
             _logger.LogMessage($"Error running extract-xiso -r for {originalFileName}: {ex.Message}");

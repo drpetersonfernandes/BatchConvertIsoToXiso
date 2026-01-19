@@ -286,6 +286,11 @@ public partial class MainWindow
                 {
                     await PerformBatchConversionAsync(extractXisoPath, inputFolder, outputFolder, deleteFiles, skipSystemUpdate, topLevelEntries);
                 }
+                catch (ExceptionFormatter.CriticalToolFailureException ex)
+                {
+                    UpdateStatus("Operation stopped: Tool inaccessible.");
+                    ShowCriticalToolFailureMessage(ex.Message);
+                }
                 catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // ERROR_DISK_FULL
                 {
                     _logger.LogMessage($"Operation stopped due to insufficient disk space: {ex.Message}");
@@ -460,6 +465,11 @@ public partial class MainWindow
                 try
                 {
                     await PerformBatchIsoTestAsync(extractXisoPath, inputFolder, moveSuccessful, successFolder, moveFailed, failedFolder, isoFilesToTest);
+                }
+                catch (ExceptionFormatter.CriticalToolFailureException ex)
+                {
+                    UpdateStatus("Operation stopped: Tool inaccessible.");
+                    ShowCriticalToolFailureMessage(ex.Message);
                 }
                 catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // ERROR_DISK_FULL
                 {
@@ -928,6 +938,18 @@ public partial class MainWindow
             _logger.LogMessage($"Warning: Could not validate disk space: {ex.Message}");
             return true; // Don't block operation if check fails
         }
+    }
+
+    private void ShowCriticalToolFailureMessage(string detail)
+    {
+        var message = $"{detail}\n\n" +
+                      "Possible Solutions:\n" +
+                      "1. Antivirus: Check if your Antivirus (e.g., Windows Defender) quarantined 'extract-xiso.exe'. Add the application folder to your Antivirus Exclusion/Exemption list.\n" +
+                      "2. Permissions: Try running this application as Administrator.\n" +
+                      "3. Drive Issues: If the files are on an external drive, ensure it hasn't been disconnected.\n\n" +
+                      "The batch operation has been stopped to prevent further errors.";
+
+        _messageBoxService.ShowError(message);
     }
 
     private async Task<bool> CopyFileWithCloudRetryAsync(string sourcePath, string destinationPath)

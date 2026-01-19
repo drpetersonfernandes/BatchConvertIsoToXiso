@@ -184,6 +184,13 @@ public partial class MainWindow
 
             throw;
         }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            var msg = $"The execution of 'extract-xiso.exe' failed (Error: {ex.NativeErrorCode}). " +
+                      "The tool is no longer accessible.";
+            _logger.LogMessage($"CRITICAL: {msg}");
+            throw new ExceptionFormatter.CriticalToolFailureException(msg, ex);
+        }
         catch (Exception ex)
         {
             _logger.LogMessage($"    Critical Error during extraction of {isoFileName}: {ex.Message}");
