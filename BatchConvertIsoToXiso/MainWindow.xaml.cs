@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -13,6 +12,7 @@ namespace BatchConvertIsoToXiso;
 public partial class MainWindow
 {
     private readonly IIsoOrchestratorService _orchestratorService;
+    private readonly IDiskMonitorService _diskMonitorService;
 
     private CancellationTokenSource _cts = new();
     private readonly IUpdateChecker _updateChecker;
@@ -32,11 +32,6 @@ public partial class MainWindow
     private int _uiSkippedCount;
     private bool _isOperationRunning;
 
-    // Performance Counter for Disk Write Speed
-    private PerformanceCounter? _diskWriteSpeedCounter;
-    private string? _activeMonitoringDriveLetter;
-    private string? _currentOperationDrive;
-
     private int _invalidIsoErrorCount;
     private int _totalProcessedFiles;
     private readonly List<string> _failedConversionFilePaths = new();
@@ -45,7 +40,8 @@ public partial class MainWindow
 
     public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
         IMessageBoxService messageBoxService, IFileMover fileMover, IUrlOpener urlOpener,
-        ISettingsService settingsService, IExternalToolService externalToolService, IIsoOrchestratorService orchestratorService)
+        ISettingsService settingsService, IExternalToolService externalToolService,
+        IIsoOrchestratorService orchestratorService, IDiskMonitorService diskMonitorService)
     {
         InitializeComponent();
 
@@ -58,6 +54,7 @@ public partial class MainWindow
         _settingsService = settingsService;
         _externalToolService = externalToolService;
         _orchestratorService = orchestratorService;
+        _diskMonitorService = diskMonitorService;
 
         _logger.Initialize(LogViewer);
 
@@ -306,8 +303,8 @@ public partial class MainWindow
     private void FinalizeUiState()
     {
         _processingTimer.Stop();
+        _diskMonitorService.StopMonitoring();
         StopPerformanceCounter();
-        _currentOperationDrive = null;
         _isOperationRunning = false;
         SetControlsState(true);
 
@@ -447,9 +444,7 @@ public partial class MainWindow
                 UpdateSummaryStatsUi();
 
                 // Initial drive for monitoring is the temp path, as the test involves extraction to temp.
-                var initialDriveForMonitoring = GetDriveLetter(Path.GetTempPath());
-                _currentOperationDrive = initialDriveForMonitoring; // Initial drive
-                InitializePerformanceCounter(initialDriveForMonitoring);
+                _diskMonitorService.StartMonitoring(Path.GetTempPath());
 
                 _operationStartTime = DateTime.Now;
                 _processingTimer.Start();
@@ -491,7 +486,6 @@ public partial class MainWindow
                 {
                     _processingTimer.Stop();
                     StopPerformanceCounter();
-                    _currentOperationDrive = null;
                     var finalElapsedTime = DateTime.Now - _operationStartTime;
                     Application.Current.Dispatcher.Invoke(() => ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
                     SetControlsState(true);
@@ -658,28 +652,11 @@ public partial class MainWindow
         var elapsedTime = DateTime.Now - _operationStartTime;
         ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
 
-        if (_diskWriteSpeedCounter == null || string.IsNullOrEmpty(_activeMonitoringDriveLetter)) return;
-
-        try
-        {
-            var writeSpeedBytes = _diskWriteSpeedCounter.NextValue();
-            Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                WriteSpeedValue?.Text = Formatter.FormatBytesPerSecond(writeSpeedBytes);
-            });
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogMessage($"Error reading write speed for drive {_activeMonitoringDriveLetter}: {ex.Message}. Stopping monitoring.");
-            _ = ReportBugAsync($"PerfCounter Read InvalidOpExc for {_activeMonitoringDriveLetter}", ex);
-            StopPerformanceCounter();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogMessage($"Unexpected error reading write speed for drive {_activeMonitoringDriveLetter}: {ex.Message}. Stopping monitoring.");
-            _ = ReportBugAsync($"PerfCounter Read GenericExc for {_activeMonitoringDriveLetter}", ex);
-            StopPerformanceCounter();
-        }
+        // Replace old logic with service call
+        WriteSpeedValue.Text = _diskMonitorService.GetCurrentWriteSpeedFormatted();
+        WriteSpeedDriveIndicator.Text = _diskMonitorService.CurrentDriveLetter != null
+            ? $"({_diskMonitorService.CurrentDriveLetter})"
+            : "";
     }
 
     private void SetControlsState(bool enabled)

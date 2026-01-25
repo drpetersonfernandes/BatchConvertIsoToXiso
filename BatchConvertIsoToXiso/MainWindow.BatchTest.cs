@@ -25,7 +25,7 @@ public partial class MainWindow
             _logger.LogMessage($"Testing ISO: {isoFileName}...");
 
             // Drive for testing (temp) vs. moving successful (output)
-            SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Test extraction always uses the temp path
+            _diskMonitorService.StartMonitoring(Path.GetTempPath()); // Test extraction always uses the temp path
 
             var testStatus = await TestSingleIsoAsync(isoFilePath, testFileIndex);
             testFileIndex++;

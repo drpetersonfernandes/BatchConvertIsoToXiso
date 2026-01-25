@@ -98,6 +98,7 @@ public partial class App
         services.AddSingleton<IBugReportService>(static _ => new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
         services.AddSingleton<IUpdateChecker, UpdateChecker>();
         services.AddSingleton<ILogger, LoggerService>();
+        services.AddSingleton<IDiskMonitorService, DiskMonitorService>();
         services.AddSingleton<IMessageBoxService, MessageBoxService>();
         services.AddSingleton<IUrlOpener, UrlOpenerService>();
         services.AddTransient<IFileExtractor, FileExtractorService>(static provider => new FileExtractorService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
