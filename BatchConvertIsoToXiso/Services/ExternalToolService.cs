@@ -106,6 +106,7 @@ public partial class ExternalToolService : IExternalToolService
     {
         try
         {
+            // Use a standard using block to make the process scope explicit
             using var process = new Process();
             process.StartInfo = new ProcessStartInfo
             {
@@ -139,14 +140,12 @@ public partial class ExternalToolService : IExternalToolService
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            var registration = token.Register(() => ProcessTerminatorHelper.TerminateProcess(process, contextName, _logger));
-            try
+            // Use 'await using' to ensure the registration is disposed (unregistered)
+            // BEFORE the process itself is disposed at the end of this block.
+            // ReSharper disable once AccessToDisposedClosure
+            await using (token.Register(() => ProcessTerminatorHelper.TerminateProcess(process, contextName, _logger)))
             {
                 await process.WaitForExitAsync(token);
-            }
-            finally
-            {
-                await registration.DisposeAsync();
             }
 
             return process.ExitCode;
@@ -161,6 +160,7 @@ public partial class ExternalToolService : IExternalToolService
             return null;
         }
     }
+
 
     private static async Task<string?> ParseCueForBinFileAsync(string cuePath, CancellationToken token)
     {

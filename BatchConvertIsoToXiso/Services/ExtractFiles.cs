@@ -57,7 +57,10 @@ public class FileExtractorService : IFileExtractor
 
                     // Ensure the resulting path is still inside our extraction directory
                     if (!fullDestPath.StartsWith(Path.GetFullPath(extractionPath), StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogMessage($"  WARNING: Skipping entry '{fileData.FileName}' - potential path traversal (Zip Slip) detected.");
                         continue;
+                    }
 
                     Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath) ?? throw new InvalidOperationException("fullDestPath cannot be null"));
                     using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);

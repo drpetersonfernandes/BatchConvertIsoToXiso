@@ -359,15 +359,8 @@ public partial class MainWindow
 
             var moveSuccessful = MoveSuccessFilesCheckBox.IsChecked == true;
             var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
-            var successFolder = Path.Combine(inputFolder, "_success");
-            var failedFolder = Path.Combine(inputFolder, "_failed");
-
-            if (moveSuccessful && moveFailed && successFolder.Equals(failedFolder, StringComparison.OrdinalIgnoreCase))
-            {
-                _messageBoxService.ShowError("Success Folder and Failed Folder cannot be the same.");
-                FinalizeUiState();
-                return;
-            }
+            Path.Combine(inputFolder, "_success");
+            Path.Combine(inputFolder, "_failed");
 
             // 3. Prepare Cancellation
             var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
