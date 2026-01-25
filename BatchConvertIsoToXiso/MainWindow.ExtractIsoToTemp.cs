@@ -113,7 +113,7 @@ public partial class MainWindow
                     return false;
                 case 0:
                 {
-                    var criticalErrorInStdErr = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+                    var criticalErrorInStdErr = collectedOutput.Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries)
                         .Any(static line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase) &&
                                             (line.Contains("failed to extract", StringComparison.OrdinalIgnoreCase) ||
                                              line.Contains("error extracting", StringComparison.OrdinalIgnoreCase) ||
@@ -130,12 +130,12 @@ public partial class MainWindow
                 }
                 case 1:
                 {
-                    var stdErrLines = collectedOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+                    var stdErrLines = collectedOutput.Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries)
                         .Where(static line => line.StartsWith("STDERR:", StringComparison.OrdinalIgnoreCase))
                         .Select(static line => line.Substring("STDERR:".Length).Trim())
                         .ToArray();
 
-                    var onlyKnownBenignErrors = stdErrLines.All(errLine =>
+                    var onlyKnownBenignErrors = stdErrLines.All(static errLine =>
                         errLine.Contains("open error: -d No such file or directory") ||
                         errLine.Contains("open error: LoadScreen_BlackScreen.nif No such file or directory") ||
                         errLine.Contains("failed to extract xbox iso image")

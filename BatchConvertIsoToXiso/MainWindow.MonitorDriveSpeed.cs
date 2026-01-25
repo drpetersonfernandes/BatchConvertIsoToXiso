@@ -130,15 +130,9 @@ public partial class MainWindow
 
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            if (WriteSpeedValue != null)
-            {
-                WriteSpeedValue.Text = "N/A";
-            }
+            WriteSpeedValue?.Text = "N/A";
 
-            if (WriteSpeedDriveIndicator != null)
-            {
-                WriteSpeedDriveIndicator.Text = "";
-            }
+            WriteSpeedDriveIndicator?.Text = "";
         });
     }
 }

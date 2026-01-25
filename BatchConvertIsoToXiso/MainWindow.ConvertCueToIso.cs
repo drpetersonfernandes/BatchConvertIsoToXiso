@@ -199,7 +199,7 @@ public partial class MainWindow
 
                 // Regex to handle both quoted ("filename.bin") and unquoted (filename.bin) formats
                 // Pattern: FILE + whitespace + (quoted group OR unquoted group) + whitespace + type
-                var match = Regex.Match(trimmedLine, """^FILE\s+(?:"(.+)"|(\S+))\s+\S+""", RegexOptions.IgnoreCase);
+                var match = MyRegex().Match(trimmedLine);
 
                 if (!match.Success) continue;
 
@@ -233,4 +233,7 @@ public partial class MainWindow
         _logger.LogMessage($"  Could not find a valid BIN file for CUE: {Path.GetFileName(cuePath)}");
         return null;
     }
+
+    [GeneratedRegex("""^FILE\s+(?:"(.+)"|(\S+))\s+\S+""", RegexOptions.IgnoreCase, "pt-BR")]
+    private static partial Regex MyRegex();
 }

@@ -83,7 +83,7 @@ public class FileExtractorService : IFileExtractor
                 _logger.LogMessage($"  Calculating uncompressed size for: {Path.GetFileName(archivePath)}");
 
                 using var extractor = new SevenZipExtractor(archivePath);
-                return extractor.ArchiveFileData.Sum(x => (long)x.Size);
+                return extractor.ArchiveFileData.Sum(static x => (long)x.Size);
             }, token);
         }
         catch (OperationCanceledException)

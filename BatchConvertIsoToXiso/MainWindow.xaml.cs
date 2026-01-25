@@ -178,7 +178,7 @@ public partial class MainWindow
 
                 // Thread-safe cancellation token replacement
                 var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
-                oldCts?.Dispose();
+                oldCts.Dispose();
 
                 var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
@@ -360,7 +360,7 @@ public partial class MainWindow
 
                 // Thread-safe cancellation token replacement
                 var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
-                oldCts?.Dispose();
+                oldCts.Dispose();
 
                 var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
@@ -521,7 +521,7 @@ public partial class MainWindow
     {
         try
         {
-            _cts?.Cancel();
+            _cts.Cancel();
         }
         catch
         {
@@ -614,7 +614,7 @@ public partial class MainWindow
 
             if (total > 0 && ProgressBar.Visibility == Visibility.Visible)
             {
-                var percentage = ((double)current / total) * 100;
+                var percentage = (double)current / total * 100;
                 ProgressTextBlock.Text = $"{current} of {total} ({percentage:F0}%)";
             }
             else
@@ -692,36 +692,6 @@ public partial class MainWindow
             _logger.LogMessage($"WARNING: {tempFolders.Count} temporary folders could not be cleaned automatically.");
     }
 
-    /// <summary>
-    /// Attempts to delete a directory with retry logic for locked files
-    /// </summary>
-    private async Task<bool> TryDeleteDirectoryWithRetryAsync(string directoryPath, int maxRetries, int delayMs)
-    {
-        for (var attempt = 1; attempt <= maxRetries; attempt++)
-        {
-            try
-            {
-                if (!Directory.Exists(directoryPath))
-                    return true;
-
-                await Task.Run(() => Directory.Delete(directoryPath, true), CancellationToken.None);
-                return true;
-            }
-            catch (IOException) when (attempt < maxRetries)
-            {
-                _logger.LogMessage($"Temp folder deletion attempt {attempt}/{maxRetries} failed (files may be locked). Retrying in {delayMs}ms...");
-                await Task.Delay(delayMs, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"Error deleting directory {directoryPath}: {ex.Message}");
-                return false;
-            }
-        }
-
-        return false;
-    }
-
     private void ProcessingTimer_Tick(object? sender, EventArgs e)
     {
         var elapsedTime = DateTime.Now - _operationStartTime;
@@ -734,10 +704,7 @@ public partial class MainWindow
             var writeSpeedBytes = _diskWriteSpeedCounter.NextValue();
             Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                if (WriteSpeedValue != null)
-                {
-                    WriteSpeedValue.Text = Formatter.FormatBytesPerSecond(writeSpeedBytes);
-                }
+                WriteSpeedValue?.Text = Formatter.FormatBytesPerSecond(writeSpeedBytes);
             });
         }
         catch (InvalidOperationException ex)
@@ -785,10 +752,7 @@ public partial class MainWindow
 
         ProgressBar.IsIndeterminate = false;
         ProgressBar.Value = 0;
-        if (ProgressTextBlock != null)
-        {
-            ProgressTextBlock.Text = "";
-        }
+        ProgressTextBlock?.Text = "";
     }
 
     private void ResetSummaryStats()
@@ -822,7 +786,7 @@ public partial class MainWindow
                 return;
             }
 
-            _cts?.Cancel();
+            _cts.Cancel();
         }
 
         _processingTimer.Tick -= ProcessingTimer_Tick;
@@ -866,7 +830,7 @@ public partial class MainWindow
         });
     }
 
-    private async Task<bool> ValidateDiskSpaceAsync(List<string> topLevelEntries, string outputFolder)
+    private async Task<bool> ValidateDiskSpaceAsync(IEnumerable<string> topLevelEntries, string outputFolder)
     {
         try
         {
@@ -892,7 +856,7 @@ public partial class MainWindow
 
             // Calculate approximate space needed (largest file * 3 for safety margin)
             long maxFileSize = 0;
-            foreach (var file in topLevelEntries.Where(f => Path.GetExtension(f).Equals(".iso", StringComparison.OrdinalIgnoreCase)))
+            foreach (var file in topLevelEntries.Where(static f => Path.GetExtension(f).Equals(".iso", StringComparison.OrdinalIgnoreCase)))
             {
                 try
                 {
@@ -904,7 +868,6 @@ public partial class MainWindow
                 }
                 catch (FileNotFoundException)
                 {
-                    continue;
                 }
             }
 

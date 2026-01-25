@@ -302,7 +302,7 @@ public partial class MainWindow : IDisposable
             {
                 try
                 {
-                    await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
+                    await CleanupTempFoldersAsync([tempCueBinDir]);
                 }
                 catch (Exception cleanupEx)
                 {
@@ -443,7 +443,7 @@ public partial class MainWindow : IDisposable
             {
                 try
                 {
-                    await CleanupTempFoldersAsync(new List<string> { tempCueBinDir });
+                    await CleanupTempFoldersAsync([tempCueBinDir]);
                 }
                 catch (Exception cleanupEx)
                 {
