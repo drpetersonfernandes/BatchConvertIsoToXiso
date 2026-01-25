@@ -6,7 +6,7 @@ namespace BatchConvertIsoToXiso;
 
 public partial class MainWindow
 {
-    private async Task PerformBatchIsoTestAsync(string extractXisoPath, string inputFolder, bool moveSuccessful, string? successFolder, bool moveFailed, string? failedFolder, List<string> isoFilesToTest)
+    private async Task PerformBatchIsoTestAsync(bool moveSuccessful, string? successFolder, bool moveFailed, string? failedFolder, List<string> isoFilesToTest)
     {
         var topLevelItemsProcessed = 0;
 
@@ -27,7 +27,7 @@ public partial class MainWindow
             // Drive for testing (temp) vs. moving successful (output)
             SetCurrentOperationDrive(GetDriveLetter(Path.GetTempPath())); // Test extraction always uses the temp path
 
-            var testStatus = await TestSingleIsoAsync(extractXisoPath, isoFilePath, testFileIndex);
+            var testStatus = await TestSingleIsoAsync(isoFilePath, testFileIndex);
             testFileIndex++;
 
             if (testStatus == IsoTestResultStatus.Passed)
@@ -80,7 +80,7 @@ public partial class MainWindow
         }
     }
 
-    private async Task<IsoTestResultStatus> TestSingleIsoAsync(string extractXisoPath, string isoFilePath, int fileIndex)
+    private async Task<IsoTestResultStatus> TestSingleIsoAsync(string isoFilePath, int fileIndex)
     {
         var isoFileName = Path.GetFileName(isoFilePath);
         var tempExtractionDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_TestExtract", Guid.NewGuid().ToString());
@@ -96,43 +96,27 @@ public partial class MainWindow
                 return IsoTestResultStatus.Failed;
             }
 
+            // Basic file validation
             try
             {
                 var fileInfo = new FileInfo(isoFilePath);
-                var length = await Task.Run(() => fileInfo.Length);
-                if (length == 0)
+                if (fileInfo.Length == 0)
                 {
                     _logger.LogMessage($"  ERROR: ISO file is empty: {isoFileName}");
                     return IsoTestResultStatus.Failed;
                 }
             }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
             catch (Exception ex)
             {
                 _logger.LogMessage($"  ERROR: Cannot open or check ISO file: {ex.Message}");
-                _ = ReportBugAsync($"Error checking file {isoFileName} in TestSingleIsoAsync", ex);
                 return IsoTestResultStatus.Failed;
             }
 
             // ---------------------------------------------------------
-            // ATTEMPT 1: Direct Extraction (Saves Temp Space & Time)
+            // ATTEMPT 1: Direct Extraction via Service
             // ---------------------------------------------------------
             _logger.LogMessage($"  Attempting direct extraction test on '{isoFileName}'...");
-            bool directSuccess;
-            try
-            {
-                // Try extracting directly from source.
-                // This avoids copying the 8GB+ ISO to temp if the path is accessible.
-                directSuccess = await RunIsoExtractionToTempAsync(extractXisoPath, isoFilePath, tempExtractionDir);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"  Direct extraction encountered an error: {ex.Message}. Proceeding to fallback.");
-                directSuccess = false;
-            }
+            var directSuccess = await _externalToolService.RunIsoExtractionAsync(isoFilePath, tempExtractionDir, _cts.Token);
 
             if (directSuccess)
             {
@@ -142,26 +126,16 @@ public partial class MainWindow
             // ---------------------------------------------------------
             // ATTEMPT 2: Fallback (Copy to Temp -> Extract)
             // ---------------------------------------------------------
-            // If direct extraction failed (e.g. network path issues, weird characters, permissions),
-            // we fall back to the original logic: Copy to temp with a simple name.
             _logger.LogMessage($"  Direct extraction failed. Falling back to copy-to-temp strategy for '{isoFileName}'...");
 
-            // Clean up temp dir from the failed direct attempt to ensure a clean slate
-            try
+            // Clean up temp dir from the failed direct attempt
+            if (Directory.Exists(tempExtractionDir))
             {
-                if (Directory.Exists(tempExtractionDir))
-                {
-                    await Task.Run(() => Directory.Delete(tempExtractionDir, true), _cts.Token);
-                }
-
-                await Task.Run(() => Directory.CreateDirectory(tempExtractionDir), _cts.Token);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"  Warning: Could not clean temp dir before fallback: {ex.Message}");
+                await Task.Run(() => Directory.Delete(tempExtractionDir, true), _cts.Token);
             }
 
-            // Always rename to a simple filename for testing
+            await Task.Run(() => Directory.CreateDirectory(tempExtractionDir), _cts.Token);
+
             var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
             var simpleFilePath = Path.Combine(tempExtractionDir, simpleFilename);
 
@@ -169,12 +143,11 @@ public partial class MainWindow
             var copySuccess = await CopyFileWithCloudRetryAsync(isoFilePath, simpleFilePath);
             if (!copySuccess)
             {
-                _logger.LogMessage($"  Copy for testing failed or was skipped by user for '{isoFileName}'.");
-                // No need to clean up simpleFilePath as it was never created.
                 return IsoTestResultStatus.Failed;
             }
 
-            var extractionSuccess = await RunIsoExtractionToTempAsync(extractXisoPath, simpleFilePath, tempExtractionDir);
+            // Run extraction on the local copy via Service
+            var extractionSuccess = await _externalToolService.RunIsoExtractionAsync(simpleFilePath, tempExtractionDir, _cts.Token);
 
             return extractionSuccess ? IsoTestResultStatus.Passed : IsoTestResultStatus.Failed;
         }
@@ -191,17 +164,9 @@ public partial class MainWindow
         }
         finally
         {
-            // Clean up temp dir which contains the simple file copy and any extracted contents
-            try
+            if (Directory.Exists(tempExtractionDir))
             {
-                if (Directory.Exists(tempExtractionDir))
-                {
-                    await Task.Run(() => Directory.Delete(tempExtractionDir, true), _cts.Token);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"  Error cleaning temp folder for '{isoFileName}': {ex.Message}");
+                await Task.Run(() => Directory.Delete(tempExtractionDir, true), CancellationToken.None);
             }
         }
     }

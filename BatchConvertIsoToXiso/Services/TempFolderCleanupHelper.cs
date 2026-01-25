@@ -7,7 +7,7 @@ public static class TempFolderCleanupHelper
     /// <summary>
     /// Deletes a directory with retry logic for locked files
     /// </summary>
-    public static async Task<bool> TryDeleteDirectoryWithRetryAsync(string directoryPath, int maxRetries, int delayMs, ILogger logger)
+    public static async Task<bool> TryDeleteDirectoryWithRetryAsync(string directoryPath, int maxRetries, int delayMs, ILogger? logger)
     {
         for (var attempt = 1; attempt <= maxRetries; attempt++)
         {
@@ -17,27 +17,27 @@ public static class TempFolderCleanupHelper
                     return true;
 
                 Directory.Delete(directoryPath, true);
-                logger.LogMessage($"Successfully deleted temp folder: {Path.GetFileName(directoryPath)}");
+                logger?.LogMessage($"Successfully deleted temp folder: {Path.GetFileName(directoryPath)}");
                 return true;
             }
             catch (IOException) when (attempt < maxRetries)
             {
-                logger.LogMessage($"Deletion attempt {attempt}/{maxRetries} failed for '{Path.GetFileName(directoryPath)}' (files locked). Retrying...");
+                logger?.LogMessage($"Deletion attempt {attempt}/{maxRetries} failed for '{Path.GetFileName(directoryPath)}' (files locked). Retrying...");
                 await Task.Delay(delayMs);
             }
             catch (UnauthorizedAccessException) when (attempt < maxRetries)
             {
-                logger.LogMessage($"Deletion attempt {attempt}/{maxRetries} failed for '{Path.GetFileName(directoryPath)}' (access denied). Retrying...");
+                logger?.LogMessage($"Deletion attempt {attempt}/{maxRetries} failed for '{Path.GetFileName(directoryPath)}' (access denied). Retrying...");
                 await Task.Delay(delayMs);
             }
             catch (Exception ex)
             {
-                logger.LogMessage($"Failed to delete '{Path.GetFileName(directoryPath)}': {ex.Message}");
+                logger?.LogMessage($"Failed to delete '{Path.GetFileName(directoryPath)}': {ex.Message}");
                 return false;
             }
         }
 
-        logger.LogMessage($"WARNING: Could not delete '{Path.GetFileName(directoryPath)}' after {maxRetries} attempts. Manual cleanup may be needed.");
+        logger?.LogMessage($"WARNING: Could not delete '{Path.GetFileName(directoryPath)}' after {maxRetries} attempts. Manual cleanup may be needed.");
         return false;
     }
 

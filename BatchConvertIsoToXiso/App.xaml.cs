@@ -95,7 +95,7 @@ public partial class App
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<ISettingsService, SettingsService>();
-        services.AddSingleton<IBugReportService>(static provider => new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
+        services.AddSingleton<IBugReportService>(static _ => new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
         services.AddSingleton<IUpdateChecker, UpdateChecker>();
         services.AddSingleton<ILogger, LoggerService>();
         services.AddSingleton<IMessageBoxService, MessageBoxService>();
@@ -103,6 +103,8 @@ public partial class App
         services.AddTransient<IFileExtractor, FileExtractorService>(static provider => new FileExtractorService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<AboutWindow>();
+        services.AddSingleton<IExternalToolService, ExternalToolService>();
+        services.AddSingleton<IIsoOrchestratorService, IsoOrchestratorService>();
         services.AddTransient<MainWindow>();
     }
 
