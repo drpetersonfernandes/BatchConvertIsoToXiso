@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.Services;
@@ -74,7 +74,7 @@ public class IsoOrchestratorService : IIsoOrchestratorService
 
             var fileName = Path.GetFileName(entryPath);
             var extension = Path.GetExtension(entryPath).ToLowerInvariant();
-            progress.Report(new BatchOperationProgress { StatusText = $"Processing: {fileName}", CurrentDrive = GetDriveLetter(entryPath) });
+            progress.Report(new BatchOperationProgress { StatusText = $"Processing: {fileName}", CurrentDrive = PathHelper.GetDriveLetter(entryPath) });
 
             try
             {
@@ -238,7 +238,7 @@ public class IsoOrchestratorService : IIsoOrchestratorService
             var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
             var localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);
 
-            progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Copying to local temp...", CurrentDrive = GetDriveLetter(Path.GetTempPath()) });
+            progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Copying to local temp...", CurrentDrive = PathHelper.GetDriveLetter(Path.GetTempPath()) });
 
             var copySuccess = await CopyFileWithCloudRetryAsync(inputFile, localTempIsoPath, onCloudRetryRequired, progress, token);
             if (!copySuccess) return FileProcessingStatus.Failed;
@@ -251,8 +251,8 @@ public class IsoOrchestratorService : IIsoOrchestratorService
             var destinationPath = Path.Combine(outputFolder, originalFileName);
             var isTempFile = inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase);
 
-            progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Moving to output...", CurrentDrive = GetDriveLetter(outputFolder) });
-            await RobustMoveFileAsync(localTempIsoPath, destinationPath, token);
+            progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Moving to output...", CurrentDrive = PathHelper.GetDriveLetter(outputFolder) });
+            await _fileMover.RobustMoveFileAsync(localTempIsoPath, destinationPath, token);
 
             if (deleteOriginal && !isTempFile)
             {
@@ -298,7 +298,7 @@ public class IsoOrchestratorService : IIsoOrchestratorService
         {
             token.ThrowIfCancellationRequested();
             var fileName = Path.GetFileName(isoPath);
-            progress.Report(new BatchOperationProgress { StatusText = $"Testing: {fileName}", CurrentDrive = GetDriveLetter(Path.GetTempPath()) });
+            progress.Report(new BatchOperationProgress { StatusText = $"Testing: {fileName}", CurrentDrive = PathHelper.GetDriveLetter(Path.GetTempPath()) });
 
             var result = await TestSingleIsoInternalAsync(isoPath, fileIndex++, onCloudRetryRequired, progress, token);
 
@@ -356,22 +356,6 @@ public class IsoOrchestratorService : IIsoOrchestratorService
 
     #region Helpers
 
-    private static string? GetDriveLetter(string path)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(path) || path.StartsWith(@"\\", StringComparison.Ordinal)) return null;
-
-            var fullPath = Path.GetFullPath(path);
-            var root = Path.GetPathRoot(fullPath);
-            return root?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     private static void ReportStatus(FileProcessingStatus status, string path, IProgress<BatchOperationProgress> progress)
     {
         switch (status)
@@ -414,30 +398,6 @@ public class IsoOrchestratorService : IIsoOrchestratorService
                 return false;
             }
         }
-    }
-
-    private static async Task RobustMoveFileAsync(string source, string dest, CancellationToken token)
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            try
-            {
-                if (File.Exists(dest))
-                {
-                    File.SetAttributes(dest, FileAttributes.Normal);
-                    File.Delete(dest);
-                }
-
-                await Task.Run(() => File.Move(source, dest, true), token);
-                return;
-            }
-            catch when (i < 2)
-            {
-                await Task.Delay(500, token);
-            }
-        }
-
-        File.Move(source, dest, true);
     }
 
     private static async Task CleanupTempFoldersAsync(List<string> folders, IProgress<BatchOperationProgress> progress)

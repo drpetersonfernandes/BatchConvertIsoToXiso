@@ -12,7 +12,7 @@ public interface IUpdateChecker
     Task<(bool IsNewVersionAvailable, string? LatestVersion, string? DownloadUrl)> CheckForUpdateAsync();
 }
 
-public class UpdateChecker : IUpdateChecker, IDisposable
+public partial class UpdateChecker : IUpdateChecker, IDisposable
 {
     private const string GitHubApiUrl = "https://api.github.com/repos/drpetersonfernandes/BatchConvertIsoToXiso/releases/latest";
     private readonly HttpClient _httpClient;
@@ -22,7 +22,7 @@ public class UpdateChecker : IUpdateChecker, IDisposable
         _httpClient = new HttpClient();
         _httpClient.Timeout = TimeSpan.FromSeconds(15);
         // GitHub API requires a User-Agent header.
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BatchConvertIsoToXiso", GetApplicationVersion()));
+        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BatchConvertIsoToXiso", GetApplicationVersion.GetProgramVersion()));
     }
 
     public async Task<(bool IsNewVersionAvailable, string? LatestVersion, string? DownloadUrl)> CheckForUpdateAsync()
@@ -39,7 +39,7 @@ public class UpdateChecker : IUpdateChecker, IDisposable
 
             // Use a regular expression to extract a semantic version number (e.g., X.Y.Z)
             // This makes the parsing more robust against varying tag prefixes like "release-" or "v".
-            var versionMatch = Regex.Match(releaseInfo.TagName, @"\d+\.\d+\.\d+(\.\d+)?");
+            var versionMatch = MyRegex().Match(releaseInfo.TagName);
             if (!versionMatch.Success)
             {
                 // If no version number can be extracted, treat as no update available.
@@ -66,15 +66,12 @@ public class UpdateChecker : IUpdateChecker, IDisposable
         return (false, null, null);
     }
 
-    private static string GetApplicationVersion()
-    {
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
-        return version?.ToString() ?? "1.0.0";
-    }
-
     public void Dispose()
     {
-        _httpClient?.Dispose();
+        _httpClient.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    [GeneratedRegex(@"\d+\.\d+\.\d+(\.\d+)?")]
+    private static partial Regex MyRegex();
 }

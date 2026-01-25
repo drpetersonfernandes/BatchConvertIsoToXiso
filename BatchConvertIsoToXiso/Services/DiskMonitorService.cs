@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.IO;
+using System.Diagnostics;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -17,7 +16,7 @@ public class DiskMonitorService : IDiskMonitorService, IDisposable
 
     public void StartMonitoring(string? path)
     {
-        var driveLetter = GetDriveLetter(path);
+        var driveLetter = PathHelper.GetDriveLetter(path);
         if (CurrentDriveLetter == driveLetter) return;
 
         StopMonitoring();
@@ -71,27 +70,6 @@ public class DiskMonitorService : IDiskMonitorService, IDisposable
         {
             StopMonitoring();
             return "N/A";
-        }
-    }
-
-    private static string? GetDriveLetter(string? path)
-    {
-        if (string.IsNullOrEmpty(path)) return null;
-
-        try
-        {
-            if (path.StartsWith(@"\\", StringComparison.Ordinal)) return null;
-
-            var fullPath = Path.GetFullPath(path);
-            var pathRoot = Path.GetPathRoot(fullPath);
-            if (string.IsNullOrEmpty(pathRoot)) return null;
-
-            var driveInfo = new DriveInfo(pathRoot);
-            return driveInfo.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        }
-        catch
-        {
-            return null;
         }
     }
 

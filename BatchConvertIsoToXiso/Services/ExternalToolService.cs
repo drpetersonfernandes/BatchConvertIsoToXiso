@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
 using BatchConvertIsoToXiso.Models;
@@ -70,8 +70,8 @@ public partial class ExternalToolService : IExternalToolService
 
         if (result == null) return false;
 
-        var expectedSubDir = Path.Combine(tempExtractionDir, Path.GetFileNameWithoutExtension(isoFileName));
-        var filesExtracted = Directory.Exists(expectedSubDir) && Directory.EnumerateFileSystemEntries(expectedSubDir).Any();
+        // Check if anything was extracted into the temp directory (usually a subfolder named after the XBE title)
+        var filesExtracted = Directory.Exists(tempExtractionDir) && Directory.EnumerateFileSystemEntries(tempExtractionDir).Any();
 
         switch (result)
         {

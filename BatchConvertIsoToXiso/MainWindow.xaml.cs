@@ -33,7 +33,7 @@ public partial class MainWindow
 
     private int _invalidIsoErrorCount;
     private int _totalProcessedFiles;
-    private readonly List<string> _failedConversionFilePaths = [];
+    private readonly List<string> _failedFilePaths = [];
 
     public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
         IMessageBoxService messageBoxService, IUrlOpener urlOpener, ISettingsService settingsService,
@@ -230,7 +230,7 @@ public partial class MainWindow
                     }
 
                     if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
-                    if (p.FailedPathToAdd != null) _failedConversionFilePaths.Add(p.FailedPathToAdd);
+                    if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
 
                     ProgressBar.IsIndeterminate = p.IsIndeterminate;
                 });
@@ -404,7 +404,7 @@ public partial class MainWindow
                 }
 
                 if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
-                if (p.FailedPathToAdd != null) _failedConversionFilePaths.Add(p.FailedPathToAdd);
+                if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
 
                 ProgressBar.IsIndeterminate = p.IsIndeterminate;
             });
@@ -581,7 +581,7 @@ public partial class MainWindow
             _logger.LogMessage($"Failed to {operationType.ToLowerInvariant()}: {_uiFailedCount} files");
 
             _logger.LogMessage($"\nList of files that failed the {operationType.ToLowerInvariant()} (original names):");
-            foreach (var originalPath in _failedConversionFilePaths)
+            foreach (var originalPath in _failedFilePaths)
             {
                 _logger.LogMessage($"- {Path.GetFileName(originalPath)}");
             }
@@ -663,7 +663,7 @@ public partial class MainWindow
         _uiSkippedCount = 0;
         _invalidIsoErrorCount = 0; // Reset invalid ISO count
         _totalProcessedFiles = 0; // Reset total processed count
-        _failedConversionFilePaths.Clear(); // Clear failed files list
+        _failedFilePaths.Clear(); // Clear failed files list
         UpdateSummaryStatsUi();
         UpdateProgressUi(0, 0);
         ProcessingTimeValue.Text = "00:00:00";

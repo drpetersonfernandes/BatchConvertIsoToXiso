@@ -56,14 +56,6 @@ public partial class App
 
     protected override void OnExit(ExitEventArgs e)
     {
-        // Exit cleanup
-        // Ensure _logger is not null before using it, though it should be initialized by OnStartup
-        if (_logger != null)
-        {
-            _ = TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_logger);
-        }
-
-
         // Dispose registered services that implement IDisposable
         if (ServiceProvider != null)
         {
