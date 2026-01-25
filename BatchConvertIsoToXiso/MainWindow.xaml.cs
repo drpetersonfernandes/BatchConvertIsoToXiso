@@ -19,7 +19,6 @@ public partial class MainWindow
     private readonly ILogger _logger;
     private readonly IBugReportService _bugReportService;
     private readonly IMessageBoxService _messageBoxService;
-    private readonly IFileMover _fileMover;
     private readonly IUrlOpener _urlOpener;
     private readonly ISettingsService _settingsService;
 
@@ -34,13 +33,10 @@ public partial class MainWindow
 
     private int _invalidIsoErrorCount;
     private int _totalProcessedFiles;
-    private readonly List<string> _failedConversionFilePaths = new();
-
-    private readonly IExternalToolService _externalToolService;
+    private readonly List<string> _failedConversionFilePaths = [];
 
     public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
-        IMessageBoxService messageBoxService, IFileMover fileMover, IUrlOpener urlOpener,
-        ISettingsService settingsService, IExternalToolService externalToolService,
+        IMessageBoxService messageBoxService, IUrlOpener urlOpener, ISettingsService settingsService,
         IIsoOrchestratorService orchestratorService, IDiskMonitorService diskMonitorService)
     {
         InitializeComponent();
@@ -49,10 +45,8 @@ public partial class MainWindow
         _logger = logger;
         _bugReportService = bugReportService;
         _messageBoxService = messageBoxService;
-        _fileMover = fileMover;
         _urlOpener = urlOpener;
         _settingsService = settingsService;
-        _externalToolService = externalToolService;
         _orchestratorService = orchestratorService;
         _diskMonitorService = diskMonitorService;
 
@@ -345,169 +339,125 @@ public partial class MainWindow
         {
             if (_isOperationRunning) return;
 
+            // 1. UI Initialization
             _isOperationRunning = true;
-            SetControlsState(false); // Disable controls immediately
+            SetControlsState(false);
+            LogViewer.Clear();
+            ResetSummaryStats();
 
             UpdateStatus("Cleaning up temporary files...");
             await PreOperationCleanupAsync();
 
+            // 2. Validation
+            var inputFolder = TestInputFolderTextBox.Text;
+            if (string.IsNullOrEmpty(inputFolder))
+            {
+                _messageBoxService.ShowError("Please select the input folder for testing.");
+                FinalizeUiState();
+                return;
+            }
+
+            var moveSuccessful = MoveSuccessFilesCheckBox.IsChecked == true;
+            var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
+            var successFolder = Path.Combine(inputFolder, "_success");
+            var failedFolder = Path.Combine(inputFolder, "_failed");
+
+            if (moveSuccessful && moveFailed && successFolder.Equals(failedFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                _messageBoxService.ShowError("Success Folder and Failed Folder cannot be the same.");
+                FinalizeUiState();
+                return;
+            }
+
+            // 3. Prepare Cancellation
+            var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+            oldCts.Dispose();
+
+            // 4. Define Progress Reporting Logic
+            var progress = new Progress<BatchOperationProgress>(p =>
+            {
+                if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
+                if (p.StatusText != null) UpdateStatus(p.StatusText);
+
+                if (p.TotalFiles.HasValue)
+                {
+                    _uiTotalFiles = p.TotalFiles.Value;
+                    _logger.LogMessage($"Found {_uiTotalFiles} .iso files for testing.");
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.ProcessedCount.HasValue)
+                {
+                    UpdateProgressUi(p.ProcessedCount.Value, _uiTotalFiles);
+                }
+
+                if (p.SuccessCount.HasValue)
+                {
+                    _uiSuccessCount += p.SuccessCount.Value;
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.FailedCount.HasValue)
+                {
+                    _uiFailedCount += p.FailedCount.Value;
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
+                if (p.FailedPathToAdd != null) _failedConversionFilePaths.Add(p.FailedPathToAdd);
+
+                ProgressBar.IsIndeterminate = p.IsIndeterminate;
+            });
+
+            // 5. Start Operation
+            _operationStartTime = DateTime.Now;
+            _processingTimer.Start();
+            UpdateStatus("Starting batch ISO test...");
+            _logger.LogMessage("--- Starting batch ISO test process... ---");
+
             try
             {
-                Application.Current.Dispatcher.Invoke(() => LogViewer.Clear());
-
-                // Thread-safe cancellation token replacement
-                var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
-                oldCts.Dispose();
-
-                var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-                var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
-
-                if (!File.Exists(extractXisoPath))
-                {
-                    _logger.LogMessage("Error: extract-xiso.exe not found.");
-                    _messageBoxService.ShowError("extract-xiso.exe is missing. Please ensure it's in the application folder.");
-                    SetControlsState(true);
-                    _isOperationRunning = false;
-                    return;
-                }
-
-                var inputFolder = TestInputFolderTextBox.Text;
-                var moveSuccessful = MoveSuccessFilesCheckBox.IsChecked == true;
-                var successFolder = Path.Combine(inputFolder, "_success");
-                var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
-                var failedFolder = Path.Combine(inputFolder, "_failed");
-                var searchSubfolders = SearchSubfoldersTestCheckBox.IsChecked ?? false;
-
-                if (string.IsNullOrEmpty(inputFolder))
-                {
-                    _messageBoxService.ShowError("Please select the input folder for testing.");
-                    SetControlsState(true);
-                    _isOperationRunning = false; // Reset flag before early return
-                    return;
-                }
-
-                if (moveSuccessful && moveFailed && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(failedFolder, StringComparison.OrdinalIgnoreCase))
-                {
-                    _messageBoxService.ShowError("Success Folder and Failed Folder cannot be the same.");
-                    SetControlsState(true);
-                    _isOperationRunning = false; // Reset flag before early return
-                    return;
-                }
-
-                if ((moveSuccessful && !string.IsNullOrEmpty(successFolder) && successFolder.Equals(inputFolder, StringComparison.OrdinalIgnoreCase)) ||
-                    (moveFailed && !string.IsNullOrEmpty(failedFolder) && failedFolder.Equals(inputFolder, StringComparison.OrdinalIgnoreCase)))
-                {
-                    _messageBoxService.ShowError("Success/Failed folder cannot be the same as the Input folder.");
-                    SetControlsState(true);
-                    _isOperationRunning = false; // Reset flag before early return
-                    return;
-                }
-
-                // Scan the input folder to get .iso files for size calculation and count
-                List<string> isoFilesToTest;
-                try
-                {
-                    var enumOptions = new EnumerationOptions
-                    {
-                        IgnoreInaccessible = true,
-                        RecurseSubdirectories = searchSubfolders
-                    };
-
-                    isoFilesToTest = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", enumOptions).ToList(), _cts.Token);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogMessage($"Error scanning input folder for .iso files: {ex.Message}");
-                    // Only report unexpected errors, not missing directories/files
-                    if (ex is not DirectoryNotFoundException && ex is not FileNotFoundException)
-                    {
-                        _ = ReportBugAsync("Error scanning input folder for .iso files for testing", ex);
-                    }
-
-                    SetControlsState(true);
-                    _isOperationRunning = false; // Reset flag before early return
-                    return;
-                }
-
-                if (isoFilesToTest.Count == 0)
-                {
-                    _logger.LogMessage("No .iso files found in the input folder for testing.");
-                    _messageBoxService.ShowError($"No .iso files were found in the selected folder for testing. {(searchSubfolders ? "" : "Please note this tool is currently configured not to search in subfolders.")}");
-                    SetControlsState(true);
-                    _isOperationRunning = false;
-                    return;
-                }
-
-                ResetSummaryStats();
-
-                _uiTotalFiles = isoFilesToTest.Count;
-                UpdateSummaryStatsUi();
-
-                // Initial drive for monitoring is the temp path, as the test involves extraction to temp.
-                _diskMonitorService.StartMonitoring(Path.GetTempPath());
-
-                _operationStartTime = DateTime.Now;
-                _processingTimer.Start();
-
-                UpdateStatus("Starting batch ISO test...");
-                _logger.LogMessage("--- Starting batch ISO test process... ---");
-                _logger.LogMessage($"Input folder: {inputFolder}");
-                _logger.LogMessage($"Total ISOs to test: {isoFilesToTest.Count}.");
-                _logger.LogMessage($"Search in subfolders: {searchSubfolders}");
-                if (moveSuccessful) _logger.LogMessage($"Moving successful files to: {successFolder}"); // This is a subfolder, so it's fine.
-                if (moveFailed) _logger.LogMessage($"Moving failed files to: {failedFolder}");
-
-                try
-                {
-                    await PerformBatchIsoTestAsync(moveSuccessful, successFolder, moveFailed, failedFolder, isoFilesToTest);
-                }
-                catch (ExceptionFormatter.CriticalToolFailureException ex)
-                {
-                    UpdateStatus("Operation stopped: Tool inaccessible.");
-                    ShowCriticalToolFailureMessage(ex.Message);
-                }
-                catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // ERROR_DISK_FULL
-                {
-                    _logger.LogMessage($"Operation stopped due to insufficient disk space: {ex.Message}");
-                    _messageBoxService.ShowError("The operation was stopped because the disk is full. Please free up some space and try again.");
-                    UpdateStatus("Operation failed: Disk full.");
-                }
-                catch (OperationCanceledException)
-                {
-                    _logger.LogMessage("Operation was canceled by user during initial setup.");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogMessage($"Critical Error during ISO test: {ex.Message}");
-                    UpdateStatus("An error occurred. Ready.");
-                    _ = ReportBugAsync("Critical error during batch ISO test process", ex);
-                }
-                finally
-                {
-                    _processingTimer.Stop();
-                    StopPerformanceCounter();
-                    var finalElapsedTime = DateTime.Now - _operationStartTime;
-                    Application.Current.Dispatcher.Invoke(() => ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
-                    SetControlsState(true);
-                    UpdateStatus("Test complete. Ready.");
-                    _isOperationRunning = false;
-                    LogOperationSummary("Test");
-                }
+                await _orchestratorService.TestAsync(
+                    inputFolder,
+                    moveSuccessful,
+                    moveFailed,
+                    SearchSubfoldersTestCheckBox.IsChecked ?? false,
+                    progress,
+                    HandleCloudRetryRequest,
+                    _cts.Token);
+            }
+            catch (ExceptionFormatter.CriticalToolFailureException ex)
+            {
+                UpdateStatus("Operation stopped: Tool inaccessible.");
+                ShowCriticalToolFailureMessage(ex.Message);
+            }
+            catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // Disk Full
+            {
+                _logger.LogMessage($"Operation stopped: Disk Full. {ex.Message}");
+                _messageBoxService.ShowError("The operation was stopped because the disk is full.");
+                UpdateStatus("Operation failed: Disk full.");
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogMessage("Operation was canceled by the user.");
+                UpdateStatus("Operation canceled.");
             }
             catch (Exception ex)
             {
-                _ = ReportBugAsync($"Error during batch ISO test process: {ex.Message}", ex);
-                _logger.LogMessage($"Error during batch ISO test process: {ex.Message}");
-                _isOperationRunning = false;
-                SetControlsState(true);
+                _logger.LogMessage($"Critical Error: {ex.Message}");
+                _ = ReportBugAsync("Critical error during ISO test", ex);
+            }
+            finally
+            {
+                FinalizeUiState();
+                UpdateStatus("Test complete. Ready.");
+                LogOperationSummary("Test");
             }
         }
         catch (Exception ex)
         {
-            _ = ReportBugAsync($"Error during batch ISO test process: {ex.Message}", ex);
-            _logger.LogMessage($"Error during batch ISO test process: {ex.Message}");
-            _isOperationRunning = false;
-            SetControlsState(true);
+            _ = ReportBugAsync("Unexpected UI Error in StartTestButton", ex);
+            FinalizeUiState();
         }
     }
 
@@ -625,11 +575,23 @@ public partial class MainWindow
         _logger.LogMessage($"Total files processed: {_uiTotalFiles}");
         _logger.LogMessage($"Successfully {ConvertToPastTense.GetPastTense(operationType)}: {_uiSuccessCount} files");
         _logger.LogMessage($"Skipped: {_uiSkippedCount} files");
-        if (_uiFailedCount > 0) _logger.LogMessage($"Failed to {operationType.ToLowerInvariant()}: {_uiFailedCount} files");
+
+        if (_uiFailedCount > 0)
+        {
+            _logger.LogMessage($"Failed to {operationType.ToLowerInvariant()}: {_uiFailedCount} files");
+
+            _logger.LogMessage($"\nList of files that failed the {operationType.ToLowerInvariant()} (original names):");
+            foreach (var originalPath in _failedConversionFilePaths)
+            {
+                _logger.LogMessage($"- {Path.GetFileName(originalPath)}");
+            }
+
+            _logger.LogMessage("");
+        }
 
         Application.Current.Dispatcher.InvokeAsync(() =>
         {
-            // Show warning if high rate of invalid ISOs detected
+            // ... existing warning logic for invalid ISOs ...
             if (_totalProcessedFiles > 5 && (double)_invalidIsoErrorCount / _totalProcessedFiles > 0.5)
             {
                 _messageBoxService.ShowWarning($"Many files ({_invalidIsoErrorCount} out of {_totalProcessedFiles}) were not valid Xbox ISOs. " +
@@ -748,59 +710,5 @@ public partial class MainWindow
                       "The batch operation has been stopped to prevent further errors.";
 
         _messageBoxService.ShowError(message);
-    }
-
-    private async Task<bool> CopyFileWithCloudRetryAsync(string sourcePath, string destinationPath)
-    {
-        while (true)
-        {
-            try
-            {
-                await Task.Run(() => File.Copy(sourcePath, destinationPath, true), _cts.Token);
-                return true; // Success
-            }
-            catch (IOException ex) when (ex.Message.Contains("cloud operation", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogMessage($"Cloud file detected: '{Path.GetFileName(sourcePath)}' needs to be downloaded.");
-
-                var result = MessageBoxResult.None;
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    result = _messageBoxService.Show(
-                        $"The file '{Path.GetFileName(sourcePath)}' is stored in the cloud and needs to be downloaded before it can be processed.\n\n" +
-                        "Please wait for your cloud sync client (e.g., OneDrive) to finish downloading the file.\n\n" +
-                        "• Click 'Yes' to Retry the operation.\n" +
-                        "• Click 'No' to Skip this file.\n" +
-                        "• Click 'Cancel' to stop the entire batch process.",
-                        "Cloud File Download Required",
-                        MessageBoxButton.YesNoCancel,
-                        MessageBoxImage.Information);
-                });
-
-                switch (result)
-                {
-                    case MessageBoxResult.Yes: // Retry
-                        _logger.LogMessage("User chose to retry. Re-attempting copy...");
-                        continue; // Loop back to the try block
-                    case MessageBoxResult.No: // Skip
-                        _logger.LogMessage($"User chose to skip file: {Path.GetFileName(sourcePath)}");
-                        return false;
-                    case MessageBoxResult.Cancel: // Cancel
-                        _logger.LogMessage("User chose to cancel the entire operation.");
-                        _cts.Cancel();
-                        return false;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Propagate cancellation
-                throw;
-            }
-            catch (Exception)
-            {
-                // Any other exception during copy is a failure
-                return false;
-            }
-        }
     }
 }
