@@ -39,7 +39,30 @@ public class FileExtractorService : IFileExtractor
                 _logger.LogMessage($"  Archive format: {archiveFormat}, Files to extract: {fileCount}");
                 _logger.LogMessage($"  Extracting all files from {archiveFileName}...");
 
-                extractor.ExtractArchive(extractionPath); // Extract all files
+                // Manually extract files to prevent "Zip Slip" (absolute paths or path traversal in archives)
+                for (var i = 0; i < extractor.FilesCount; i++)
+                {
+                    cts.Token.ThrowIfCancellationRequested();
+                    var fileData = extractor.ArchiveFileData[i];
+                    if (fileData.IsDirectory) continue;
+
+                    // Sanitize path: Remove drive letters (C:) and leading slashes to force relative path
+                    var entryPath = fileData.FileName;
+                    if (Path.IsPathRooted(entryPath) || entryPath.Contains(".."))
+                    {
+                        entryPath = Path.GetFileName(entryPath); // Flatten to just the filename if suspicious
+                    }
+
+                    var fullDestPath = Path.GetFullPath(Path.Combine(extractionPath, entryPath));
+
+                    // Ensure the resulting path is still inside our extraction directory
+                    if (!fullDestPath.StartsWith(Path.GetFullPath(extractionPath), StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath) ?? throw new InvalidOperationException("fullDestPath cannot be null"));
+                    using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);
+                    extractor.ExtractFile(i, fs);
+                }
             }, cts.Token);
 
             _logger.LogMessage($"  Successfully extracted: {archiveFileName}");

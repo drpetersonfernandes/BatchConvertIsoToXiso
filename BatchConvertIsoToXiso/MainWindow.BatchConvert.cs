@@ -617,11 +617,13 @@ public partial class MainWindow : IDisposable
                 {
                     // Clear Read-Only attribute if it exists on the destination
                     var attributes = File.GetAttributes(destinationPath);
-                    if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                    if ((attributes & (FileAttributes.ReadOnly | FileAttributes.Hidden | FileAttributes.System)) != 0)
                     {
-                        _logger.LogMessage($"{logPrefix} Destination file is Read-Only. Removing attribute...");
-                        File.SetAttributes(destinationPath, attributes & ~FileAttributes.ReadOnly);
+                        _logger.LogMessage($"{logPrefix} Destination file has restrictive attributes (R/H/S). Resetting to Normal...");
+                        File.SetAttributes(destinationPath, FileAttributes.Normal);
                     }
+
+                    File.Delete(destinationPath);
                 }
 
                 await Task.Run(() => File.Move(sourcePath, destinationPath, true), _cts.Token);
