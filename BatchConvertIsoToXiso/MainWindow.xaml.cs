@@ -594,12 +594,23 @@ public partial class MainWindow
 
     private void SetControlsState(bool enabled)
     {
-        ConvertTab.IsEnabled = enabled;
-        TestTab.IsEnabled = enabled;
-        ExplorerTab.IsEnabled = enabled;
-        MainTabControl.IsEnabled = enabled;
+        // Disable/Enable the navigation buttons in the header
+        BtnNavConvert.IsEnabled = enabled;
+        BtnNavTest.IsEnabled = enabled;
+        BtnNavExplorer.IsEnabled = enabled;
+
+        // Disable/Enable the entire settings area
+        ControlsBorder.IsEnabled = enabled;
+
+        // Toggle visibility of progress and cancel
+        ProgressAreaGrid.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         ProgressBar.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         CancelButton.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+
+        if (enabled)
+        {
+            UpdateStatus("Ready.");
+        }
     }
 
     private void ResetSummaryStats()
@@ -610,6 +621,39 @@ public partial class MainWindow
         _failedFilePaths.Clear();
         UpdateSummaryStatsUi();
         UpdateProgressUi(0, 0);
+    }
+
+    private void NavConvert_Click(object sender, RoutedEventArgs e)
+    {
+        ConvertView.Visibility = Visibility.Visible;
+        TestView.Visibility = Visibility.Collapsed;
+        ExplorerHeaderView.Visibility = Visibility.Collapsed;
+
+        LogBorder.Visibility = Visibility.Visible;
+        ExplorerBorder.Visibility = Visibility.Collapsed;
+        StatsPanel.Visibility = Visibility.Visible;
+    }
+
+    private void NavTest_Click(object sender, RoutedEventArgs e)
+    {
+        ConvertView.Visibility = Visibility.Collapsed;
+        TestView.Visibility = Visibility.Visible;
+        ExplorerHeaderView.Visibility = Visibility.Collapsed;
+
+        LogBorder.Visibility = Visibility.Visible;
+        ExplorerBorder.Visibility = Visibility.Collapsed;
+        StatsPanel.Visibility = Visibility.Visible;
+    }
+
+    private void NavExplorer_Click(object sender, RoutedEventArgs e)
+    {
+        ConvertView.Visibility = Visibility.Collapsed;
+        TestView.Visibility = Visibility.Collapsed;
+        ExplorerHeaderView.Visibility = Visibility.Visible;
+
+        LogBorder.Visibility = Visibility.Collapsed;
+        ExplorerBorder.Visibility = Visibility.Visible;
+        StatsPanel.Visibility = Visibility.Collapsed;
     }
 
     private void Window_Closing(object sender, CancelEventArgs e)

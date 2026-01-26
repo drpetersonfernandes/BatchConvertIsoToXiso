@@ -6,32 +6,18 @@ public partial class MainWindow
 {
     private void DisplayInitialInstructions()
     {
-        _logger.LogMessage("Welcome to the Batch Convert ISO to XISO & Test Tool.");
+        _logger.LogMessage("Welcome to the Batch Convert ISO to XISO.");
         _logger.LogMessage("");
-        _logger.LogMessage("This application provides two main functions, available in the tabs above:");
+        _logger.LogMessage("This application provides three main functions, available in the tabs above:");
         _logger.LogMessage("1. Convert to XISO: Converts standard Xbox ISO files to the optimized XISO format. It can also process ISOs found within .zip, .7z, and .rar archives.");
-        _logger.LogMessage("2. Test ISO Integrity: Verifies the integrity of your .iso files by attempting a full extraction to a temporary location.");
+        _logger.LogMessage("2. Test ISO Integrity: Verifies the integrity of your .iso files.");
+        _logger.LogMessage("3. Explore ISO: Explorer the content of .iso files.");
         _logger.LogMessage("");
         _logger.LogMessage("IMPORTANT: This tool ONLY works with Xbox and Xbox 360 ISO files.");
         _logger.LogMessage("It cannot convert or test ISOs from PlayStation, PlayStation 2, or other consoles.");
         _logger.LogMessage("");
-        _logger.LogMessage("General Steps:");
-        _logger.LogMessage("- Select the appropriate tab for the operation you want to perform.");
-        _logger.LogMessage("- Use the 'Browse' buttons to select your source and destination folders.");
-        _logger.LogMessage("- Configure the options for your chosen operation.");
-        _logger.LogMessage("- Click the 'Start' button to begin.");
-        _logger.LogMessage("");
 
         var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-        var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
-        if (File.Exists(extractXisoPath))
-        {
-            _logger.LogMessage("INFO: extract-xiso.exe found in the application directory.");
-        }
-        else
-        {
-            _logger.LogMessage("WARNING: extract-xiso.exe not found. ISO conversion and testing will fail.");
-        }
 
         var bchunkPath = Path.Combine(appDirectory, "bchunk.exe");
         if (File.Exists(bchunkPath))
@@ -43,7 +29,17 @@ public partial class MainWindow
             _logger.LogMessage("WARNING: bchunk.exe not found. CUE/BIN conversion will fail.");
         }
 
-        _logger.LogMessage("INFO: Archive extraction uses the SevenZipExtractor library.");
+        var sevenZipLibraryX64 = Path.Combine(appDirectory, "7z_x64.exe");
+        var sevenZipLibraryArm64 = Path.Combine(appDirectory, "7z_arm64.exe");
+        if (File.Exists(sevenZipLibraryX64) || File.Exists(sevenZipLibraryArm64))
+        {
+            _logger.LogMessage("INFO: SevenZipExtractor library found. Archive extraction is enabled.");
+        }
+        else
+        {
+            _logger.LogMessage("WARNING: SevenZipExtractor library not found. Archive extraction will fail.");
+        }
+
         _logger.LogMessage("--- Ready ---");
     }
 }

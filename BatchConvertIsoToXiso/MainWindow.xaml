@@ -3,217 +3,171 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:services="clr-namespace:BatchConvertIsoToXiso.Services"
         Title="Batch Convert ISO to XISO"
-        Height="700" Width="1150" MinHeight="650" MinWidth="700"
+        Height="750" Width="1150" MinHeight="650" MinWidth="700"
         Closing="Window_Closing"
         WindowStartupLocation="CenterScreen">
-    
+
     <Window.Resources>
         <!-- Converter for the XIso Explorer icons -->
-        <services:FolderIconConverter x:Key="FolderIconConverter"/>
+        <services:FolderIconConverter x:Key="FolderIconConverter" />
     </Window.Resources>
-    
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" /> <!-- 0: Menu -->
-            
-            <!-- 1: Main Content (Tabs) -->
-            <RowDefinition>
-                <RowDefinition.Style>
-                    <Style TargetType="RowDefinition">
-                        <!-- On Convert/Test tabs, the tab area only takes what it needs -->
-                        <Setter Property="Height" Value="Auto" />
-                        <Style.Triggers>
-                            <!-- On Explorer tab, the tab area fills the window -->
-                            <DataTrigger Binding="{Binding IsSelected, ElementName=ExplorerTab}" Value="True">
-                                <Setter Property="Height" Value="*" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </RowDefinition.Style>
-            </RowDefinition>
 
-            <!-- 2: Batch Status Area (Log, Stats, Progress) -->
-            <RowDefinition>
-                <RowDefinition.Style>
-                    <Style TargetType="RowDefinition">
-                        <!-- On Convert/Test tabs, the Log area fills the remaining space -->
-                        <Setter Property="Height" Value="*" />
-                        <Style.Triggers>
-                            <!-- On Explorer tab, this row disappears -->
-                            <DataTrigger Binding="{Binding IsSelected, ElementName=ExplorerTab}" Value="True">
-                                <Setter Property="Height" Value="0" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </RowDefinition.Style>
-            </RowDefinition>
-            
-            <RowDefinition Height="Auto" /> <!-- 3: StatusBar -->
+    <Grid Background="#F5F5F5">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" /> <!-- 0: Header -->
+            <RowDefinition Height="*" />    <!-- 1: Main Content -->
+            <RowDefinition Height="Auto" /> <!-- 2: StatusBar -->
         </Grid.RowDefinitions>
 
-        <!-- Menu Bar -->
-        <Menu Grid.Row="0">
-            <MenuItem Header="File">
-                <MenuItem Header="Exit" Click="ExitMenuItem_Click">
-                    <MenuItem.Icon>
-                        <Image Source="pack://application:,,,/images/exit.png" Width="16" Height="16" />
-                    </MenuItem.Icon>
-                </MenuItem>
-            </MenuItem>
-            <MenuItem Header="Help">
-                <MenuItem Header="About" Click="AboutMenuItem_Click">
-                    <MenuItem.Icon>
-                        <Image Source="pack://application:,,,/images/about.png" Width="16" Height="16" />
-                    </MenuItem.Icon>
-                </MenuItem>
-            </MenuItem>
-        </Menu>
-
-        <!-- Tab Control for Main Operations -->
-        <TabControl Grid.Row="1" x:Name="MainTabControl" Margin="10" VerticalAlignment="Stretch">
-            <TabItem Header="Convert to XISO" x:Name="ConvertTab">
-                <StackPanel Margin="10">
-                    <!-- Input Folder for Conversion -->
-                    <Grid Margin="0,0,0,5">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Label Grid.Column="0" Content="Source Files Folder:" VerticalAlignment="Center" />
-                        <TextBox x:Name="ConversionInputFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True" />
-                        <Button x:Name="BrowseConversionInputButton" Grid.Column="2" Content="Browse" Click="BrowseConversionInputButton_Click" Padding="10,5" />
-                    </Grid>
-
-                    <!-- Output Folder for Conversion -->
-                    <Grid Margin="0,0,0,5">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Label Grid.Column="0" Content="Output XISO Folder:" VerticalAlignment="Center" />
-                        <TextBox x:Name="ConversionOutputFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True" />
-                        <Button x:Name="BrowseConversionOutputButton" Grid.Column="2" Content="Browse" Click="BrowseConversionOutputButton_Click" Padding="10,5" />
-                    </Grid>
-
-                    <!-- Conversion Options -->
-                    <CheckBox x:Name="DeleteOriginalsCheckBox" Content="Delete original files after successful conversion" Margin="0,5,0,5" HorizontalAlignment="Left" />
-                    <CheckBox x:Name="SearchSubfoldersConversionCheckBox" Content="Search for files in subfolders" Margin="0,5,0,5" HorizontalAlignment="Left" />
-                    <CheckBox x:Name="SkipSystemUpdateCheckBox" Content="Skip $SystemUpdate folder during conversion" Margin="0,5,0,5" HorizontalAlignment="Left" />
-                    <CheckBox x:Name="CheckOutputIntegrityCheckBox" Content="Check integrity of the output file" Margin="0,5,0,10" HorizontalAlignment="Left" IsChecked="True" />
-
-                    <!-- Conversion Action Button -->
-                    <Button x:Name="StartConversionButton" Content="Start Conversion" Click="StartConversionButton_Click" Margin="0,10,0,0" Padding="15,8" HorizontalAlignment="Center" FontWeight="Bold" />
+        <!-- Header (RomValidator Style) -->
+        <Border Grid.Row="0" Background="#1976D2" Padding="15">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="Batch ISO to XISO" FontSize="20" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,30,0" />
+                    <Button x:Name="BtnNavConvert" Content="Convert" Click="NavConvert_Click" Style="{StaticResource MenuButtonStyle}" />
+                    <Button x:Name="BtnNavTest" Content="Test Integrity" Click="NavTest_Click" Style="{StaticResource MenuButtonStyle}" />
+                    <Button x:Name="BtnNavExplorer" Content="Explorer" Click="NavExplorer_Click" Style="{StaticResource MenuButtonStyle}" />
                 </StackPanel>
-            </TabItem>
-
-            <TabItem Header="Test ISO Integrity" x:Name="TestTab">
-                <StackPanel Margin="10">
-                    <!-- Input Folder for Testing -->
-                    <Grid Margin="0,0,0,5">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Label Grid.Column="0" Content="ISO Files Folder:" VerticalAlignment="Center" />
-                        <TextBox x:Name="TestInputFolderTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True" />
-                        <Button x:Name="BrowseTestInputButton" Grid.Column="2" Content="Browse" Click="BrowseTestInputButton_Click" Padding="10,5" />
-                    </Grid>
-
-                    <!-- Test Options -->
-                    <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to a '_success' subfolder within the source folder" Margin="0,10,0,0" HorizontalAlignment="Left" IsChecked="True" />
-                    <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to a '_failed' subfolder within the source folder" Margin="0,10,0,0" HorizontalAlignment="Left" IsChecked="True" />
-                    <CheckBox x:Name="SearchSubfoldersTestCheckBox" Content="Search for files in subfolders" Margin="0,10,0,10" HorizontalAlignment="Left" />
-
-                    <!-- Test Action Button -->
-                    <Button x:Name="StartTestButton" Content="Start Test" Click="StartTestButton_Click" Margin="0,10,0,0" Padding="15,8" HorizontalAlignment="Center" FontWeight="Bold" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button Content="About" Click="AboutMenuItem_Click" Style="{StaticResource MenuButtonStyle}" Background="#9C27B0" ToolTip="View application information" />
+                    <Button Content="Exit" Click="ExitMenuItem_Click" Style="{StaticResource MenuButtonStyle}" Background="#607D8B" ToolTip="Close the application" />
                 </StackPanel>
-            </TabItem>
+            </Grid>
+        </Border>
 
-            <!-- XIso Explorer -->
-            <TabItem Header="XIso Explorer" x:Name="ExplorerTab">
-                <Grid Margin="10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" /> <!-- File Picker -->
-                        <RowDefinition Height="Auto" /> <!-- Navigation Bar -->
-                        <RowDefinition Height="*" />    <!-- File List -->
-                    </Grid.RowDefinitions>
-
-                    <!-- File Picker -->
-                    <Grid Grid.Row="0" Margin="0,0,0,10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Label Content="Select XISO File:" VerticalAlignment="Center" />
-                        <TextBox x:Name="ExplorerFilePathTextBox" Grid.Column="1" Margin="5,0,5,0" Padding="5" IsReadOnly="True" />
-                        <Button Content="Browse" Grid.Column="2" Click="BrowseExplorerFile_Click" Padding="15,5" />
-                    </Grid>
-
-                    <!-- Navigation Bar -->
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,5">
-                        <Button x:Name="ExplorerUpButton" Content="⬆ Up" Click="ExplorerUpButton_Click" Width="60" Margin="0,0,10,0" IsEnabled="False" />
-                        <TextBlock Text="Current Path: " VerticalAlignment="Center" FontWeight="Bold" />
-                        <TextBlock x:Name="ExplorerPathTextBlock" Text="/" VerticalAlignment="Center" />
-                    </StackPanel>
-
-                    <!-- File List -->
-                    <ListView x:Name="ExplorerListView" Grid.Row="2" MouseDoubleClick="ExplorerListView_MouseDoubleClick">
-                        <ListView.View>
-                            <GridView>
-                                <GridViewColumn Header="Name" Width="450">
-                                    <GridViewColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding IsDirectory, Converter={StaticResource FolderIconConverter}}" Margin="0,0,5,0" />
-                                                <TextBlock Text="{Binding Name}" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </GridViewColumn.CellTemplate>
-                                </GridViewColumn>
-                                <GridViewColumn Header="Size" DisplayMemberBinding="{Binding SizeFormatted}" Width="120" />
-                                <GridViewColumn Header="Type" DisplayMemberBinding="{Binding Type}" Width="100" />
-                            </GridView>
-                        </ListView.View>
-                    </ListView>
-                </Grid>
-            </TabItem>
-        </TabControl>
-
-        <!-- Batch Status Area: Changed to Grid to allow LogViewer to fill space -->
-        <Grid Grid.Row="2" x:Name="BatchStatusArea">
-            <Grid.Style>
-                <Style TargetType="Grid">
-                    <Setter Property="Visibility" Value="Visible" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsSelected, ElementName=ExplorerTab}" Value="True">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Grid.Style>
-
+        <!-- Main Content Area -->
+        <Grid Grid.Row="1" Margin="10">
             <Grid.RowDefinitions>
-                <RowDefinition Height="*" />    <!-- Log fills available space -->
-                <RowDefinition Height="Auto" /> <!-- Summary Stats -->
-                <RowDefinition Height="Auto" /> <!-- Progress Bar -->
+                <RowDefinition Height="Auto" /> <!-- 0: Operation Controls -->
+                <RowDefinition Height="*" />    <!-- 1: Log/Explorer -->
+                <RowDefinition Height="Auto" /> <!-- 2: Stats -->
+                <RowDefinition Height="Auto" /> <!-- 3: Progress -->
             </Grid.RowDefinitions>
 
-            <!-- Log TextBox -->
-            <TextBox x:Name="LogViewer"
-                     Grid.Row="0"
-                     AcceptsReturn="True"
-                     VerticalScrollBarVisibility="Visible"
-                     IsReadOnly="True"
-                     Margin="10,0,10,0"
-                     FontFamily="Consolas"
-                     MinHeight="150" />
+            <!-- 0. Operation Controls (Styled like RomValidator Borders) -->
+            <Border x:Name="ControlsBorder" Grid.Row="0" Background="White" BorderBrush="#BDBDBD" BorderThickness="1" CornerRadius="4" Padding="15" Margin="0,0,0,10">
+                <Grid>
+                    <!-- Conversion View -->
+                    <StackPanel x:Name="ConvertView">
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Label Content="Source Folder:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBox x:Name="ConversionInputFolderTextBox" Grid.Column="1" Style="{StaticResource CustomTextBoxStyle}" IsReadOnly="True" Margin="5,0" ToolTip="Select the folder containing ISO or archive files" />
+                            <Button Grid.Column="2" Content="Browse..." Click="BrowseConversionInputButton_Click" Style="{StaticResource ActionButtonStyle}" ToolTip="Browse for source folder" />
+                        </Grid>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Label Content="Output Folder:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBox x:Name="ConversionOutputFolderTextBox" Grid.Column="1" Style="{StaticResource CustomTextBoxStyle}" IsReadOnly="True" Margin="5,0" ToolTip="Select the output folder for converted XISO files" />
+                            <Button Grid.Column="2" Content="Browse..." Click="BrowseConversionOutputButton_Click" Style="{StaticResource ActionButtonStyle}" ToolTip="Browse for output folder" />
+                        </Grid>
+                        <StackPanel Orientation="Vertical" Margin="0,5,0,5">
+                            <CheckBox x:Name="DeleteOriginalsCheckBox" Content="Delete original files after successful conversion" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Deletes the original ISO/archive if conversion is successful. Use with caution!" />
+                            <CheckBox x:Name="SearchSubfoldersConversionCheckBox" Content="Search for files in subfolders" Margin="0,8,0,8" HorizontalAlignment="Left" ToolTip="Include files found in subdirectories of the source folder" />
+                            <CheckBox x:Name="SkipSystemUpdateCheckBox" Content="Skip $SystemUpdate folder during conversion" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Omits the $SystemUpdate folder from the output XISO, reducing file size" />
+                            <CheckBox x:Name="CheckOutputIntegrityCheckBox" Content="Check integrity of the output file" Margin="0,8,0,8" HorizontalAlignment="Left" IsChecked="True" ToolTip="Performs a structural integrity check on the newly created XISO file" />
+                        </StackPanel>
+                        <Button x:Name="StartConversionButton" Content="Start Conversion" Style="{StaticResource StartButtonStyle}" HorizontalAlignment="Center" Margin="0,5,0,0" Click="StartConversionButton_Click" ToolTip="Begin the batch conversion process" />
+                    </StackPanel>
 
-            <!-- Summary Stats -->
-            <Grid Grid.Row="1" Margin="10,5,10,5">
+                    <!-- Test View (Hidden by default) -->
+                    <StackPanel x:Name="TestView" Visibility="Collapsed">
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Label Content="ISO Folder:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBox x:Name="TestInputFolderTextBox" Grid.Column="1" Style="{StaticResource CustomTextBoxStyle}" IsReadOnly="True" Margin="5,0" ToolTip="Select the folder containing ISO files to test" />
+                            <Button Grid.Column="2" Content="Browse..." Click="BrowseTestInputButton_Click" Style="{StaticResource ActionButtonStyle}" ToolTip="Browse for ISO folder" />
+                        </Grid>
+                        <StackPanel Orientation="Vertical" Margin="0,5,0,5">
+                            <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to a '_success' subfolder" Margin="0,2,0,2" HorizontalAlignment="Left" IsChecked="True" ToolTip="Moves valid ISOs to a '_success' folder within the source folder" />
+                            <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to a '_failed' subfolder" Margin="0,8,0,8" HorizontalAlignment="Left" IsChecked="True" ToolTip="Moves invalid ISOs to a '_failed' folder within the source folder" />
+                            <CheckBox x:Name="SearchSubfoldersTestCheckBox" Content="Search for files in subfolders" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Include files found in subdirectories of the input folder" />
+                        </StackPanel>
+                        <Button x:Name="StartTestButton" Content="Start Integrity Test" Style="{StaticResource StartButtonStyle}" HorizontalAlignment="Center" Margin="0,15,0,0" Click="StartTestButton_Click" ToolTip="Begin the batch integrity test process" />
+                    </StackPanel>
+
+                    <!-- Explorer View Header -->
+                    <StackPanel x:Name="ExplorerHeaderView" Visibility="Collapsed">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Label Content="Select XISO File:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBox x:Name="ExplorerFilePathTextBox" Grid.Column="1" Style="{StaticResource CustomTextBoxStyle}" IsReadOnly="True" Margin="5,0" ToolTip="Select an Xbox ISO file to explore its contents" />
+                            <Button Content="Browse..." Grid.Column="2" Click="BrowseExplorerFile_Click" Style="{StaticResource ActionButtonStyle}" ToolTip="Browse for an XISO file" />
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 1. Log / Explorer Content -->
+            <Grid Grid.Row="1">
+                <Border x:Name="LogBorder" BorderBrush="#BDBDBD" BorderThickness="1" CornerRadius="4" Background="White">
+                    <TextBox x:Name="LogViewer" AcceptsReturn="True" IsReadOnly="True" FontFamily="Consolas" BorderThickness="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                </Border>
+
+                <Border x:Name="ExplorerBorder" Visibility="Collapsed" BorderBrush="#BDBDBD" BorderThickness="1" CornerRadius="4" Background="White" Padding="10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" /> <!-- Navigation Bar -->
+                            <RowDefinition Height="*" />    <!-- File List -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Navigation Bar -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,5">
+                            <Button x:Name="ExplorerUpButton" Content="⬆ Up" Click="ExplorerUpButton_Click" Width="60" Margin="0,0,10,0" IsEnabled="False" Style="{StaticResource ActionButtonStyle}" ToolTip="Go up one directory level" />
+                            <TextBlock Text="Current Path: " VerticalAlignment="Center" FontWeight="Bold" />
+                            <TextBlock x:Name="ExplorerPathTextBlock" Text="/" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- File List -->
+                        <ListView x:Name="ExplorerListView" Grid.Row="1" MouseDoubleClick="ExplorerListView_MouseDoubleClick" BorderThickness="0">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="Padding" Value="10,5" />
+                                    <Setter Property="BorderThickness" Value="0,0,0,1" />
+                                    <Setter Property="BorderBrush" Value="#E0E0E0" />
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#E3F2FD" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Name" Width="450">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding IsDirectory, Converter={StaticResource FolderIconConverter}}" Margin="0,0,5,0" />
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="Size" DisplayMemberBinding="{Binding SizeFormatted}" Width="120" />
+                                    <GridViewColumn Header="Type" DisplayMemberBinding="{Binding Type}" Width="100" />
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- 2. Stats Panel (RomValidator Style) -->
+            <Grid x:Name="StatsPanel" Grid.Row="2" Margin="0,10,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
@@ -222,45 +176,35 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="0" BorderBrush="LightGray" BorderThickness="1" Margin="2" Padding="5">
-                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="Total Files:" FontWeight="Bold" HorizontalAlignment="Center" />
-                        <TextBlock x:Name="TotalFilesValue" Text="0" HorizontalAlignment="Center" />
+                <Border Grid.Column="0" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
+                    <StackPanel>
+                        <TextBlock Text="Total Files:" FontWeight="SemiBold" HorizontalAlignment="Center" /><TextBlock x:Name="TotalFilesValue" Text="0" HorizontalAlignment="Center" />
                     </StackPanel>
                 </Border>
-
-                <Border Grid.Column="1" BorderBrush="LightGray" BorderThickness="1" Margin="2" Padding="5">
-                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="Success:" FontWeight="Bold" Foreground="Green" HorizontalAlignment="Center" />
-                        <TextBlock x:Name="SuccessValue" Text="0" HorizontalAlignment="Center" />
+                <Border Grid.Column="1" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
+                    <StackPanel>
+                        <TextBlock Text="Success:" FontWeight="SemiBold" Foreground="Green" HorizontalAlignment="Center" /><TextBlock x:Name="SuccessValue" Text="0" HorizontalAlignment="Center" />
                     </StackPanel>
                 </Border>
-
-                <Border Grid.Column="2" BorderBrush="LightGray" BorderThickness="1" Margin="2" Padding="5">
-                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="Failed:" FontWeight="Bold" Foreground="Red" HorizontalAlignment="Center" />
-                        <TextBlock x:Name="FailedValue" Text="0" HorizontalAlignment="Center" />
+                <Border Grid.Column="2" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
+                    <StackPanel>
+                        <TextBlock Text="Failed:" FontWeight="SemiBold" Foreground="Red" HorizontalAlignment="Center" /><TextBlock x:Name="FailedValue" Text="0" HorizontalAlignment="Center" />
                     </StackPanel>
                 </Border>
-
-                <Border Grid.Column="3" BorderBrush="LightGray" BorderThickness="1" Margin="2" Padding="5">
-                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="Skipped:" FontWeight="Bold" Foreground="Orange" HorizontalAlignment="Center" />
-                        <TextBlock x:Name="SkippedValue" Text="0" HorizontalAlignment="Center" />
+                <Border Grid.Column="3" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
+                    <StackPanel>
+                        <TextBlock Text="Skipped:" FontWeight="SemiBold" Foreground="Orange" HorizontalAlignment="Center" /><TextBlock x:Name="SkippedValue" Text="0" HorizontalAlignment="Center" />
                     </StackPanel>
                 </Border>
-
-                <Border Grid.Column="4" BorderBrush="LightGray" BorderThickness="1" Margin="2" Padding="5">
-                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="Processing Time:" FontWeight="Bold" HorizontalAlignment="Center" />
-                        <TextBlock x:Name="ProcessingTimeValue" Text="00:00:00" HorizontalAlignment="Center" />
+                <!-- ADDED THIS BORDER BACK -->
+                <Border Grid.Column="4" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
+                    <StackPanel>
+                        <TextBlock Text="Time:" FontWeight="SemiBold" HorizontalAlignment="Center" /><TextBlock x:Name="ProcessingTimeValue" Text="00:00:00" HorizontalAlignment="Center" />
                     </StackPanel>
                 </Border>
-
-                <Border Grid.Column="5" BorderBrush="LightGray" BorderThickness="1" Margin="2" Padding="5">
-                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="Write Speed:" FontWeight="Bold" HorizontalAlignment="Center" />
+                <Border Grid.Column="5" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
+                    <StackPanel>
+                        <TextBlock Text="Write Speed:" FontWeight="SemiBold" HorizontalAlignment="Center" />
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                             <TextBlock x:Name="WriteSpeedValue" Text="N/A" />
                             <TextBlock x:Name="WriteSpeedDriveIndicator" Text="" Margin="5,0,0,0" />
@@ -269,44 +213,25 @@
                 </Border>
             </Grid>
 
-            <!-- Progress Bar and Cancel Button -->
-            <Grid Grid.Row="2" Margin="10,5,10,10">
+            <!-- 3. Progress Area -->
+            <Grid x:Name="ProgressAreaGrid" Grid.Row="3" Margin="0,10,0,0" Visibility="Collapsed">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <ProgressBar x:Name="ProgressBar"
-                             Height="25"
-                             Grid.Column="0"
-                             Visibility="Collapsed" />
-                <Button x:Name="CancelButton"
-                        Content="Cancel"
-                        Width="100"
-                        Height="25"
-                        Grid.Column="1"
-                        Margin="10,0,0,0"
-                        Visibility="Collapsed"
-                        Click="CancelButton_Click" />
+                <Border BorderBrush="#BDBDBD" BorderThickness="1" CornerRadius="4" Padding="1" Background="White">
+                    <Grid>
+                        <ProgressBar x:Name="ProgressBar" Height="24" Foreground="#4CAF50" Background="Transparent" BorderThickness="0" />
+                        <TextBlock x:Name="ProgressTextBlock" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" />
+                    </Grid>
+                </Border>
+                <Button x:Name="CancelButton" Grid.Column="1" Content="Cancel" Style="{StaticResource CancelButtonStyle}" Margin="10,0,0,0" Visibility="Collapsed" Click="CancelButton_Click" ToolTip="Cancel the current operation" />
             </Grid>
         </Grid>
 
-        <!-- StatusBar -->
-        <StatusBar Grid.Row="3">
-            <StatusBar.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                    </Grid>
-                </ItemsPanelTemplate>
-            </StatusBar.ItemsPanel>
-            <StatusBarItem Grid.Column="0">
-                <TextBlock x:Name="StatusTextBlock" Text="Ready" Margin="2,0" />
-            </StatusBarItem>
-            <StatusBarItem Grid.Column="1">
-                <TextBlock x:Name="ProgressTextBlock" Margin="2,0" />
+        <!-- Status Bar -->
+        <StatusBar Grid.Row="2" Background="#E0E0E0" Padding="5">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusTextBlock" Text="Ready." />
             </StatusBarItem>
         </StatusBar>
     </Grid>
