@@ -1,7 +1,7 @@
 <Window x:Class="BatchConvertIsoToXiso.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:local="clr-namespace:BatchConvertIsoToXiso"
+        xmlns:services="clr-namespace:BatchConvertIsoToXiso.Services"
         Title="Batch Convert ISO to XISO"
         Height="700" Width="1150" MinHeight="650" MinWidth="700"
         Closing="Window_Closing"
@@ -9,7 +9,7 @@
     
     <Window.Resources>
         <!-- Converter for the XIso Explorer icons -->
-        <local:FolderIconConverter x:Key="FolderIconConverter"/>
+        <services:FolderIconConverter x:Key="FolderIconConverter"/>
     </Window.Resources>
     
     <Grid>
