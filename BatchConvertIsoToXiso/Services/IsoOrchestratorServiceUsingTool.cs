@@ -1,34 +1,30 @@
 using System.IO;
 using BatchConvertIsoToXiso.Models;
-using BatchConvertIsoToXiso.Services.Xiso;
 
 namespace BatchConvertIsoToXiso.Services;
 
-public class IsoOrchestratorService : IIsoOrchestratorService
+public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
 {
     private readonly IExternalToolService _externalToolService;
     private readonly IFileExtractor _fileExtractor;
     private readonly IFileMover _fileMover;
     private readonly IBugReportService _bugReportService;
-    private readonly INativeIsoIntegrityService _nativeIsoTester;
 
     private class ProcessingContext
     {
         public int GlobalFileIndex { get; set; } = 1;
     }
 
-    public IsoOrchestratorService(
+    public IsoOrchestratorServiceUsingTool(
         IExternalToolService externalToolService,
         IFileExtractor fileExtractor,
         IFileMover fileMover,
-        IBugReportService bugReportService,
-        INativeIsoIntegrityService nativeIsoTester)
+        IBugReportService bugReportService)
     {
         _externalToolService = externalToolService;
         _fileExtractor = fileExtractor;
         _fileMover = fileMover;
         _bugReportService = bugReportService;
-        _nativeIsoTester = nativeIsoTester;
     }
 
     #region Conversion Logic
@@ -324,66 +320,35 @@ public class IsoOrchestratorService : IIsoOrchestratorService
 
     private async Task<IsoTestResultStatus> TestSingleIsoInternalAsync(string isoPath, int index, Func<string, Task<CloudRetryResult>> cloudRetry, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
-        // We can now test directly without copying to temp, unless it's a cloud file that needs downloading
-        // However, the NativeIsoIntegrityService requires a FileStream.
-
-        // 1. Handle Cloud/OneDrive files (download to temp if necessary)
-        var pathToCheck = isoPath;
-        string? tempCloudCopy = null;
-
+        var tempDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_TestExtract", Guid.NewGuid().ToString());
         try
         {
-            // Simple check if file is accessible (triggers cloud download if hydration is automatic, or fails)
-            await using (File.OpenRead(isoPath))
-            {
-            }
-        }
-        catch (IOException)
-        {
-            // Likely cloud file issue, use existing copy logic
-            var simpleName = GenerateFilename.GenerateSimpleFilename(index);
-            var tempDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Test", Guid.NewGuid().ToString());
             Directory.CreateDirectory(tempDir);
-            tempCloudCopy = Path.Combine(tempDir, simpleName);
+            var success = await _externalToolService.RunIsoExtractionAsync(isoPath, tempDir, token);
+            if (success) return IsoTestResultStatus.Passed;
 
-            if (await CopyFileWithCloudRetryAsync(isoPath, tempCloudCopy, cloudRetry, progress, token))
+            await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(tempDir, 3, 500, null);
+            Directory.CreateDirectory(tempDir);
+
+            var simpleName = GenerateFilename.GenerateSimpleFilename(index);
+            var localPath = Path.Combine(tempDir, simpleName);
+
+            if (await CopyFileWithCloudRetryAsync(isoPath, localPath, cloudRetry, progress, token))
             {
-                pathToCheck = tempCloudCopy;
+                return await _externalToolService.RunIsoExtractionAsync(localPath, tempDir, token)
+                    ? IsoTestResultStatus.Passed
+                    : IsoTestResultStatus.Failed;
             }
-            else
-            {
-                return IsoTestResultStatus.Failed;
-            }
+
+            return IsoTestResultStatus.Failed;
         }
-
-        try
+        catch
         {
-            progress.Report(new BatchOperationProgress { LogMessage = "  Verifying ISO structure and readability..." });
-
-            // Use the new In-Memory Tester
-            var passed = await _nativeIsoTester.TestIsoIntegrityAsync(pathToCheck, progress, token);
-
-            return passed ? IsoTestResultStatus.Passed : IsoTestResultStatus.Failed;
-        }
-        catch (Exception ex)
-        {
-            progress.Report(new BatchOperationProgress { LogMessage = $"  Test Error: {ex.Message}" });
             return IsoTestResultStatus.Failed;
         }
         finally
         {
-            if (tempCloudCopy != null && File.Exists(tempCloudCopy))
-            {
-                try
-                {
-                    // ReSharper disable once NullableWarningSuppressionIsUsed
-                    Directory.Delete(Path.GetDirectoryName(tempCloudCopy)!, true);
-                }
-                catch
-                {
-                    /* ignore cleanup errors */
-                }
-            }
+            await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(tempDir, 3, 500, null);
         }
     }
 
