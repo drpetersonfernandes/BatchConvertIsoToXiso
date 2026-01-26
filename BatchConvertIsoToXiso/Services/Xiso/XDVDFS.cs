@@ -1,4 +1,6 @@
-﻿using System.IO;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
 
 namespace BatchConvertIsoToXiso.Services.Xiso;
 
@@ -9,68 +11,95 @@ internal static class Xdvdfs
     public static readonly byte[] Magic = "XBOX_DVD_LAYOUT_TOOL_SIG"u8.ToArray();
 
     // Traverse file tree to get all valid data sectors in XISO
-    private static void GetValidSectors(FileStream isoFs, long isoOffset, List<uint> validSectors, long rootOffset, uint rootSize, long childOffset, bool quiet)
+    private static void GetValidSectors(FileStream isoFs, long isoOffset, List<uint> validSectors, long rootOffset, uint rootSize, long childOffset, bool quiet, bool skipSystemUpdate)
     {
-        while (true)
+        if (childOffset >= rootSize) return;
+
+        var cur = isoOffset + rootOffset + childOffset;
+
+        // XboxKit Logic: Add the directory table sectors themselves as valid
+        var curOffset = cur / Utils.SectorSize;
+        var curSize = (rootSize - childOffset + Utils.SectorSize - 1) / Utils.SectorSize;
+        for (var i = curOffset; i < curOffset + curSize; i++)
+            validSectors.Add((uint)i);
+
+        isoFs.Seek(cur, SeekOrigin.Begin);
+
+        // XboxKit Logic: 0xFFFF is the marker for an empty directory table
+        var leftChildOffset = Utils.ReadUShort(isoFs);
+        if (leftChildOffset == 0xFFFF) return;
+
+        var rightChildOffset = Utils.ReadUShort(isoFs);
+        var entryOffsetRaw = Utils.ReadUInt(isoFs);
+        var entryOffset = (long)entryOffsetRaw * Utils.SectorSize;
+        var entrySize = Utils.ReadUInt(isoFs);
+        var attributes = (byte)isoFs.ReadByte();
+        var nameLength = (byte)isoFs.ReadByte();
+
+        var fileName = "";
+        if (nameLength > 0)
         {
-            if (childOffset >= rootSize) return;
-
-            var cur = isoOffset + rootOffset + childOffset;
-            var curOffset = cur / Utils.SectorSize;
-            var curSize = (rootSize - childOffset + Utils.SectorSize - 1) / Utils.SectorSize;
-            for (var i = curOffset; i < curOffset + curSize; i++) validSectors.Add((uint)i);
-
-            isoFs.Seek(cur, SeekOrigin.Begin);
-
-            var leftChildOffset = Utils.ReadUShort(isoFs);
-            if (leftChildOffset == 0xFFFF) return;
-
-            var rightChildOffset = Utils.ReadUShort(isoFs);
-            var entryOffset = Utils.ReadUInt(isoFs) * Utils.SectorSize;
-            var entrySize = Utils.ReadUInt(isoFs);
-            var isDirectory = ((byte)isoFs.ReadByte() & 0x10) != 0;
-
-            if (leftChildOffset != 0) GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)leftChildOffset * 4, quiet);
-
-            if (isDirectory)
-            {
-                GetValidSectors(isoFs, isoOffset, validSectors, entryOffset, entrySize, 0, quiet);
-            }
-            else
-            {
-                var fileOffset = (isoOffset + entryOffset) / Utils.SectorSize;
-                var fileSize = (entrySize + Utils.SectorSize - 1) / Utils.SectorSize;
-                for (var i = fileOffset; i < fileOffset + fileSize; i++) validSectors.Add((uint)i);
-            }
-
-            if (rightChildOffset != 0)
-            {
-                childOffset = (long)rightChildOffset * 4;
-                continue;
-            }
-
-            break;
+            var nameBuffer = new byte[nameLength];
+            isoFs.ReadExactly(nameBuffer, 0, nameLength);
+            fileName = Encoding.ASCII.GetString(nameBuffer);
         }
+
+        var isDirectory = (attributes & 0x10) != 0;
+
+        // Traverse Left Child
+        if (leftChildOffset != 0)
+            GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)leftChildOffset * 4, quiet, skipSystemUpdate);
+
+        // Process Current Entry
+        if (isDirectory)
+        {
+            // Custom logic for BatchConvert: Skip contents of $SystemUpdate if requested
+            if (skipSystemUpdate && fileName.Equals("$SystemUpdate", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!quiet) Debug.WriteLine("Skipping $SystemUpdate directory contents.");
+            }
+            else if (entryOffsetRaw > 0)
+            {
+                GetValidSectors(isoFs, isoOffset, validSectors, entryOffset, entrySize, 0, quiet, skipSystemUpdate);
+            }
+        }
+        else if (entryOffsetRaw > 0)
+        {
+            // Add file data sectors
+            var fileOffset = (isoOffset + entryOffset) / Utils.SectorSize;
+            var fileSize = (entrySize + Utils.SectorSize - 1) / Utils.SectorSize;
+            for (var i = fileOffset; i < fileOffset + fileSize; i++)
+                validSectors.Add((uint)i);
+        }
+
+        // Traverse Right Child
+        if (rightChildOffset != 0)
+            GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)rightChildOffset * 4, quiet, skipSystemUpdate);
     }
 
-    // Get list of valid XISO ranges
-    public static List<(uint Start, uint End)> GetXisoRanges(FileStream isoFs, long offset, bool quiet)
+    public static List<(uint Start, uint End)> GetXisoRanges(FileStream isoFs, long offset, bool quiet, bool skipSystemUpdate)
     {
         var validSectors = new List<uint>();
         var headerOffset = offset + XisoHeaderOffset;
-        var headerOffsetSector = (headerOffset) / Utils.SectorSize;
+
+        // Add Header sectors (Standard XISO behavior)
+        var headerOffsetSector = headerOffset / Utils.SectorSize;
         validSectors.Add((uint)headerOffsetSector);
         validSectors.Add((uint)headerOffsetSector + 1);
 
         isoFs.Seek(headerOffset + 20, SeekOrigin.Begin);
         var rootOffset = Utils.ReadUInt(isoFs);
         var rootSize = Utils.ReadUInt(isoFs);
-        GetValidSectors(isoFs, offset, validSectors, rootOffset * Utils.SectorSize, rootSize, 0, quiet);
+
+        GetValidSectors(isoFs, offset, validSectors, (long)rootOffset * Utils.SectorSize, rootSize, 0, quiet, skipSystemUpdate);
 
         var ranges = new List<(uint, uint)>();
+        if (validSectors.Count == 0) return ranges;
+
         var sortedSectors = validSectors.Distinct().OrderBy(x => x).ToList();
         var start = sortedSectors[0];
         var prev = sortedSectors[0];
+
         for (var i = 1; i < sortedSectors.Count; i++)
         {
             var current = sortedSectors[i];
@@ -89,32 +118,5 @@ internal static class Xdvdfs
         ranges.Add((start, prev));
 
         return ranges;
-    }
-
-    // Heuristic to determine XGD3 system update file offset in video partition
-    public static long SuOffset(FileStream videoFs)
-    {
-        var updateOffset = videoFs.Length;
-        var videoBuf = new byte[16];
-        while (updateOffset >= Utils.SectorSize)
-        {
-            videoFs.Seek(updateOffset - Utils.SectorSize, SeekOrigin.Begin);
-            var bytesRead = 0;
-            while (bytesRead < videoBuf.Length)
-            {
-                var n = videoFs.Read(videoBuf, bytesRead, videoBuf.Length - bytesRead);
-                if (n == 0)
-                    break;
-
-                bytesRead += n;
-            }
-
-            if (Filler.AsSpan().SequenceEqual(videoBuf))
-                break;
-
-            updateOffset -= Utils.SectorSize;
-        }
-
-        return updateOffset;
     }
 }

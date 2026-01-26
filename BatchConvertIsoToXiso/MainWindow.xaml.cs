@@ -77,6 +77,7 @@ public partial class MainWindow
         DeleteOriginalsCheckBox.IsChecked = settings.DeleteOriginals;
         SearchSubfoldersConversionCheckBox.IsChecked = settings.SearchSubfoldersConversion;
         SkipSystemUpdateCheckBox.IsChecked = settings.SkipSystemUpdate;
+        CheckOutputIntegrityCheckBox.IsChecked = settings.CheckOutputIntegrity;
         MoveSuccessFilesCheckBox.IsChecked = settings.MoveSuccessFiles;
         MoveFailedFilesCheckBox.IsChecked = settings.MoveFailedFiles;
         SearchSubfoldersTestCheckBox.IsChecked = settings.SearchSubfoldersTest;
@@ -92,6 +93,7 @@ public partial class MainWindow
             DeleteOriginals = DeleteOriginalsCheckBox.IsChecked ?? false,
             SearchSubfoldersConversion = SearchSubfoldersConversionCheckBox.IsChecked ?? false,
             SkipSystemUpdate = SkipSystemUpdateCheckBox.IsChecked ?? false,
+            CheckOutputIntegrity = CheckOutputIntegrityCheckBox.IsChecked ?? false,
             MoveSuccessFiles = MoveSuccessFilesCheckBox.IsChecked ?? false,
             MoveFailedFiles = MoveFailedFilesCheckBox.IsChecked ?? false,
             SearchSubfoldersTest = SearchSubfoldersTestCheckBox.IsChecked ?? false
@@ -247,6 +249,7 @@ public partial class MainWindow
                         outputFolder,
                         DeleteOriginalsCheckBox.IsChecked ?? false,
                         SkipSystemUpdateCheckBox.IsChecked ?? false,
+                        CheckOutputIntegrityCheckBox.IsChecked ?? false,
                         SearchSubfoldersConversionCheckBox.IsChecked ?? false,
                         progress,
                         HandleCloudRetryRequest, // Callback for OneDrive/Cloud files
@@ -624,6 +627,7 @@ public partial class MainWindow
         SearchSubfoldersConversionCheckBox.IsEnabled = enabled;
         DeleteOriginalsCheckBox.IsEnabled = enabled;
         SkipSystemUpdateCheckBox.IsEnabled = enabled;
+        CheckOutputIntegrityCheckBox.IsEnabled = enabled;
         StartConversionButton.IsEnabled = enabled;
 
         // Test Tab

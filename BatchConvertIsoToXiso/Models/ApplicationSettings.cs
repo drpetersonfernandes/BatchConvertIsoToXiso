@@ -23,6 +23,9 @@ public class ApplicationSettings
     [XmlElement("SkipSystemUpdate")]
     public bool SkipSystemUpdate { get; set; }
 
+    [XmlElement("CheckOutputIntegrity")]
+    public bool CheckOutputIntegrity { get; set; }
+
     [XmlElement("MoveSuccessFiles")]
     public bool MoveSuccessFiles { get; set; }
 

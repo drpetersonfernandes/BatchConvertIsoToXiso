@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.Services.Xiso;
@@ -6,22 +6,22 @@ namespace BatchConvertIsoToXiso.Services.Xiso;
 public class XisoWriter
 {
     private readonly ILogger _logger;
+    private readonly INativeIsoIntegrityService _integrityService;
 
-    // XISO Types:                              XGD1,    XGD2,   XGD2-Hybrid,    XGD3
+    // Constants matched with XboxKit
     private static readonly long[] XisoOffset = [0x18300000, 0xFD90000, 0x89D80000, 0x2080000];
     private static readonly long[] XisoLength = [0x1A2DB0000, 0x1B3880000, 0xBF8A0000, 0x204510000];
-
-    // Redump ISO Types:                               XGD1,      XGD2w0,      XGD2w1,      XGD2w2,     XGD2w3+, XGD2-Hybrid,      XGD3v0,     XGD3
     private static readonly long[] RedumpIsoLength = [0x1D26A8000, 0x1D3301800, 0x1D2FEF800, 0x1D3082000, 0x1D3390000, 0x1D31A0000, 0x208E05800, 0x208E03800];
 
-    public XisoWriter(ILogger logger)
+    public XisoWriter(ILogger logger, INativeIsoIntegrityService integrityService)
     {
         _logger = logger;
+        _integrityService = integrityService;
     }
 
-    public async Task<bool> RewriteIsoAsync(string sourcePath, string destPath, bool skipSystemUpdate, IProgress<BatchOperationProgress> progress, CancellationToken token)
+    public async Task<bool> RewriteIsoAsync(string sourcePath, string destPath, bool skipSystemUpdate, bool checkIntegrity, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
-        return await Task.Run(() =>
+        return await Task.Run(async () =>
         {
             try
             {
@@ -37,132 +37,141 @@ public class XisoWriter
                 }
 
                 long inputOffset;
-                long targetLength;
+                long targetXisoLength;
 
                 if (redumpIsoType >= 0)
                 {
-                    // Mode 1: Redump ISO as input
-                    long xgdType = redumpIsoType switch
+                    var xgdType = redumpIsoType switch
                     {
                         0 => 0, // XGD1
                         1 or 2 or 3 or 4 => 1, // XGD2
-                        5 => 2, // XGD2 (Hybrid)
+                        5 => 2, // XGD2 Hybrid
                         6 or 7 => 3, // XGD3
                         _ => 0
                     };
                     inputOffset = XisoOffset[xgdType];
-                    targetLength = XisoLength[xgdType];
-                    _logger.LogMessage($"Detected Redump ISO (Type {xgdType}). Extracting XISO partition...");
+                    targetXisoLength = XisoLength[xgdType];
+                    _logger.LogMessage($"Detected Redump ISO (XGD{xgdType}). Extracting game partition...");
                 }
                 else
                 {
-                    // Mode 3: XISO as input
                     inputOffset = 0;
-                    targetLength = isoSize;
-                    _logger.LogMessage("Detected XISO. Optimizing/Wiping...");
+                    targetXisoLength = isoSize;
+                    _logger.LogMessage("Detected XISO. Optimizing and trimming...");
                 }
 
-                using FileStream isoFs = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using FileStream xisoFs = new(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                await using FileStream isoFs = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                await using FileStream xisoFs = new(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
-                // Parse XISO filesystem for all file extents
-                // Note: XboxKit logic does not support filtering by filename easily, so skipSystemUpdate is ignored to ensure stability.
-                if (skipSystemUpdate)
-                {
-                    _logger.LogMessage("[INFO] 'Skip System Update' is not supported with the current engine. Performing full valid rewrite.");
-                }
-
-                var validRanges = Xdvdfs.GetXisoRanges(isoFs, inputOffset, true);
+                // Generate valid ranges based on XDVDFS traversal
+                var validRanges = Xdvdfs.GetXisoRanges(isoFs, inputOffset, true, skipSystemUpdate);
+                var lastValidSector = validRanges.Count > 0 ? validRanges[^1].End : 0;
 
                 isoFs.Seek(inputOffset, SeekOrigin.Begin);
-                long numBytes = 0;
+                long numBytesProcessed = 0;
 
-                // We enable "wipe" behavior (writing zeroes to filler) by default for optimization
-
-                while (numBytes < targetLength)
+                while (numBytesProcessed < targetXisoLength)
                 {
                     token.ThrowIfCancellationRequested();
 
-                    var currentByte = inputOffset + numBytes;
-                    var currentSector = (currentByte + Utils.SectorSize - 1) / Utils.SectorSize;
+                    var currentPhysicalByte = inputOffset + numBytesProcessed;
+                    // XboxKit Logic: Calculate sector index relative to start of disc
+                    var currentSector = (currentPhysicalByte + Utils.SectorSize - 1) / Utils.SectorSize;
+
+                    // XboxKit Logic: Trim everything after the last valid file extent
+                    if (validRanges.Count > 0 && currentSector > lastValidSector)
+                    {
+                        break;
+                    }
+
                     long bytesUntilEndOfExtent = 0;
                     long bytesToWipe = 0;
 
-                    // Determine whether current sector is after last file extent
-                    if (validRanges.Count > 0 && currentSector > validRanges[^1].End)
+                    // Determine if current sector is data or filler
+                    for (var i = 0; i < validRanges.Count; i++)
                     {
-                        // Remainder of XISO is filler
-                        bytesToWipe = targetLength - numBytes;
-                    }
-                    else
-                    {
-                        // Determine whether current sector is within a file extent or filler data
-                        for (var i = 0; i < validRanges.Count; i++)
+                        if (currentSector >= validRanges[i].Start && currentSector <= validRanges[i].End)
                         {
-                            if (currentSector >= validRanges[i].Start && currentSector <= validRanges[i].End)
-                            {
-                                // Number of bytes remaining in current file extent
-                                bytesUntilEndOfExtent = (validRanges[i].End + 1) * Utils.SectorSize - currentByte;
-                                break;
-                            }
-                            else if (currentSector < validRanges[i].Start && (i == 0 || currentSector > validRanges[i - 1].End))
-                            {
-                                // Wipe until next file extent
-                                bytesToWipe = validRanges[i].Start * Utils.SectorSize - currentByte;
-                                break;
-                            }
+                            bytesUntilEndOfExtent = (validRanges[i].End + 1) * Utils.SectorSize - currentPhysicalByte;
+                            break;
+                        }
+                        else if (currentSector < validRanges[i].Start && (i == 0 || currentSector > validRanges[i - 1].End))
+                        {
+                            bytesToWipe = validRanges[i].Start * Utils.SectorSize - currentPhysicalByte;
+                            break;
                         }
                     }
 
                     if (bytesToWipe > 0)
                     {
-                        // Write zeroes to XISO
-                        Utils.WriteZeroes(xisoFs, -1, bytesToWipe);
-                        numBytes += bytesToWipe;
+                        // Alignment check from XboxKit
+                        if (bytesToWipe % Utils.SectorSize != 0)
+                        {
+                            _logger.LogMessage("[ERROR] Unexpected Error: Filler data is not sector aligned.");
+                            return false;
+                        }
 
-                        // Move ahead in ISO file
+                        // Wipe logic: Write zeroes to the output XISO
+                        Utils.WriteZeroes(xisoFs, -1, bytesToWipe);
+                        numBytesProcessed += bytesToWipe;
                         isoFs.Seek(bytesToWipe, SeekOrigin.Current);
                     }
                     else
                     {
-                        // Write data to XISO
-                        long bytesToRead;
-                        if (bytesToWipe > 0)
-                        {
-                            bytesToRead = bytesToWipe;
-                        }
-                        else if (bytesUntilEndOfExtent > 0)
-                        {
-                            bytesToRead = bytesUntilEndOfExtent;
-                        }
-                        else
-                        {
-                            bytesToRead = targetLength - numBytes;
-                        }
-
+                        // Data logic: Copy valid sectors
+                        var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : (targetXisoLength - numBytesProcessed);
                         if (!Utils.WriteBytes(isoFs, xisoFs, -1, bytesToRead))
                         {
-                            _logger.LogMessage("[ERROR] Failed writing game partition (XISO).");
+                            _logger.LogMessage("[ERROR] Failed writing game partition data.");
                             return false;
                         }
 
-                        numBytes += bytesToRead;
+                        numBytesProcessed += bytesToRead;
                     }
 
-                    // Report progress occasionally
-                    if (numBytes % (10 * 1024 * 1024) == 0) // Every 10MB
+                    // UI Progress Update
+                    if (numBytesProcessed % (100 * 1024 * 1024) == 0)
                     {
-                        progress.Report(new BatchOperationProgress { StatusText = $"Writing: {numBytes / (1024 * 1024)} MB / {targetLength / (1024 * 1024)} MB" });
+                        progress.Report(new BatchOperationProgress { StatusText = $"Processing: {numBytesProcessed / (1024 * 1024)} MB" });
                     }
                 }
 
-                return true;
+                // Finalize file size (Trimming)
+                xisoFs.SetLength(xisoFs.Position);
+                _logger.LogMessage($"Successfully created optimized XISO. Final size: {xisoFs.Length / (1024 * 1024)} MB");
             }
             catch (Exception ex)
             {
                 _logger.LogMessage($"Rewrite failed: {ex.Message}");
                 return false;
             }
+
+            // Optional Post-Rewrite Integrity Check
+            if (checkIntegrity)
+            {
+                _logger.LogMessage("Verifying output XISO integrity...");
+                // We pass a dummy progress here to avoid spamming the main UI with file-level details during this automated check
+                var isValid = await _integrityService.TestIsoIntegrityAsync(destPath, new Progress<BatchOperationProgress>(), token);
+
+                if (!isValid)
+                {
+                    _logger.LogMessage("[ERROR] Rewritten XISO failed structural validation! Deleting corrupt output.");
+                    try
+                    {
+                        if (File.Exists(destPath)) File.Delete(destPath);
+                    }
+                    catch
+                    {
+                        /* ignore deletion errors */
+                    }
+
+                    return false;
+                }
+
+                _logger.LogMessage("Output XISO passed structural validation.");
+            }
+
+            return true;
         }, token);
     }
 }

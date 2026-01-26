@@ -1,4 +1,4 @@
-﻿using BatchConvertIsoToXiso.Models;
+using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -16,6 +16,7 @@ public interface IIsoOrchestratorService
         string outputFolder,
         bool deleteOriginals,
         bool skipSystemUpdate,
+        bool checkIntegrity,
         bool searchSubfolders,
         IProgress<BatchOperationProgress> progress,
         Func<string, Task<CloudRetryResult>> onCloudRetryRequired,

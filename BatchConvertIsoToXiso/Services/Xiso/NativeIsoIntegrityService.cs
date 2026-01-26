@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.Services.Xiso;
@@ -105,7 +105,7 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
         var visited = new HashSet<(long, long)>(); // Cycle detection
 
         var firstChild = dir.GetFirstChild(isoSt);
-        if (firstChild == null) return results;
+        if (firstChild == null || firstChild.LeftSubTree == 0xFFFF) return results;
 
         var stack = new Stack<FileEntry>();
         var current = firstChild;
