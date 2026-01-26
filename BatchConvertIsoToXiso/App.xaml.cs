@@ -98,6 +98,8 @@ public partial class App
         services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<AboutWindow>();
         services.AddSingleton<IExternalToolService, ExternalToolService>();
+        // If you use IsoOrchestratorServiceUsingTool, make sure it receives the tester
+        // services.AddSingleton<IIsoOrchestratorService, IsoOrchestratorServiceUsingTool>();
         services.AddSingleton<IIsoOrchestratorService, IsoOrchestratorService>();
         services.AddSingleton<INativeIsoIntegrityService, NativeIsoIntegrityService>();
         services.AddSingleton<XisoWriter>();

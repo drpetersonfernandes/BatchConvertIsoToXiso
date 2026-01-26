@@ -1,5 +1,6 @@
 using System.IO;
 using BatchConvertIsoToXiso.Models;
+using BatchConvertIsoToXiso.Services.Xiso;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -9,6 +10,7 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
     private readonly IFileExtractor _fileExtractor;
     private readonly IFileMover _fileMover;
     private readonly IBugReportService _bugReportService;
+    private readonly INativeIsoIntegrityService _nativeIsoTester;
 
     private class ProcessingContext
     {
@@ -19,12 +21,14 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
         IExternalToolService externalToolService,
         IFileExtractor fileExtractor,
         IFileMover fileMover,
-        IBugReportService bugReportService)
+        IBugReportService bugReportService,
+        INativeIsoIntegrityService nativeIsoTester)
     {
         _externalToolService = externalToolService;
         _fileExtractor = fileExtractor;
         _fileMover = fileMover;
         _bugReportService = bugReportService;
+        _nativeIsoTester = nativeIsoTester;
     }
 
     #region Conversion Logic
@@ -34,6 +38,7 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
         string outputFolder,
         bool deleteOriginals,
         bool skipSystemUpdate,
+        bool checkIntegrity,
         bool searchSubfolders,
         IProgress<BatchOperationProgress> progress,
         Func<string, Task<CloudRetryResult>> onCloudRetryRequired,
@@ -81,16 +86,16 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
                 switch (extension)
                 {
                     case ".iso":
-                        var isoStatus = await ConvertFileInternalAsync(entryPath, outputFolder, deleteOriginals, context.GlobalFileIndex++, skipSystemUpdate, progress, onCloudRetryRequired, token);
+                        var isoStatus = await ConvertFileInternalAsync(entryPath, outputFolder, deleteOriginals, context.GlobalFileIndex++, skipSystemUpdate, checkIntegrity, progress, onCloudRetryRequired, token);
                         ReportStatus(isoStatus, entryPath, progress);
                         break;
 
                     case ".zip" or ".7z" or ".rar":
-                        await ProcessArchiveAsync(entryPath, outputFolder, deleteOriginals, skipSystemUpdate, context, tempFoldersToCleanUp, progress, onCloudRetryRequired, token);
+                        await ProcessArchiveAsync(entryPath, outputFolder, deleteOriginals, skipSystemUpdate, checkIntegrity, context, tempFoldersToCleanUp, progress, onCloudRetryRequired, token);
                         break;
 
                     case ".cue":
-                        await ProcessCueAsync(entryPath, outputFolder, deleteOriginals, skipSystemUpdate, context, tempFoldersToCleanUp, progress, onCloudRetryRequired, token);
+                        await ProcessCueAsync(entryPath, outputFolder, deleteOriginals, skipSystemUpdate, checkIntegrity, context, tempFoldersToCleanUp, progress, onCloudRetryRequired, token);
                         break;
                 }
             }
@@ -111,7 +116,7 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
         await CleanupTempFoldersAsync(tempFoldersToCleanUp, progress);
     }
 
-    private async Task ProcessArchiveAsync(string archivePath, string outputFolder, bool deleteOriginal, bool skipUpdate, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
+    private async Task ProcessArchiveAsync(string archivePath, string outputFolder, bool deleteOriginal, bool skipUpdate, bool checkIntegrity, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Extract", Guid.NewGuid().ToString());
         tempFolders.Add(tempDir);
@@ -136,11 +141,11 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
                     FileProcessingStatus status;
                     if (Path.GetExtension(file).Equals(".iso", StringComparison.OrdinalIgnoreCase))
                     {
-                        status = await ConvertFileInternalAsync(file, outputFolder, false, context.GlobalFileIndex++, skipUpdate, progress, cloudRetry, token);
+                        status = await ConvertFileInternalAsync(file, outputFolder, false, context.GlobalFileIndex++, skipUpdate, checkIntegrity, progress, cloudRetry, token);
                     }
                     else
                     {
-                        status = await ProcessCueInternalAsync(file, outputFolder, false, skipUpdate, context, tempFolders, progress, cloudRetry, token);
+                        status = await ProcessCueInternalAsync(file, outputFolder, false, skipUpdate, checkIntegrity, context, tempFolders, progress, cloudRetry, token);
                     }
 
                     switch (status)
@@ -182,13 +187,13 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
         }
     }
 
-    private async Task ProcessCueAsync(string cuePath, string outputFolder, bool deleteOriginal, bool skipUpdate, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
+    private async Task ProcessCueAsync(string cuePath, string outputFolder, bool deleteOriginal, bool skipUpdate, bool checkIntegrity, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
     {
-        var status = await ProcessCueInternalAsync(cuePath, outputFolder, deleteOriginal, skipUpdate, context, tempFolders, progress, cloudRetry, token);
+        var status = await ProcessCueInternalAsync(cuePath, outputFolder, deleteOriginal, skipUpdate, checkIntegrity, context, tempFolders, progress, cloudRetry, token);
         ReportStatus(status, cuePath, progress);
     }
 
-    private async Task<FileProcessingStatus> ProcessCueInternalAsync(string cuePath, string outputFolder, bool deleteOriginal, bool skipUpdate, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
+    private async Task<FileProcessingStatus> ProcessCueInternalAsync(string cuePath, string outputFolder, bool deleteOriginal, bool skipUpdate, bool checkIntegrity, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
     {
         var tempCueDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_CueBin", Guid.NewGuid().ToString());
         tempFolders.Add(tempCueDir);
@@ -198,7 +203,7 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
             var tempIso = await _externalToolService.ConvertCueBinToIsoAsync(cuePath, tempCueDir, token);
             if (tempIso != null && File.Exists(tempIso))
             {
-                var status = await ConvertFileInternalAsync(tempIso, outputFolder, false, context.GlobalFileIndex++, skipUpdate, progress, cloudRetry, token);
+                var status = await ConvertFileInternalAsync(tempIso, outputFolder, false, context.GlobalFileIndex++, skipUpdate, checkIntegrity, progress, cloudRetry, token);
                 if (deleteOriginal && status != FileProcessingStatus.Failed)
                 {
                     try
@@ -225,7 +230,7 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
         }
     }
 
-    private async Task<FileProcessingStatus> ConvertFileInternalAsync(string inputFile, string outputFolder, bool deleteOriginal, int fileIndex, bool skipSystemUpdate, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> onCloudRetryRequired, CancellationToken token)
+    private async Task<FileProcessingStatus> ConvertFileInternalAsync(string inputFile, string outputFolder, bool deleteOriginal, int fileIndex, bool skipSystemUpdate, bool checkIntegrity, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> onCloudRetryRequired, CancellationToken token)
     {
         var originalFileName = Path.GetFileName(inputFile);
         string? localTempWorkingDir = null;
@@ -253,6 +258,28 @@ public class IsoOrchestratorServiceUsingTool : IIsoOrchestratorService
 
             progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Moving to output...", CurrentDrive = PathHelper.GetDriveLetter(outputFolder) });
             await _fileMover.RobustMoveFileAsync(localTempIsoPath, destinationPath, token);
+
+            if (checkIntegrity)
+            {
+                progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Verifying output integrity..." });
+                var isValid = await _nativeIsoTester.TestIsoIntegrityAsync(destinationPath, new Progress<BatchOperationProgress>(), token);
+                if (!isValid)
+                {
+                    progress.Report(new BatchOperationProgress { LogMessage = $"[ERROR] File '{originalFileName}': Output failed integrity check. Deleting corrupt output." });
+                    try
+                    {
+                        if (File.Exists(destinationPath)) File.Delete(destinationPath);
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+
+                    return FileProcessingStatus.Failed;
+                }
+
+                progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Integrity verified." });
+            }
 
             if (deleteOriginal && !isTempFile)
             {
