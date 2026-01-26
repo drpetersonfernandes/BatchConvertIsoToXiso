@@ -30,6 +30,7 @@
     <ItemGroup>
         <None Include="extract-xiso.exe">
             <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Include="7z_x64.dll">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>

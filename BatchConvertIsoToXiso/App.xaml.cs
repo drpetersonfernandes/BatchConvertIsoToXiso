@@ -7,7 +7,6 @@ using BatchConvertIsoToXiso.Services;
 using Microsoft.Extensions.DependencyInjection;
 using SevenZip;
 using BatchConvertIsoToXiso.Services.Xiso;
-using BatchConvertIsoToXiso.Services.Xiso.Writing;
 
 namespace BatchConvertIsoToXiso;
 

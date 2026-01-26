@@ -1,7 +1,6 @@
 using System.IO;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services.Xiso;
-using BatchConvertIsoToXiso.Services.Xiso.Writing;
 
 namespace BatchConvertIsoToXiso.Services;
 
