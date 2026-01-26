@@ -94,7 +94,7 @@
                             <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to a '_failed' subfolder" Margin="0,8,0,8" HorizontalAlignment="Left" IsChecked="True" ToolTip="Moves invalid ISOs to a '_failed' folder within the source folder" />
                             <CheckBox x:Name="SearchSubfoldersTestCheckBox" Content="Search for files in subfolders" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Include files found in subdirectories of the input folder" />
                         </StackPanel>
-                        <Button x:Name="StartTestButton" Content="Start Integrity Test" Style="{StaticResource StartButtonStyle}" HorizontalAlignment="Center" Margin="0,15,0,0" Click="StartTestButton_Click" ToolTip="Begin the batch integrity test process" />
+                        <Button x:Name="StartTestButton" Content="Start Integrity Test" Style="{StaticResource StartButtonStyle}" HorizontalAlignment="Center" Margin="0,5,0,0" Click="StartTestButton_Click" ToolTip="Begin the batch integrity test process" />
                     </StackPanel>
 
                     <!-- Explorer View Header -->
