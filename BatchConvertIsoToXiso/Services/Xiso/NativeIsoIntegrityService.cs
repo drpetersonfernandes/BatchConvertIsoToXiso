@@ -33,6 +33,10 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
 
                 return VerifyDirectory(rootEntry, isoSt, buffer, progress, token);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogMessage($"Integrity check failed for {Path.GetFileName(isoPath)}: {ex.Message}");

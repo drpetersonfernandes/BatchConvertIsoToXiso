@@ -388,6 +388,10 @@ public class IsoOrchestratorService : IIsoOrchestratorService
 
             return passed ? IsoTestResultStatus.Passed : IsoTestResultStatus.Failed;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             progress.Report(new BatchOperationProgress { LogMessage = $"  Test Error: {ex.Message}" });

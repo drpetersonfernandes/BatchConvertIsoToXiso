@@ -140,6 +140,10 @@ public class XisoWriter
                 xisoFs.SetLength(xisoFs.Position);
                 _logger.LogMessage($"Successfully created optimized XISO. Final size: {xisoFs.Length / (1024 * 1024)} MB");
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogMessage($"Rewrite failed: {ex.Message}");
