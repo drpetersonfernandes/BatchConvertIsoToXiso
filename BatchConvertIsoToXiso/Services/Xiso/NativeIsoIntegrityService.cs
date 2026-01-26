@@ -6,6 +6,7 @@ namespace BatchConvertIsoToXiso.Services.Xiso;
 public interface INativeIsoIntegrityService
 {
     Task<bool> TestIsoIntegrityAsync(string isoPath, IProgress<BatchOperationProgress> progress, CancellationToken token);
+    List<FileEntry> GetDirectoryEntries(IsoSt isoSt, FileEntry dir);
 }
 
 public class NativeIsoIntegrityService : INativeIsoIntegrityService
@@ -42,8 +43,8 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
 
     private bool VerifyDirectory(FileEntry dirEntry, IsoSt isoSt, byte[] buffer, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
-        // 1. Get all children of this directory
-        var children = GetAllChildren(dirEntry, isoSt);
+        // Use the public method to get children
+        var children = GetDirectoryEntries(isoSt, dirEntry);
 
         foreach (var child in children)
         {
@@ -99,7 +100,10 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
         return true;
     }
 
-    private static List<FileEntry> GetAllChildren(FileEntry dir, IsoSt isoSt)
+    /// <summary>
+    /// Traverses the XISO binary tree to return a flat list of entries for a specific directory.
+    /// </summary>
+    public List<FileEntry> GetDirectoryEntries(IsoSt isoSt, FileEntry dir)
     {
         var results = new List<FileEntry>();
         var visited = new HashSet<(long, long)>(); // Cycle detection

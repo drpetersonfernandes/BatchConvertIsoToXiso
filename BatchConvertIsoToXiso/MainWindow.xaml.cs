@@ -2,10 +2,12 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
+using System.Windows.Data;
 using Microsoft.Win32;
 using System.Windows.Threading;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
+using BatchConvertIsoToXiso.Services.Xiso;
 
 namespace BatchConvertIsoToXiso;
 
@@ -13,6 +15,7 @@ public partial class MainWindow
 {
     private readonly IIsoOrchestratorService _orchestratorService;
     private readonly IDiskMonitorService _diskMonitorService;
+    private readonly INativeIsoIntegrityService _nativeIsoTester;
 
     private CancellationTokenSource _cts = new();
     private readonly IUpdateChecker _updateChecker;
@@ -35,9 +38,15 @@ public partial class MainWindow
     private int _totalProcessedFiles;
     private readonly List<string> _failedFilePaths = [];
 
+    // XIso Explorer State
+    private IsoSt? _explorerIsoSt;
+    private readonly Stack<FileEntry> _explorerHistory = new();
+    private readonly Stack<string> _explorerPathNames = new();
+
     public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
         IMessageBoxService messageBoxService, IUrlOpener urlOpener, ISettingsService settingsService,
-        IIsoOrchestratorService orchestratorService, IDiskMonitorService diskMonitorService)
+        IIsoOrchestratorService orchestratorService, IDiskMonitorService diskMonitorService,
+        INativeIsoIntegrityService nativeIsoTester)
     {
         InitializeComponent();
 
@@ -49,6 +58,7 @@ public partial class MainWindow
         _settingsService = settingsService;
         _orchestratorService = orchestratorService;
         _diskMonitorService = diskMonitorService;
+        _nativeIsoTester = nativeIsoTester;
 
         _logger.Initialize(LogViewer);
 
@@ -61,6 +71,8 @@ public partial class MainWindow
         DisplayInitialInstructions();
         _ = CheckForUpdatesAsync();
     }
+
+    #region Conversion & Testing Logic
 
     private void UpdateStatus(string status)
     {
@@ -117,12 +129,10 @@ public partial class MainWindow
         if (CheckForTempPath.IsSystemTempPath(inputFolder))
         {
             _messageBoxService.ShowError("The system's temporary folder or a subfolder within it cannot be selected as an input folder. Please choose a different location.");
-            _logger.LogMessage($"Attempted to select system temp folder '{inputFolder}' as conversion input. Blocked.");
             return;
         }
 
         ConversionInputFolderTextBox.Text = inputFolder;
-        _logger.LogMessage($"Conversion input folder selected: {inputFolder}");
     }
 
     private void BrowseConversionOutputButton_Click(object sender, RoutedEventArgs e)
@@ -133,12 +143,10 @@ public partial class MainWindow
         if (CheckForTempPath.IsSystemTempPath(outputFolder))
         {
             _messageBoxService.ShowError("The system's temporary folder or a subfolder within it cannot be selected as an output folder. Please choose a different location.");
-            _logger.LogMessage($"Attempted to select system temp folder '{outputFolder}' as conversion output. Blocked.");
             return;
         }
 
         ConversionOutputFolderTextBox.Text = outputFolder;
-        _logger.LogMessage($"Conversion output folder selected: {outputFolder}");
     }
 
     private void BrowseTestInputButton_Click(object sender, RoutedEventArgs e)
@@ -149,12 +157,10 @@ public partial class MainWindow
         if (CheckForTempPath.IsSystemTempPath(inputFolder))
         {
             _messageBoxService.ShowError("The system's temporary folder or a subfolder within it cannot be selected as an input folder for testing. Please choose a different location.");
-            _logger.LogMessage($"Attempted to select system temp folder '{inputFolder}' as test input. Blocked.");
             return;
         }
 
         TestInputFolderTextBox.Text = inputFolder;
-        _logger.LogMessage($"Test input folder selected: {inputFolder}");
     }
 
     private async void StartConversionButton_Click(object sender, RoutedEventArgs e)
@@ -163,140 +169,296 @@ public partial class MainWindow
         {
             if (_isOperationRunning) return;
 
-            try
+            _isOperationRunning = true;
+            SetControlsState(false);
+            LogViewer.Clear();
+            ResetSummaryStats();
+
+            UpdateStatus("Cleaning up temporary files...");
+            await PreOperationCleanupAsync();
+
+            var inputFolder = ConversionInputFolderTextBox.Text;
+            var outputFolder = ConversionOutputFolderTextBox.Text;
+
+            if (string.IsNullOrEmpty(inputFolder) || string.IsNullOrEmpty(outputFolder))
             {
-                // 1. UI Initialization
-                _isOperationRunning = true;
-                SetControlsState(false);
-                LogViewer.Clear();
-                ResetSummaryStats();
-
-                UpdateStatus("Cleaning up temporary files...");
-                await PreOperationCleanupAsync();
-
-                // 2. Validation
-                var inputFolder = ConversionInputFolderTextBox.Text;
-                var outputFolder = ConversionOutputFolderTextBox.Text;
-
-                if (string.IsNullOrEmpty(inputFolder) || string.IsNullOrEmpty(outputFolder))
-                {
-                    _messageBoxService.ShowError("Please select both input and output folders for conversion.");
-                    FinalizeUiState();
-                    return;
-                }
-
-                if (!ValidateInputOutputFolders(inputFolder, outputFolder))
-                {
-                    FinalizeUiState();
-                    return;
-                }
-
-                // 3. Prepare Cancellation
-                var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
-                oldCts.Dispose();
-
-                // 4. Define Progress Reporting Logic
-                // IProgress<T> automatically dispatches to the UI thread
-                var progress = new Progress<BatchOperationProgress>(p =>
-                {
-                    if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
-                    if (p.StatusText != null) UpdateStatus(p.StatusText);
-
-                    if (p.TotalFiles.HasValue)
-                    {
-                        _uiTotalFiles = p.TotalFiles.Value;
-                        UpdateSummaryStatsUi();
-                    }
-
-                    if (p.ProcessedCount.HasValue)
-                    {
-                        UpdateProgressUi(p.ProcessedCount.Value, _uiTotalFiles);
-                    }
-
-                    if (p.SuccessCount.HasValue)
-                    {
-                        _uiSuccessCount += p.SuccessCount.Value;
-                        UpdateSummaryStatsUi();
-                    }
-
-                    if (p.FailedCount.HasValue)
-                    {
-                        _uiFailedCount += p.FailedCount.Value;
-                        UpdateSummaryStatsUi();
-                    }
-
-                    if (p.SkippedCount.HasValue)
-                    {
-                        _uiSkippedCount += p.SkippedCount.Value;
-                        UpdateSummaryStatsUi();
-                    }
-
-                    if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
-                    if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
-
-                    ProgressBar.IsIndeterminate = p.IsIndeterminate;
-                });
-
-                // 5. Start Operation
-                _operationStartTime = DateTime.Now;
-                _processingTimer.Start();
-                UpdateStatus("Starting batch conversion...");
-
-                try
-                {
-                    await _orchestratorService.ConvertAsync(
-                        inputFolder,
-                        outputFolder,
-                        DeleteOriginalsCheckBox.IsChecked ?? false,
-                        SkipSystemUpdateCheckBox.IsChecked ?? false,
-                        CheckOutputIntegrityCheckBox.IsChecked ?? false,
-                        SearchSubfoldersConversionCheckBox.IsChecked ?? false,
-                        progress,
-                        HandleCloudRetryRequest, // Callback for OneDrive/Cloud files
-                        _cts.Token);
-                }
-                catch (ExceptionFormatter.CriticalToolFailureException ex)
-                {
-                    UpdateStatus("Operation stopped: Tool inaccessible.");
-                    ShowCriticalToolFailureMessage(ex.Message);
-                }
-                catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // Disk Full
-                {
-                    _logger.LogMessage($"Operation stopped: Disk Full. {ex.Message}");
-                    _messageBoxService.ShowError("The operation was stopped because the disk is full.");
-                    UpdateStatus("Operation failed: Disk full.");
-                }
-                catch (OperationCanceledException)
-                {
-                    _logger.LogMessage("Operation was canceled by the user.");
-                    UpdateStatus("Operation canceled.");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogMessage($"Critical Error: {ex.Message}");
-                    _ = ReportBugAsync("Critical error during conversion", ex);
-                }
-                finally
-                {
-                    FinalizeUiState();
-                    LogOperationSummary("Conversion");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"Unexpected UI Error: {ex.Message}");
+                _messageBoxService.ShowError("Please select both input and output folders for conversion.");
                 FinalizeUiState();
+                return;
             }
+
+            if (!ValidateInputOutputFolders(inputFolder, outputFolder))
+            {
+                FinalizeUiState();
+                return;
+            }
+
+            var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+            oldCts.Dispose();
+
+            var progress = new Progress<BatchOperationProgress>(p =>
+            {
+                if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
+                if (p.StatusText != null) UpdateStatus(p.StatusText);
+                if (p.TotalFiles.HasValue)
+                {
+                    _uiTotalFiles = p.TotalFiles.Value;
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.ProcessedCount.HasValue) UpdateProgressUi(p.ProcessedCount.Value, _uiTotalFiles);
+
+                if (p.SuccessCount.HasValue)
+                {
+                    _uiSuccessCount += p.SuccessCount.Value;
+                    _totalProcessedFiles += p.SuccessCount.Value;
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.FailedCount.HasValue)
+                {
+                    _uiFailedCount += p.FailedCount.Value;
+                    _totalProcessedFiles += p.FailedCount.Value;
+                    _invalidIsoErrorCount += p.FailedCount.Value; // Assume failure is often due to invalid ISO
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.SkippedCount.HasValue)
+                {
+                    _uiSkippedCount += p.SkippedCount.Value;
+                    _totalProcessedFiles += p.SkippedCount.Value;
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
+                if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
+                ProgressBar.IsIndeterminate = p.IsIndeterminate;
+            });
+
+            _operationStartTime = DateTime.Now;
+            _processingTimer.Start();
+            UpdateStatus("Starting batch conversion...");
+
+            await _orchestratorService.ConvertAsync(
+                inputFolder, outputFolder,
+                DeleteOriginalsCheckBox.IsChecked ?? false,
+                SkipSystemUpdateCheckBox.IsChecked ?? false,
+                CheckOutputIntegrityCheckBox.IsChecked ?? false,
+                SearchSubfoldersConversionCheckBox.IsChecked ?? false,
+                progress, HandleCloudRetryRequest, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            UpdateStatus("Operation canceled.");
         }
         catch (Exception ex)
         {
-            _ = ReportBugAsync("Unexpected UI Error", ex);
+            _logger.LogMessage($"Critical Error: {ex.Message}");
+        }
+        finally
+        {
+            FinalizeUiState();
+            LogOperationSummary("Conversion");
         }
     }
 
-    /// <summary>
-    /// Helper to reset UI state after operation finishes or fails
-    /// </summary>
+    private async void StartTestButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_isOperationRunning) return;
+
+            _isOperationRunning = true;
+            SetControlsState(false);
+            LogViewer.Clear();
+            ResetSummaryStats();
+
+            UpdateStatus("Cleaning up temporary files...");
+            await PreOperationCleanupAsync();
+
+            var inputFolder = TestInputFolderTextBox.Text;
+            if (string.IsNullOrEmpty(inputFolder))
+            {
+                _messageBoxService.ShowError("Please select the input folder for testing.");
+                FinalizeUiState();
+                return;
+            }
+
+            var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+            oldCts.Dispose();
+
+            var progress = new Progress<BatchOperationProgress>(p =>
+            {
+                if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
+                if (p.StatusText != null) UpdateStatus(p.StatusText);
+                if (p.TotalFiles.HasValue)
+                {
+                    _uiTotalFiles = p.TotalFiles.Value;
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.ProcessedCount.HasValue) UpdateProgressUi(p.ProcessedCount.Value, _uiTotalFiles);
+
+                if (p.SuccessCount.HasValue)
+                {
+                    _uiSuccessCount += p.SuccessCount.Value;
+                    _totalProcessedFiles += p.SuccessCount.Value;
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.FailedCount.HasValue)
+                {
+                    _uiFailedCount += p.FailedCount.Value;
+                    _totalProcessedFiles += p.FailedCount.Value;
+                    _invalidIsoErrorCount += p.FailedCount.Value;
+                    UpdateSummaryStatsUi();
+                }
+
+                if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
+                if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
+                ProgressBar.IsIndeterminate = p.IsIndeterminate;
+            });
+
+            _operationStartTime = DateTime.Now;
+            _processingTimer.Start();
+            UpdateStatus("Starting batch ISO test...");
+
+            await _orchestratorService.TestAsync(
+                inputFolder,
+                MoveSuccessFilesCheckBox.IsChecked == true,
+                MoveFailedFilesCheckBox.IsChecked == true,
+                SearchSubfoldersTestCheckBox.IsChecked ?? false,
+                progress, HandleCloudRetryRequest, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            UpdateStatus("Operation canceled.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogMessage($"Critical Error: {ex.Message}");
+        }
+        finally
+        {
+            FinalizeUiState();
+            LogOperationSummary("Test");
+        }
+    }
+
+    #endregion
+
+    #region XIso Explorer Logic
+
+    private void BrowseExplorerFile_Click(object sender, RoutedEventArgs e)
+    {
+        var openFileDialog = new OpenFileDialog
+        {
+            Filter = "Xbox ISO files (*.iso)|*.iso|All files (*.*)|*.*",
+            Title = "Select an Xbox ISO to explore"
+        };
+
+        if (openFileDialog.ShowDialog() != true) return;
+
+        ExplorerFilePathTextBox.Text = openFileDialog.FileName;
+        InitializeExplorer(openFileDialog.FileName);
+    }
+
+    private void InitializeExplorer(string isoPath)
+    {
+        try
+        {
+            _explorerIsoSt?.Dispose();
+            _explorerHistory.Clear();
+            _explorerPathNames.Clear();
+
+            _explorerIsoSt = new IsoSt(isoPath);
+            var volume = VolumeDescriptor.ReadFrom(_explorerIsoSt);
+            var root = FileEntry.CreateRootEntry(volume.RootDirTableSector);
+
+            LoadDirectory(root, "Root");
+        }
+        catch (Exception ex)
+        {
+            _messageBoxService.ShowError($"Failed to read XISO: {ex.Message}");
+        }
+    }
+
+    private void LoadDirectory(FileEntry dirEntry, string folderName)
+    {
+        if (_explorerIsoSt == null) return;
+
+        try
+        {
+            var entries = _nativeIsoTester.GetDirectoryEntries(_explorerIsoSt, dirEntry);
+            var uiItems = entries.Select(static e => new XisoExplorerItem
+            {
+                Name = e.FileName,
+                IsDirectory = e.IsDirectory,
+                SizeFormatted = e.IsDirectory ? "" : Formatter.FormatBytes(e.FileSize),
+                Entry = e
+            }).OrderByDescending(static i => i.IsDirectory).ThenBy(static i => i.Name).ToList();
+
+            ExplorerListView.ItemsSource = uiItems;
+
+            if (folderName != "Root")
+            {
+                _explorerHistory.Push(dirEntry);
+                _explorerPathNames.Push(folderName);
+            }
+            else
+            {
+                _explorerHistory.Clear();
+                _explorerPathNames.Clear();
+            }
+
+            UpdateExplorerUiState();
+        }
+        catch (Exception ex)
+        {
+            _messageBoxService.ShowError($"Error loading directory: {ex.Message}");
+        }
+    }
+
+    private void UpdateExplorerUiState()
+    {
+        ExplorerUpButton.IsEnabled = _explorerHistory.Count > 0;
+        var path = "/" + string.Join("/", _explorerPathNames.Reverse());
+        ExplorerPathTextBlock.Text = path;
+    }
+
+    private void ExplorerListView_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (ExplorerListView.SelectedItem is XisoExplorerItem { IsDirectory: true } item)
+        {
+            LoadDirectory(item.Entry, item.Name);
+        }
+    }
+
+    private void ExplorerUpButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_explorerIsoSt == null) return;
+
+        if (_explorerHistory.Count <= 1)
+        {
+            var volume = VolumeDescriptor.ReadFrom(_explorerIsoSt);
+            LoadDirectory(FileEntry.CreateRootEntry(volume.RootDirTableSector), "Root");
+        }
+        else
+        {
+            _explorerHistory.Pop();
+            _explorerPathNames.Pop();
+
+            var parentEntry = _explorerHistory.Pop();
+            var parentName = _explorerPathNames.Pop();
+
+            LoadDirectory(parentEntry, parentName);
+        }
+    }
+
+    #endregion
+
+    #region UI Helpers & Window Events
+
     private void FinalizeUiState()
     {
         _processingTimer.Stop();
@@ -309,12 +471,8 @@ public partial class MainWindow
         ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>
-    /// Callback passed to the Service to handle Cloud/OneDrive file prompts on the UI thread
-    /// </summary>
     private async Task<CloudRetryResult> HandleCloudRetryRequest(string fileName)
     {
-        // Since this is called from the service, we must ensure the MessageBox shows on the UI thread
         return await Application.Current.Dispatcher.InvokeAsync(() =>
         {
             var result = _messageBoxService.Show(
@@ -335,157 +493,16 @@ public partial class MainWindow
         });
     }
 
-
-    private async void StartTestButton_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            if (_isOperationRunning) return;
-
-            // 1. UI Initialization
-            _isOperationRunning = true;
-            SetControlsState(false);
-            LogViewer.Clear();
-            ResetSummaryStats();
-
-            UpdateStatus("Cleaning up temporary files...");
-            await PreOperationCleanupAsync();
-
-            // 2. Validation
-            var inputFolder = TestInputFolderTextBox.Text;
-            if (string.IsNullOrEmpty(inputFolder))
-            {
-                _messageBoxService.ShowError("Please select the input folder for testing.");
-                FinalizeUiState();
-                return;
-            }
-
-            var moveSuccessful = MoveSuccessFilesCheckBox.IsChecked == true;
-            var moveFailed = MoveFailedFilesCheckBox.IsChecked == true;
-            Path.Combine(inputFolder, "_success");
-            Path.Combine(inputFolder, "_failed");
-
-            // 3. Prepare Cancellation
-            var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
-            oldCts.Dispose();
-
-            // 4. Define Progress Reporting Logic
-            var progress = new Progress<BatchOperationProgress>(p =>
-            {
-                if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
-                if (p.StatusText != null) UpdateStatus(p.StatusText);
-
-                if (p.TotalFiles.HasValue)
-                {
-                    _uiTotalFiles = p.TotalFiles.Value;
-                    _logger.LogMessage($"Found {_uiTotalFiles} .iso files for testing.");
-                    UpdateSummaryStatsUi();
-                }
-
-                if (p.ProcessedCount.HasValue)
-                {
-                    UpdateProgressUi(p.ProcessedCount.Value, _uiTotalFiles);
-                }
-
-                if (p.SuccessCount.HasValue)
-                {
-                    _uiSuccessCount += p.SuccessCount.Value;
-                    UpdateSummaryStatsUi();
-                }
-
-                if (p.FailedCount.HasValue)
-                {
-                    _uiFailedCount += p.FailedCount.Value;
-                    UpdateSummaryStatsUi();
-                }
-
-                if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
-                if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
-
-                ProgressBar.IsIndeterminate = p.IsIndeterminate;
-            });
-
-            // 5. Start Operation
-            _operationStartTime = DateTime.Now;
-            _processingTimer.Start();
-            UpdateStatus("Starting batch ISO test...");
-            _logger.LogMessage("--- Starting batch ISO test process... ---");
-
-            try
-            {
-                await _orchestratorService.TestAsync(
-                    inputFolder,
-                    moveSuccessful,
-                    moveFailed,
-                    SearchSubfoldersTestCheckBox.IsChecked ?? false,
-                    progress,
-                    HandleCloudRetryRequest,
-                    _cts.Token);
-            }
-            catch (ExceptionFormatter.CriticalToolFailureException ex)
-            {
-                UpdateStatus("Operation stopped: Tool inaccessible.");
-                ShowCriticalToolFailureMessage(ex.Message);
-            }
-            catch (IOException ex) when ((ex.HResult & 0xFFFF) == 112) // Disk Full
-            {
-                _logger.LogMessage($"Operation stopped: Disk Full. {ex.Message}");
-                _messageBoxService.ShowError("The operation was stopped because the disk is full.");
-                UpdateStatus("Operation failed: Disk full.");
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogMessage("Operation was canceled by the user.");
-                UpdateStatus("Operation canceled.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogMessage($"Critical Error: {ex.Message}");
-                _ = ReportBugAsync("Critical error during ISO test", ex);
-            }
-            finally
-            {
-                FinalizeUiState();
-                UpdateStatus("Test complete. Ready.");
-                LogOperationSummary("Test");
-            }
-        }
-        catch (Exception ex)
-        {
-            _ = ReportBugAsync("Unexpected UI Error in StartTestButton", ex);
-            FinalizeUiState();
-        }
-    }
-
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            _cts.Cancel();
-        }
-        catch
-        {
-            /* Ignore if already disposed */
-        }
-
-        _logger.LogMessage("Cancellation requested. Finishing current file/archive...");
+        _cts.Cancel();
+        _logger.LogMessage("Cancellation requested. Finishing current file...");
     }
 
     private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            var aboutWindow = new AboutWindow(_urlOpener, _messageBoxService)
-            {
-                Owner = this
-            };
-            aboutWindow.ShowDialog();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogMessage($"Error opening About window: {ex.Message}");
-            _ = ReportBugAsync("Error opening About window", ex);
-        }
+        var aboutWindow = new AboutWindow(_urlOpener, _messageBoxService) { Owner = this };
+        aboutWindow.ShowDialog();
     }
 
     private static string? SelectFolder(string description)
@@ -494,40 +511,13 @@ public partial class MainWindow
         return dialog.ShowDialog() == true ? dialog.FolderName : null;
     }
 
-    private static bool IsSubdirectory(string parentPath, string childPath)
-    {
-        var parentUri = new Uri(parentPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ? parentPath : parentPath + Path.DirectorySeparatorChar);
-        var childUri = new Uri(childPath);
-
-        return parentUri.IsBaseOf(childUri);
-    }
-
     private bool ValidateInputOutputFolders(string inputFolder, string outputFolder)
     {
         if (inputFolder.Equals(outputFolder, StringComparison.OrdinalIgnoreCase))
         {
-            _messageBoxService.ShowError("Input and output folders must be different for conversion.");
+            _messageBoxService.ShowError("Input and output folders must be different.");
             return false;
         }
-
-        try
-        {
-            var pathRoot = Path.GetPathRoot(outputFolder);
-            if (!string.IsNullOrEmpty(pathRoot) &&
-                outputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                    .Equals(pathRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
-            {
-                _messageBoxService.ShowError("Selecting the root of a drive (e.g., C:\\) as an output folder is not allowed due to Windows permission restrictions. Please select or create a subfolder.");
-                return false;
-            }
-        }
-        catch
-        {
-            /* Ignore parsing errors here */
-        }
-
-        if (IsSubdirectory(inputFolder, outputFolder) || IsSubdirectory(outputFolder, inputFolder))
-            _messageBoxService.ShowWarning("Input and output folders are in the same directory tree. This may cause unexpected behavior.", "Folder Path Warning");
 
         return true;
     }
@@ -547,19 +537,12 @@ public partial class MainWindow
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
-            if (ProgressBar == null || ProgressTextBlock == null) return;
-
             ProgressBar.Maximum = total > 0 ? total : 1;
             ProgressBar.Value = current;
-
             if (total > 0 && ProgressBar.Visibility == Visibility.Visible)
             {
                 var percentage = (double)current / total * 100;
                 ProgressTextBlock.Text = $"{current} of {total} ({percentage:F0}%)";
-            }
-            else
-            {
-                ProgressTextBlock.Text = "";
             }
         });
     }
@@ -575,8 +558,7 @@ public partial class MainWindow
         if (_uiFailedCount > 0)
         {
             _logger.LogMessage($"Failed to {operationType.ToLowerInvariant()}: {_uiFailedCount} files");
-
-            _logger.LogMessage($"\nList of files that failed the {operationType.ToLowerInvariant()} (original names):");
+            _logger.LogMessage("\nList of files that failed (original names):");
             foreach (var originalPath in _failedFilePaths)
             {
                 _logger.LogMessage($"- {Path.GetFileName(originalPath)}");
@@ -587,12 +569,10 @@ public partial class MainWindow
 
         Application.Current.Dispatcher.InvokeAsync(() =>
         {
-            // ... existing warning logic for invalid ISOs ...
             if (_totalProcessedFiles > 5 && (double)_invalidIsoErrorCount / _totalProcessedFiles > 0.5)
             {
                 _messageBoxService.ShowWarning($"Many files ({_invalidIsoErrorCount} out of {_totalProcessedFiles}) were not valid Xbox ISOs. " +
-                                               "Please ensure you are selecting the correct ISO files from Xbox or Xbox 360 games, " +
-                                               "not from other consoles like PlayStation.", "High Rate of Invalid ISOs Detected");
+                                               "Please ensure you are selecting the correct ISO files from Xbox or Xbox 360 games.", "High Rate of Invalid ISOs Detected");
             }
 
             _messageBoxService.Show($"Batch {operationType.ToLowerInvariant()} completed.\n\n" +
@@ -609,74 +589,36 @@ public partial class MainWindow
     {
         var elapsedTime = DateTime.Now - _operationStartTime;
         ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
-
-        // Replace old logic with service call
         WriteSpeedValue.Text = _diskMonitorService.GetCurrentWriteSpeedFormatted();
-        WriteSpeedDriveIndicator.Text = _diskMonitorService.CurrentDriveLetter != null
-            ? $"({_diskMonitorService.CurrentDriveLetter})"
-            : "";
+        WriteSpeedDriveIndicator.Text = _diskMonitorService.CurrentDriveLetter != null ? $"({_diskMonitorService.CurrentDriveLetter})" : "";
     }
 
     private void SetControlsState(bool enabled)
     {
-        // Conversion Tab
-        ConversionInputFolderTextBox.IsEnabled = enabled;
-        BrowseConversionInputButton.IsEnabled = enabled;
-        ConversionOutputFolderTextBox.IsEnabled = enabled;
-        BrowseConversionOutputButton.IsEnabled = enabled;
-        SearchSubfoldersConversionCheckBox.IsEnabled = enabled;
-        DeleteOriginalsCheckBox.IsEnabled = enabled;
-        SkipSystemUpdateCheckBox.IsEnabled = enabled;
-        CheckOutputIntegrityCheckBox.IsEnabled = enabled;
-        StartConversionButton.IsEnabled = enabled;
-
-        // Test Tab
-        TestInputFolderTextBox.IsEnabled = enabled;
-        BrowseTestInputButton.IsEnabled = enabled;
-        MoveSuccessFilesCheckBox.IsEnabled = enabled;
-        SearchSubfoldersTestCheckBox.IsEnabled = enabled;
-        MoveFailedFilesCheckBox.IsEnabled = enabled;
-        StartTestButton.IsEnabled = enabled;
-
-        // Main Window Controls
+        ConvertTab.IsEnabled = enabled;
+        TestTab.IsEnabled = enabled;
+        ExplorerTab.IsEnabled = enabled;
         MainTabControl.IsEnabled = enabled;
         ProgressBar.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         CancelButton.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
-
-        // Always reset indeterminate state
-        ProgressBar.IsIndeterminate = false;
-        if (!enabled) return;
-
-        ProgressBar.IsIndeterminate = false;
-        ProgressBar.Value = 0;
-        ProgressTextBlock?.Text = "";
     }
 
     private void ResetSummaryStats()
     {
-        _uiTotalFiles = 0;
-        _uiSuccessCount = 0;
-        _uiFailedCount = 0;
-        _uiSkippedCount = 0;
-        _invalidIsoErrorCount = 0; // Reset invalid ISO count
-        _totalProcessedFiles = 0; // Reset total processed count
-        _failedFilePaths.Clear(); // Clear failed files list
+        _uiTotalFiles = _uiSuccessCount = _uiFailedCount = _uiSkippedCount = 0;
+        _invalidIsoErrorCount = 0;
+        _totalProcessedFiles = 0;
+        _failedFilePaths.Clear();
         UpdateSummaryStatsUi();
         UpdateProgressUi(0, 0);
-        ProcessingTimeValue.Text = "00:00:00";
-        if (!_processingTimer.IsEnabled)
-        {
-            StopPerformanceCounter();
-        }
     }
 
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         SaveSettings();
-
         if (_isOperationRunning)
         {
-            var result = _messageBoxService.Show("An operation is still running. Do you want to cancel and exit?", "Operation in Progress", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            var result = _messageBoxService.Show("An operation is still running. Exit anyway?", "Warning", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result == MessageBoxResult.No)
             {
                 e.Cancel = true;
@@ -686,10 +628,9 @@ public partial class MainWindow
             _cts.Cancel();
         }
 
-        _processingTimer.Tick -= ProcessingTimer_Tick;
+        _explorerIsoSt?.Dispose();
         _processingTimer.Stop();
         StopPerformanceCounter();
-        // No call to base.OnClosing(e); needed here.
     }
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
@@ -697,15 +638,21 @@ public partial class MainWindow
         Application.Current.Shutdown();
     }
 
-    private void ShowCriticalToolFailureMessage(string detail)
-    {
-        var message = $"{detail}\n\n" +
-                      "Possible Solutions:\n" +
-                      "1. Antivirus: Check if your Antivirus (e.g., Windows Defender) quarantined 'extract-xiso.exe'. Add the application folder to your Antivirus Exclusion/Exemption list.\n" +
-                      "2. Permissions: Try running this application as Administrator.\n" +
-                      "3. Drive Issues: If the files are on an external drive, ensure it hasn't been disconnected.\n\n" +
-                      "The batch operation has been stopped to prevent further errors.";
+    #endregion
+}
 
-        _messageBoxService.ShowError(message);
+/// <summary>
+/// Converter to show folder or file icons in the XIso Explorer
+/// </summary>
+public class FolderIconConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return (value is bool isDir && isDir) ? "📁" : "📄";
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
     }
 }
