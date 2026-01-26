@@ -1,6 +1,7 @@
 using System.IO;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services.Xiso;
+using BatchConvertIsoToXiso.Services.Xiso.Writing;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -11,6 +12,7 @@ public class IsoOrchestratorService : IIsoOrchestratorService
     private readonly IFileMover _fileMover;
     private readonly IBugReportService _bugReportService;
     private readonly INativeIsoIntegrityService _nativeIsoTester;
+    private readonly XisoWriter _xisoWriter;
 
     private class ProcessingContext
     {
@@ -22,13 +24,15 @@ public class IsoOrchestratorService : IIsoOrchestratorService
         IFileExtractor fileExtractor,
         IFileMover fileMover,
         IBugReportService bugReportService,
-        INativeIsoIntegrityService nativeIsoTester)
+        INativeIsoIntegrityService nativeIsoTester,
+        XisoWriter xisoWriter)
     {
         _externalToolService = externalToolService;
         _fileExtractor = fileExtractor;
         _fileMover = fileMover;
         _bugReportService = bugReportService;
         _nativeIsoTester = nativeIsoTester;
+        _xisoWriter = xisoWriter;
     }
 
     #region Conversion Logic
@@ -236,27 +240,46 @@ public class IsoOrchestratorService : IIsoOrchestratorService
 
         try
         {
-            localTempWorkingDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Convert", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(localTempWorkingDir);
+            // Use Native Writer directly if possible
+            // We still need to handle Cloud files, so check that first
+            var sourcePath = inputFile;
+            var isTempFile = false;
 
-            var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
-            var localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);
+            try
+            {
+                // Simple check if file is accessible (triggers cloud download if hydration is automatic, or fails)
+                await using (File.OpenRead(inputFile))
+                {
+                }
+            }
+            catch (IOException)
+            {
+                // Likely cloud file issue, use existing copy logic
+                localTempWorkingDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Convert", Guid.NewGuid().ToString());
+                Directory.CreateDirectory(localTempWorkingDir);
+                var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
+                var localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);
 
-            progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Copying to local temp...", CurrentDrive = PathHelper.GetDriveLetter(Path.GetTempPath()) });
+                progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Copying to local temp...", CurrentDrive = PathHelper.GetDriveLetter(Path.GetTempPath()) });
 
-            var copySuccess = await CopyFileWithCloudRetryAsync(inputFile, localTempIsoPath, onCloudRetryRequired, progress, token);
-            if (!copySuccess) return FileProcessingStatus.Failed;
+                if (!await CopyFileWithCloudRetryAsync(inputFile, localTempIsoPath, onCloudRetryRequired, progress, token))
+                {
+                    return FileProcessingStatus.Failed;
+                }
 
-            var toolResult = await _externalToolService.RunConversionAsync(localTempIsoPath, skipSystemUpdate, token);
-
-            if (toolResult == ConversionToolResultStatus.Failed) return FileProcessingStatus.Failed;
+                sourcePath = localTempIsoPath;
+                isTempFile = true;
+            }
 
             Directory.CreateDirectory(outputFolder);
             var destinationPath = Path.Combine(outputFolder, originalFileName);
-            var isTempFile = inputFile.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase);
 
-            progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Moving to output...", CurrentDrive = PathHelper.GetDriveLetter(outputFolder) });
-            await _fileMover.RobustMoveFileAsync(localTempIsoPath, destinationPath, token);
+            progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Rewriting to output...", CurrentDrive = PathHelper.GetDriveLetter(outputFolder) });
+
+            // Use Native Writer
+            var success = await _xisoWriter.RewriteIsoAsync(sourcePath, destinationPath, skipSystemUpdate, progress, token);
+
+            if (!success) return FileProcessingStatus.Failed;
 
             if (deleteOriginal && !isTempFile)
             {
@@ -271,7 +294,7 @@ public class IsoOrchestratorService : IIsoOrchestratorService
                 }
             }
 
-            return toolResult == ConversionToolResultStatus.Skipped ? FileProcessingStatus.Skipped : FileProcessingStatus.Converted;
+            return FileProcessingStatus.Converted;
         }
         finally
         {

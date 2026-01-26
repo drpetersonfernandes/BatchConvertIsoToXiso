@@ -7,6 +7,7 @@ using BatchConvertIsoToXiso.Services;
 using Microsoft.Extensions.DependencyInjection;
 using SevenZip;
 using BatchConvertIsoToXiso.Services.Xiso;
+using BatchConvertIsoToXiso.Services.Xiso.Writing;
 
 namespace BatchConvertIsoToXiso;
 
@@ -100,6 +101,7 @@ public partial class App
         services.AddSingleton<IExternalToolService, ExternalToolService>();
         services.AddSingleton<IIsoOrchestratorService, IsoOrchestratorService>();
         services.AddSingleton<INativeIsoIntegrityService, NativeIsoIntegrityService>();
+        services.AddSingleton<XisoWriter>();
         services.AddTransient<MainWindow>();
     }
 
