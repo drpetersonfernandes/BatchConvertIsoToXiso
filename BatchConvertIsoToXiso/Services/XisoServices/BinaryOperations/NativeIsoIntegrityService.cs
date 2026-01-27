@@ -77,7 +77,7 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
 
             while (bytesRead < totalBytes)
             {
-                if (token.IsCancellationRequested) return; // Exit the Action
+                token.ThrowIfCancellationRequested();
 
                 var toRead = (int)Math.Min(buffer.Length, totalBytes - bytesRead);
                 var read = stream.Read(buffer, 0, toRead);
