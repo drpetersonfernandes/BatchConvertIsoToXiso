@@ -6,7 +6,7 @@ public partial class MainWindow
 {
     private void DisplayInitialInstructions()
     {
-        _logger.LogMessage("Welcome to the Batch Convert ISO to XISO.");
+        _logger.LogMessage("Welcome to 'Batch Convert ISO to XISO'.");
         _logger.LogMessage("");
         _logger.LogMessage("This application provides three main functions, available in the tabs above:");
         _logger.LogMessage("1. Convert: Converts standard Xbox ISO files to the optimized XISO format. It can also process ISOs found within .zip, .7z, and .rar archives. It can also process CUE/BIN files.");

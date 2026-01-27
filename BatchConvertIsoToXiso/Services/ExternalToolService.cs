@@ -1,22 +1,18 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
-using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.Services;
 
 public interface IExternalToolService
 {
-    Task<ConversionToolResultStatus> RunConversionAsync(string inputFile, bool skipSystemUpdate, CancellationToken token);
     Task<string?> ConvertCueBinToIsoAsync(string cuePath, string tempOutputDir, CancellationToken token);
-    Task<bool> RunIsoExtractionAsync(string inputFile, string tempExtractionDir, CancellationToken token);
 }
 
 public partial class ExternalToolService : IExternalToolService
 {
     private readonly ILogger _logger;
     private readonly IBugReportService _bugReportService;
-    private readonly string _extractXisoPath;
     private readonly string _bchunkPath;
 
     public ExternalToolService(ILogger logger, IBugReportService bugReportService)
@@ -24,68 +20,7 @@ public partial class ExternalToolService : IExternalToolService
         _logger = logger;
         _bugReportService = bugReportService;
         var appDir = AppDomain.CurrentDomain.BaseDirectory;
-        _extractXisoPath = Path.Combine(appDir, "extract-xiso.exe");
         _bchunkPath = Path.Combine(appDir, "bchunk.exe");
-    }
-
-    public async Task<ConversionToolResultStatus> RunConversionAsync(string inputFile, bool skipSystemUpdate, CancellationToken token)
-    {
-        var originalFileName = Path.GetFileName(inputFile);
-        var arguments = skipSystemUpdate ? $"-s -r \"{inputFile}\"" : $"-r \"{inputFile}\"";
-
-        var outputLines = new List<string>();
-        var result = await RunProcessAsync(_extractXisoPath, arguments, Path.GetDirectoryName(inputFile), outputLines, originalFileName, token);
-
-        if (result == null) return ConversionToolResultStatus.Failed; // Canceled or critical start error
-
-        var outputString = string.Join(Environment.NewLine, outputLines);
-
-        if (result is 0 or 1)
-        {
-            if (outputLines.Any(static l => l.Contains("is already optimized", StringComparison.OrdinalIgnoreCase) ||
-                                            l.Contains("already an XISO image", StringComparison.OrdinalIgnoreCase)))
-                return ConversionToolResultStatus.Skipped;
-
-            if (outputLines.Any(static l => l.Contains("successfully rewritten", StringComparison.OrdinalIgnoreCase)) || result == 0)
-                return ConversionToolResultStatus.Success;
-        }
-
-        // Handle known validation errors
-        if (outputString.Contains("does not appear to be a valid xbox iso image", StringComparison.OrdinalIgnoreCase) ||
-            outputString.Contains("failed to rewrite xbox iso image", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogMessage($"Tool reported invalid ISO for {originalFileName}.");
-            return ConversionToolResultStatus.Failed;
-        }
-
-        _ = _bugReportService.SendBugReportAsync($"extract-xiso -r failed for {originalFileName} (Exit: {result}). Output: {outputString}");
-        return ConversionToolResultStatus.Failed;
-    }
-
-    public async Task<bool> RunIsoExtractionAsync(string inputFile, string tempExtractionDir, CancellationToken token)
-    {
-        var isoFileName = Path.GetFileName(inputFile);
-        var outputLines = new List<string>();
-        var result = await RunProcessAsync(_extractXisoPath, $"-x \"{inputFile}\"", tempExtractionDir, outputLines, isoFileName, token);
-
-        if (result == null) return false;
-
-        // Check if anything was extracted into the temp directory (usually a subfolder named after the XBE title)
-        var filesExtracted = Directory.Exists(tempExtractionDir) && Directory.EnumerateFileSystemEntries(tempExtractionDir).Any();
-
-        switch (result)
-        {
-            case 0 when filesExtracted:
-                return true;
-            case 1 when filesExtracted:
-            {
-                // Check if errors are just benign metadata issues
-                var hasCriticalError = outputLines.Any(static l => l.StartsWith("STDERR:", StringComparison.Ordinal) && !l.Contains("No such file or directory"));
-                return !hasCriticalError;
-            }
-            default:
-                return false;
-        }
     }
 
     public async Task<string?> ConvertCueBinToIsoAsync(string cuePath, string tempOutputDir, CancellationToken token)
