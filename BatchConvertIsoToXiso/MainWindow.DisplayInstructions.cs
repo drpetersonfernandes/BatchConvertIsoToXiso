@@ -29,8 +29,8 @@ public partial class MainWindow
             _logger.LogMessage("WARNING: bchunk.exe not found. CUE/BIN conversion will fail.");
         }
 
-        var sevenZipLibraryX64 = Path.Combine(appDirectory, "7z_x64.exe");
-        var sevenZipLibraryArm64 = Path.Combine(appDirectory, "7z_arm64.exe");
+        var sevenZipLibraryX64 = Path.Combine(appDirectory, "7z_x64.dll");
+        var sevenZipLibraryArm64 = Path.Combine(appDirectory, "7z_arm64.dll");
         if (File.Exists(sevenZipLibraryX64) || File.Exists(sevenZipLibraryArm64))
         {
             _logger.LogMessage("INFO: SevenZipExtractor library found. Archive extraction is enabled.");
