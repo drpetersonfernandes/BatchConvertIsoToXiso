@@ -93,6 +93,7 @@
                             <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to a '_success' subfolder" Margin="0,2,0,2" HorizontalAlignment="Left" IsChecked="False" ToolTip="Moves valid ISOs to a '_success' folder within the source folder" />
                             <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to a '_failed' subfolder" Margin="0,8,0,8" HorizontalAlignment="Left" IsChecked="False" ToolTip="Moves invalid ISOs to a '_failed' folder within the source folder" />
                             <CheckBox x:Name="SearchSubfoldersTestCheckBox" Content="Search for files in subfolders" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Include files found in subdirectories of the input folder" />
+                            <CheckBox x:Name="PerformDeepScanCheckBox" Content="Perform deep surface scan (slower)" Margin="0,8,0,2" HorizontalAlignment="Left" IsChecked="False" ToolTip="Reads entire ISO sequentially to detect bad sectors. Unchecked performs logical file test only (faster)." />
                         </StackPanel>
                         <Button x:Name="StartTestButton" Content="Start Integrity Test" Style="{StaticResource StartButtonStyle}" HorizontalAlignment="Center" Margin="0,5,0,0" Click="StartTestButton_Click" ToolTip="Begin the batch integrity test process" />
                     </StackPanel>

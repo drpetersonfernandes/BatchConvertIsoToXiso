@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
 
@@ -237,6 +237,7 @@ public partial class MainWindow
                 MoveSuccessFilesCheckBox.IsChecked == true,
                 MoveFailedFilesCheckBox.IsChecked == true,
                 SearchSubfoldersTestCheckBox.IsChecked ?? false,
+                PerformDeepScanCheckBox.IsChecked ?? false,
                 progress, HandleCloudRetryRequest, _cts.Token);
         }
         catch (OperationCanceledException)

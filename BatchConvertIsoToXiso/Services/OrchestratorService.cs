@@ -312,7 +312,7 @@ public class OrchestratorService : IOrchestratorService
 
     #region Testing Logic
 
-    public async Task TestAsync(string inputFolder, bool moveSuccessful, bool moveFailed, bool searchSubfolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> onCloudRetryRequired, CancellationToken token)
+    public async Task TestAsync(string inputFolder, bool moveSuccessful, bool moveFailed, bool searchSubfolders, bool performDeepScan, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> onCloudRetryRequired, CancellationToken token)
     {
         var enumOptions = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = searchSubfolders };
         var isoFiles = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", enumOptions).ToList(), token);
@@ -332,7 +332,7 @@ public class OrchestratorService : IOrchestratorService
             var fileName = Path.GetFileName(isoPath);
             progress.Report(new BatchOperationProgress { StatusText = $"Testing: {fileName}", CurrentDrive = PathHelper.GetDriveLetter(Path.GetTempPath()) });
 
-            var result = await TestSingleIsoInternalAsync(isoPath, fileIndex++, onCloudRetryRequired, progress, token);
+            var result = await TestSingleIsoInternalAsync(isoPath, fileIndex++, performDeepScan, onCloudRetryRequired, progress, token);
 
             if (result == IsoTestResultStatus.Passed)
             {
@@ -350,7 +350,7 @@ public class OrchestratorService : IOrchestratorService
         }
     }
 
-    private async Task<IsoTestResultStatus> TestSingleIsoInternalAsync(string isoPath, int index, Func<string, Task<CloudRetryResult>> cloudRetry, IProgress<BatchOperationProgress> progress, CancellationToken token)
+    private async Task<IsoTestResultStatus> TestSingleIsoInternalAsync(string isoPath, int index, bool performDeepScan, Func<string, Task<CloudRetryResult>> cloudRetry, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
         // 1. Handle Cloud/OneDrive files (download to temp if necessary)
         var pathToCheck = isoPath;
@@ -386,7 +386,7 @@ public class OrchestratorService : IOrchestratorService
             progress.Report(new BatchOperationProgress { LogMessage = "  Verifying ISO structure and readability..." });
 
             // Use the new In-Memory Tester
-            var passed = await _nativeIsoTester.TestIsoIntegrityAsync(pathToCheck, progress, token);
+            var passed = await _nativeIsoTester.TestIsoIntegrityAsync(pathToCheck, performDeepScan, progress, token);
 
             return passed ? IsoTestResultStatus.Passed : IsoTestResultStatus.Failed;
         }

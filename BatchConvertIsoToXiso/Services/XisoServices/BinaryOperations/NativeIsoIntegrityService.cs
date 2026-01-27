@@ -17,7 +17,7 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
         _logger = logger;
     }
 
-    public Task<bool> TestIsoIntegrityAsync(string isoPath, IProgress<BatchOperationProgress> progress, CancellationToken token)
+    public Task<bool> TestIsoIntegrityAsync(string isoPath, bool performDeepScan, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
         return Task.Run(() =>
         {
@@ -27,13 +27,24 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
                 _logger.LogMessage("[INFO] Note: This verifies filesystem structure and readability, not data checksums.");
 
                 using var isoSt = new IsoSt(isoPath);
+
+                // 1. Optional Deep Surface Scan: Read entire ISO sequentially to test physical media
+                if (performDeepScan)
+                {
+                    if (!PerformSurfaceScan(isoSt, progress, token))
+                    {
+                        return false;
+                    }
+
+                    // Reset position for structure test
+                    isoSt.ExecuteLocked(static reader => reader.BaseStream.Seek(0, SeekOrigin.Begin));
+                }
+
+                // 2. Logical Structure Test: Verify each file is readable using queue (BFS)
                 var volume = VolumeDescriptor.ReadFrom(isoSt);
                 var rootEntry = FileEntry.CreateRootEntry(volume.RootDirTableSector);
 
-                // Buffer for reading file content (4MB chunks)
-                var buffer = new byte[4 * 1024 * 1024];
-
-                return VerifyDirectory(rootEntry, isoSt, buffer, progress, token);
+                return VerifyAllFiles(rootEntry, isoSt, progress, token);
             }
             catch (OperationCanceledException)
             {
@@ -47,29 +58,89 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
         }, token);
     }
 
-    private bool VerifyDirectory(FileEntry dirEntry, IsoSt isoSt, byte[] buffer, IProgress<BatchOperationProgress> progress, CancellationToken token)
+    private bool PerformSurfaceScan(IsoSt isoSt, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
-        var children = GetDirectoryEntries(isoSt, dirEntry);
+        _logger.LogMessage("[INFO] Performing deep surface scan (sequential read of all sectors)...");
 
-        foreach (var child in children)
+        var scanSuccessful = false;
+
+        // ExecuteLocked takes an Action (void), so we use a local variable to track success
+        isoSt.ExecuteLocked(reader =>
+        {
+            var stream = reader.BaseStream;
+            stream.Seek(0, SeekOrigin.Begin);
+
+            var buffer = new byte[4 * 1024 * 1024]; // 4MB chunks
+            var totalBytes = stream.Length;
+            long bytesRead = 0;
+            long lastReportedPercent = -1;
+
+            while (bytesRead < totalBytes)
+            {
+                if (token.IsCancellationRequested) return; // Exit the Action
+
+                var toRead = (int)Math.Min(buffer.Length, totalBytes - bytesRead);
+                var read = stream.Read(buffer, 0, toRead);
+
+                if (read == 0 && bytesRead < totalBytes)
+                {
+                    _logger.LogMessage($"[ERROR] Surface scan failed: Unexpected end of file at {bytesRead}.");
+                    return; // Exit the Action (scanSuccessful remains false)
+                }
+
+                bytesRead += read;
+
+                // Report progress every 1%
+                var percent = bytesRead * 100 / totalBytes;
+                if (percent > lastReportedPercent)
+                {
+                    lastReportedPercent = percent;
+                    progress.Report(new BatchOperationProgress { StatusText = $"Surface scan: {percent}%" });
+                }
+            }
+
+            scanSuccessful = true; // If we reached here, the entire file was read
+        });
+
+        if (scanSuccessful)
+        {
+            _logger.LogMessage("[INFO] Surface scan completed successfully.");
+        }
+
+        return scanSuccessful;
+    }
+
+    private bool VerifyAllFiles(FileEntry rootEntry, IsoSt isoSt, IProgress<BatchOperationProgress> progress, CancellationToken token)
+    {
+        // Use a Queue for BFS traversal to avoid stack overflow and process files in order
+        var dirQueue = new Queue<FileEntry>();
+        dirQueue.Enqueue(rootEntry);
+
+        var buffer = new byte[4 * 1024 * 1024]; // 4MB buffer for file reading
+
+        while (dirQueue.Count > 0)
         {
             token.ThrowIfCancellationRequested();
+            var currentDir = dirQueue.Dequeue();
 
-            if (child.IsDirectory)
+            var entries = GetDirectoryEntries(isoSt, currentDir);
+            foreach (var entry in entries)
             {
-                // Recurse
-                if (!VerifyDirectory(child, isoSt, buffer, progress, token)) return false;
-            }
-            else
-            {
-                // Report progress for the file being checked
-                progress.Report(new BatchOperationProgress { StatusText = $"Verifying: {child.FileName}" });
+                token.ThrowIfCancellationRequested();
 
-                // Verify File Content
-                if (!VerifyFileContent(child, isoSt, buffer, token))
+                if (entry.IsDirectory)
                 {
-                    _logger.LogMessage($"Data corruption detected in file: {child.FileName}");
-                    return false;
+                    dirQueue.Enqueue(entry);
+                }
+                else
+                {
+                    progress.Report(new BatchOperationProgress { StatusText = $"Verifying: {entry.FileName}" });
+
+                    if (!VerifyFileContent(entry, isoSt, buffer, token))
+                    {
+                        _logger.LogMessage($"[ERROR] Data corruption detected in file: {entry.FileName}");
+                        return false;
+                    }
                 }
             }
         }
@@ -89,13 +160,11 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
             token.ThrowIfCancellationRequested();
 
             var toRead = (int)Math.Min(buffer.Length, bytesRemaining);
-
-            // Read into buffer - we don't do anything with the data, just ensure it reads without exception
             var read = isoSt.Read(file, buffer.AsSpan(0, toRead), currentOffset);
 
             if (read != toRead)
             {
-                return false; // Unexpected end of stream or read failure
+                return false;
             }
 
             bytesRemaining -= read;
@@ -105,25 +174,17 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
         return true;
     }
 
-    /// <summary>
-    /// Traverses the XISO binary tree to return a flat list of entries for a specific directory.
-    /// </summary>
     public List<FileEntry> GetDirectoryEntries(IsoSt isoSt, FileEntry dir)
     {
         var results = new List<FileEntry>();
-        var visited = new HashSet<(long, long)>(); // Cycle detection
+        var visited = new HashSet<(long, long)>();
 
         var firstChild = dir.GetFirstChild(isoSt);
-
-        // [FIX] Removed "|| firstChild.LeftSubTree == 0xFFFF"
-        // A valid file entry can have 0xFFFF as a LeftSubTree.
-        // We only return if firstChild is null (which happens if the directory table is truly empty/0-byte).
         if (firstChild == null) return results;
 
         var stack = new Stack<FileEntry>();
         var current = firstChild;
 
-        // In-order traversal of the binary tree to get directory listing
         while (current != null || stack.Count > 0)
         {
             while (current != null)
@@ -142,7 +203,6 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
 
             current = stack.Pop();
 
-            // [FIX] Ensure we don't add entries with empty names (which might happen if we hit a padding/empty sector entry)
             if (!string.IsNullOrEmpty(current.FileName))
             {
                 results.Add(current);

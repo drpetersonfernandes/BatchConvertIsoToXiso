@@ -20,6 +20,7 @@ public interface IOrchestratorService
         bool moveSuccessful,
         bool moveFailed,
         bool searchSubfolders,
+        bool performDeepScan,
         IProgress<BatchOperationProgress> progress,
         Func<string, Task<CloudRetryResult>> onCloudRetryRequired,
         CancellationToken token);

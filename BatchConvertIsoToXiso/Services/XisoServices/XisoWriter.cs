@@ -164,7 +164,7 @@ public class XisoWriter
             {
                 _logger.LogMessage("Verifying output XISO integrity...");
                 // We pass a dummy progress here to avoid spamming the main UI with file-level details during this automated check
-                var isValid = await _integrityService.TestIsoIntegrityAsync(destPath, new Progress<BatchOperationProgress>(), token);
+                var isValid = await _integrityService.TestIsoIntegrityAsync(destPath, false, new Progress<BatchOperationProgress>(), token);
 
                 if (!isValid)
                 {
