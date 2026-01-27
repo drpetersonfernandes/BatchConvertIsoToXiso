@@ -22,7 +22,6 @@ public partial class MainWindow
     private readonly IBugReportService _bugReportService;
     private readonly IMessageBoxService _messageBoxService;
     private readonly IUrlOpener _urlOpener;
-    private readonly ISettingsService _settingsService;
 
     // Summary Stats
     private DateTime _operationStartTime;
@@ -43,9 +42,8 @@ public partial class MainWindow
     private readonly Stack<string> _explorerPathNames = new();
 
     public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
-        IMessageBoxService messageBoxService, IUrlOpener urlOpener, ISettingsService settingsService,
-        IIsoOrchestratorService orchestratorService, IDiskMonitorService diskMonitorService,
-        INativeIsoIntegrityService nativeIsoTester)
+        IMessageBoxService messageBoxService, IUrlOpener urlOpener,
+        IIsoOrchestratorService orchestratorService, IDiskMonitorService diskMonitorService, INativeIsoIntegrityService nativeIsoTester)
     {
         InitializeComponent();
 
@@ -54,14 +52,11 @@ public partial class MainWindow
         _bugReportService = bugReportService;
         _messageBoxService = messageBoxService;
         _urlOpener = urlOpener;
-        _settingsService = settingsService;
         _orchestratorService = orchestratorService;
         _diskMonitorService = diskMonitorService;
         _nativeIsoTester = nativeIsoTester;
 
         _logger.Initialize(LogViewer);
-
-        LoadSettings();
 
         _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _processingTimer.Tick += ProcessingTimer_Tick;
@@ -76,41 +71,6 @@ public partial class MainWindow
     private void UpdateStatus(string status)
     {
         StatusTextBlock.Text = status;
-    }
-
-    private void LoadSettings()
-    {
-        var settings = _settingsService.LoadSettings();
-
-        ConversionInputFolderTextBox.Text = settings.ConversionInputFolder;
-        ConversionOutputFolderTextBox.Text = settings.ConversionOutputFolder;
-        TestInputFolderTextBox.Text = settings.TestInputFolder;
-        DeleteOriginalsCheckBox.IsChecked = settings.DeleteOriginals;
-        SearchSubfoldersConversionCheckBox.IsChecked = settings.SearchSubfoldersConversion;
-        SkipSystemUpdateCheckBox.IsChecked = settings.SkipSystemUpdate;
-        CheckOutputIntegrityCheckBox.IsChecked = settings.CheckOutputIntegrity;
-        MoveSuccessFilesCheckBox.IsChecked = settings.MoveSuccessFiles;
-        MoveFailedFilesCheckBox.IsChecked = settings.MoveFailedFiles;
-        SearchSubfoldersTestCheckBox.IsChecked = settings.SearchSubfoldersTest;
-    }
-
-    private void SaveSettings()
-    {
-        var settings = new ApplicationSettings
-        {
-            ConversionInputFolder = ConversionInputFolderTextBox.Text,
-            ConversionOutputFolder = ConversionOutputFolderTextBox.Text,
-            TestInputFolder = TestInputFolderTextBox.Text,
-            DeleteOriginals = DeleteOriginalsCheckBox.IsChecked ?? false,
-            SearchSubfoldersConversion = SearchSubfoldersConversionCheckBox.IsChecked ?? false,
-            SkipSystemUpdate = SkipSystemUpdateCheckBox.IsChecked ?? false,
-            CheckOutputIntegrity = CheckOutputIntegrityCheckBox.IsChecked ?? false,
-            MoveSuccessFiles = MoveSuccessFilesCheckBox.IsChecked ?? false,
-            MoveFailedFiles = MoveFailedFilesCheckBox.IsChecked ?? false,
-            SearchSubfoldersTest = SearchSubfoldersTestCheckBox.IsChecked ?? false
-        };
-
-        _settingsService.SaveSettings(settings);
     }
 
     private async Task PreOperationCleanupAsync()
@@ -658,7 +618,6 @@ public partial class MainWindow
 
     private void Window_Closing(object sender, CancelEventArgs e)
     {
-        SaveSettings();
         if (_isOperationRunning)
         {
             var result = _messageBoxService.Show("An operation is still running. Exit anyway?", "Warning", MessageBoxButton.YesNo, MessageBoxImage.Warning);

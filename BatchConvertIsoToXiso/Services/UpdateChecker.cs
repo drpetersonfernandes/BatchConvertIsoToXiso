@@ -72,6 +72,6 @@ public partial class UpdateChecker : IUpdateChecker, IDisposable
         GC.SuppressFinalize(this);
     }
 
-    [GeneratedRegex(@"\d+\.\d+\.\d+(\.\d+)?")]
+    [GeneratedRegex(@"\d+(\.\d+){1,3}")]
     private static partial Regex MyRegex();
 }

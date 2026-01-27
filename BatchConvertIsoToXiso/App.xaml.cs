@@ -87,7 +87,6 @@ public partial class App
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IBugReportService>(static _ => new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
         services.AddSingleton<IUpdateChecker, UpdateChecker>();
         services.AddSingleton<ILogger, LoggerService>();

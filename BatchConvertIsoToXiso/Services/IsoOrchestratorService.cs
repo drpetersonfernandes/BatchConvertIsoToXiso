@@ -211,9 +211,13 @@ public class IsoOrchestratorService : IIsoOrchestratorService
                 {
                     try
                     {
-                        File.Delete(cuePath);
-                        var bin = Path.ChangeExtension(cuePath, ".bin");
-                        if (File.Exists(bin)) File.Delete(bin);
+                        var folder = Path.GetDirectoryName(cuePath);
+                        if (!string.IsNullOrEmpty(folder))
+                        {
+                            var filesToDelete = Directory.EnumerateFiles(folder, "*.*")
+                                .Where(static f => Path.GetExtension(f).ToLowerInvariant() is ".cue" or ".bin");
+                            foreach (var f in filesToDelete) File.Delete(f);
+                        }
                     }
                     catch
                     {

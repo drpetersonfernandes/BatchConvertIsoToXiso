@@ -64,7 +64,7 @@ public class FileExtractorService : IFileExtractor
 
                     Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath) ?? throw new InvalidOperationException("fullDestPath cannot be null"));
                     using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);
-                    extractor.ExtractFile(i, fs);
+                    extractor.ExtractFile(fileData.Index, fs);
                 }
             }, cts.Token);
 
