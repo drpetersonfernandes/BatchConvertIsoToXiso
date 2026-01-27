@@ -1,4 +1,4 @@
-﻿namespace BatchConvertIsoToXiso.Models;
+﻿namespace BatchConvertIsoToXiso.Models.XisoDefinitions;
 
 [Flags]
 public enum XisoFsFileAttributes : byte

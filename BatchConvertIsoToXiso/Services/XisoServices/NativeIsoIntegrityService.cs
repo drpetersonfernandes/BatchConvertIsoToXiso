@@ -2,7 +2,7 @@ using System.IO;
 using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
 
-namespace BatchConvertIsoToXiso.Services.Xiso;
+namespace BatchConvertIsoToXiso.Services.XisoServices;
 
 public class NativeIsoIntegrityService : INativeIsoIntegrityService
 {

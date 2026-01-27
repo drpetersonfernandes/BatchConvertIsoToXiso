@@ -1,6 +1,6 @@
 ﻿using System.IO;
 
-namespace BatchConvertIsoToXiso.Services.Xiso;
+namespace BatchConvertIsoToXiso.Services.XisoServices;
 
 public class IsoSt : IDisposable
 {

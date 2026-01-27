@@ -1,11 +1,11 @@
 using System.IO;
 using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
-using BatchConvertIsoToXiso.Services.Xiso;
+using BatchConvertIsoToXiso.Services.XisoServices;
 
 namespace BatchConvertIsoToXiso.Services;
 
-public class IsoOrchestratorService : IIsoOrchestratorService
+public class OrchestratorService : IOrchestratorService
 {
     private readonly IExternalToolService _externalToolService;
     private readonly IFileExtractor _fileExtractor;
@@ -19,7 +19,7 @@ public class IsoOrchestratorService : IIsoOrchestratorService
         public int GlobalFileIndex { get; set; } = 1;
     }
 
-    public IsoOrchestratorService(
+    public OrchestratorService(
         IExternalToolService externalToolService,
         IFileExtractor fileExtractor,
         IFileMover fileMover,

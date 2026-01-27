@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 
-namespace BatchConvertIsoToXiso.Services.Xiso;
+namespace BatchConvertIsoToXiso.Services.XisoServices;
 
 internal static class Xdvdfs
 {

@@ -1,5 +1,5 @@
 ﻿using BatchConvertIsoToXiso.Models;
-using BatchConvertIsoToXiso.Services.Xiso;
+using BatchConvertIsoToXiso.Services.XisoServices;
 
 namespace BatchConvertIsoToXiso.interfaces;
 

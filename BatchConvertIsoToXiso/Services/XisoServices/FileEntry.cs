@@ -1,8 +1,8 @@
 using System.IO;
 using System.Text;
-using BatchConvertIsoToXiso.Models;
+using BatchConvertIsoToXiso.Models.XisoDefinitions;
 
-namespace BatchConvertIsoToXiso.Services.Xiso;
+namespace BatchConvertIsoToXiso.Services.XisoServices;
 
 public class FileEntry
 {

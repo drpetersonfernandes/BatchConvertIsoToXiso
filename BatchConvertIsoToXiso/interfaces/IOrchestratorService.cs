@@ -2,7 +2,7 @@ using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.interfaces;
 
-public interface IIsoOrchestratorService
+public interface IOrchestratorService
 {
     Task ConvertAsync(
         string inputFolder,

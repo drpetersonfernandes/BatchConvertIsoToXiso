@@ -7,7 +7,7 @@ using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Services;
 using Microsoft.Extensions.DependencyInjection;
 using SevenZip;
-using BatchConvertIsoToXiso.Services.Xiso;
+using BatchConvertIsoToXiso.Services.XisoServices;
 
 namespace BatchConvertIsoToXiso;
 
@@ -97,7 +97,7 @@ public partial class App
         services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<AboutWindow>();
         services.AddSingleton<IExternalToolService, ExternalToolService>();
-        services.AddSingleton<IIsoOrchestratorService, IsoOrchestratorService>();
+        services.AddSingleton<IOrchestratorService, OrchestratorService>();
         services.AddSingleton<INativeIsoIntegrityService, NativeIsoIntegrityService>();
         services.AddSingleton<XisoWriter>();
         services.AddTransient<MainWindow>();

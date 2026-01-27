@@ -7,13 +7,13 @@ using System.Windows.Threading;
 using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
-using BatchConvertIsoToXiso.Services.Xiso;
+using BatchConvertIsoToXiso.Services.XisoServices;
 
 namespace BatchConvertIsoToXiso;
 
 public partial class MainWindow
 {
-    private readonly IIsoOrchestratorService _orchestratorService;
+    private readonly IOrchestratorService _orchestratorService;
     private readonly IDiskMonitorService _diskMonitorService;
     private readonly INativeIsoIntegrityService _nativeIsoTester;
 
@@ -44,7 +44,7 @@ public partial class MainWindow
 
     public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
         IMessageBoxService messageBoxService, IUrlOpener urlOpener,
-        IIsoOrchestratorService orchestratorService, IDiskMonitorService diskMonitorService, INativeIsoIntegrityService nativeIsoTester)
+        IOrchestratorService orchestratorService, IDiskMonitorService diskMonitorService, INativeIsoIntegrityService nativeIsoTester)
     {
         InitializeComponent();
 
