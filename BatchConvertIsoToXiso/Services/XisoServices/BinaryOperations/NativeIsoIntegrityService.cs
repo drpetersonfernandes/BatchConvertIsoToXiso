@@ -23,6 +23,9 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
         {
             try
             {
+                _logger.LogMessage($"[INFO] Starting structural integrity test for: {Path.GetFileName(isoPath)}");
+                _logger.LogMessage("[INFO] Note: This verifies filesystem structure and readability, not data checksums.");
+
                 using var isoSt = new IsoSt(isoPath);
                 var volume = VolumeDescriptor.ReadFrom(isoSt);
                 var rootEntry = FileEntry.CreateRootEntry(volume.RootDirTableSector);

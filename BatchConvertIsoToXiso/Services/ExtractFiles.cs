@@ -32,7 +32,9 @@ public class FileExtractorService : IFileExtractor
                 var archiveFormat = extractor.Format;
 
                 _logger.LogMessage($"  Archive format: {archiveFormat}, Files to extract: {fileCount}");
-                _logger.LogMessage($"  Extracting all files from {archiveFileName}...");
+                _logger.LogMessage($"  Extracting files from {archiveFileName}...");
+
+                var isoExtracted = false;
 
                 // Manually extract files to prevent "Zip Slip" (absolute paths or path traversal in archives)
                 for (var i = 0; i < extractor.FilesCount; i++)
@@ -41,11 +43,25 @@ public class FileExtractorService : IFileExtractor
                     var fileData = extractor.ArchiveFileData[i];
                     if (fileData.IsDirectory) continue;
 
-                    // Sanitize path: Remove drive letters (C:) and leading slashes to force relative path
                     var entryPath = fileData.FileName;
+
+                    // Strict Zip Slip check: Skip suspicious paths entirely
                     if (Path.IsPathRooted(entryPath) || entryPath.Contains(".."))
                     {
-                        entryPath = Path.GetFileName(entryPath); // Flatten to just the filename if suspicious
+                        _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
+                        continue;
+                    }
+
+                    // Check for multiple ISOs
+                    if (Path.GetExtension(entryPath).Equals(".iso", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (isoExtracted)
+                        {
+                            _logger.LogMessage($"  Skipping additional ISO: {entryPath} (Only the first ISO is processed per archive).");
+                            continue;
+                        }
+
+                        isoExtracted = true;
                     }
 
                     var fullDestPath = Path.GetFullPath(Path.Combine(extractionPath, entryPath));

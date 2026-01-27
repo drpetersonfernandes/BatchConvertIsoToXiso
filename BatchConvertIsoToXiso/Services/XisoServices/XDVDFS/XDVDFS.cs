@@ -15,11 +15,14 @@ internal static class Xdvdfs
     public static readonly byte[] Magic = "XBOX_DVD_LAYOUT_TOOL_SIG"u8.ToArray();
 
     // Traverse file tree to get all valid data sectors in XISO
-    private static void GetValidSectors(FileStream isoFs, long isoOffset, List<uint> validSectors, long rootOffset, uint rootSize, long childOffset, bool quiet, bool skipSystemUpdate)
+    private static void GetValidSectors(FileStream isoFs, long isoOffset, List<uint> validSectors, long rootOffset, uint rootSize, long childOffset, bool quiet, bool skipSystemUpdate, HashSet<long> visited)
     {
         if (childOffset >= rootSize) return;
 
         var cur = isoOffset + rootOffset + childOffset;
+
+        // Cycle detection
+        if (!visited.Add(cur)) return;
 
         // Add the directory table sectors themselves as valid
         var curOffset = cur / Utils.SectorSize;
@@ -52,7 +55,7 @@ internal static class Xdvdfs
 
         // Traverse Left Child (only if valid offset)
         if (leftChildOffset != 0xFFFF && leftChildOffset != 0)
-            GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)leftChildOffset * 4, quiet, skipSystemUpdate);
+            GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)leftChildOffset * 4, quiet, skipSystemUpdate, visited);
 
         // Process Current Entry
         if (isDirectory)
@@ -64,7 +67,7 @@ internal static class Xdvdfs
             }
             else if (entryOffsetRaw > 0)
             {
-                GetValidSectors(isoFs, isoOffset, validSectors, entryOffset, entrySize, 0, quiet, skipSystemUpdate);
+                GetValidSectors(isoFs, isoOffset, validSectors, entryOffset, entrySize, 0, quiet, skipSystemUpdate, visited);
             }
         }
         else if (entryOffsetRaw > 0)
@@ -78,7 +81,7 @@ internal static class Xdvdfs
 
         // Traverse Right Child (only if valid offset)
         if (rightChildOffset != 0xFFFF && rightChildOffset != 0)
-            GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)rightChildOffset * 4, quiet, skipSystemUpdate);
+            GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)rightChildOffset * 4, quiet, skipSystemUpdate, visited);
     }
 
     public static List<(uint Start, uint End)> GetXisoRanges(FileStream isoFs, long offset, bool quiet, bool skipSystemUpdate)
@@ -95,7 +98,8 @@ internal static class Xdvdfs
         var rootOffset = Utils.ReadUInt(isoFs);
         var rootSize = Utils.ReadUInt(isoFs);
 
-        GetValidSectors(isoFs, offset, validSectors, (long)rootOffset * Utils.SectorSize, rootSize, 0, quiet, skipSystemUpdate);
+        var visited = new HashSet<long>();
+        GetValidSectors(isoFs, offset, validSectors, (long)rootOffset * Utils.SectorSize, rootSize, 0, quiet, skipSystemUpdate, visited);
 
         var ranges = new List<(uint, uint)>();
         if (validSectors.Count == 0) return ranges;

@@ -67,6 +67,9 @@ public class XisoWriter
                 await using FileStream isoFs = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
                 await using FileStream xisoFs = new(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
+                // Pre-allocate buffer to avoid GC pressure in the loop
+                var buffer = new byte[64 * Utils.SectorSize];
+
                 // Generate valid ranges based on XDVDFS traversal
                 var validRanges = Xdvdfs.GetXisoRanges(isoFs, inputOffset, true, skipSystemUpdate);
                 var lastValidSector = validRanges.Count > 0 ? validRanges[^1].End : 0;
@@ -115,7 +118,7 @@ public class XisoWriter
                         }
 
                         // Wipe logic: Write zeroes to the output XISO
-                        Utils.WriteZeroes(xisoFs, -1, bytesToWipe);
+                        Utils.WriteZeroes(xisoFs, -1, bytesToWipe, buffer);
                         numBytesProcessed += bytesToWipe;
 
                         // [FIX] Moves the input stream forward when wiping.
@@ -126,7 +129,7 @@ public class XisoWriter
                         // Data logic: Copy valid sectors
                         var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : targetXisoLength - numBytesProcessed;
 
-                        if (!Utils.WriteBytes(isoFs, xisoFs, -1, bytesToRead))
+                        if (!Utils.WriteBytes(isoFs, xisoFs, -1, bytesToRead, buffer))
                         {
                             _logger.LogMessage("[ERROR] Failed writing game partition data.");
                             return false;

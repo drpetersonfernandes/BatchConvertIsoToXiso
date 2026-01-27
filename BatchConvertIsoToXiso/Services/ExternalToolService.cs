@@ -101,7 +101,11 @@ public partial class ExternalToolService : IExternalToolService
                 var match = CueRegex().Match(line.Trim());
                 if (!match.Success) continue;
 
-                var binFileName = !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Groups[2].Value;
+                var rawBinName = !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Groups[2].Value;
+
+                // Fix: Ignore absolute paths in CUE (e.g. C:\Games\image.bin) and look in the CUE's directory
+                var binFileName = Path.GetFileName(rawBinName);
+
                 var binPath = Path.Combine(cueDir, binFileName);
                 if (File.Exists(binPath)) return binPath;
             }

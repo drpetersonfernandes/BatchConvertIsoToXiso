@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 
 namespace BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
@@ -50,9 +50,8 @@ internal static class Utils
     }
 
     // Ensure proper writing to filestream
-    public static bool WriteBytes(FileStream inFs, FileStream outFs, long offset, long length)
+    public static bool WriteBytes(FileStream inFs, FileStream outFs, long offset, long length, byte[] buf)
     {
-        var buf = new byte[64 * SectorSize];
         long numBytes = 0;
         if (offset >= 0)
             inFs.Seek(offset, SeekOrigin.Begin);
@@ -70,9 +69,9 @@ internal static class Utils
     }
 
     // Write zeroes to filestream
-    public static void WriteZeroes(FileStream outFs, long offset, long length)
+    public static void WriteZeroes(FileStream outFs, long offset, long length, byte[] buf)
     {
-        var buf = new byte[64 * SectorSize];
+        Array.Clear(buf, 0, buf.Length);
         long numBytes = 0;
         if (offset >= 0)
             outFs.Seek(offset, SeekOrigin.Begin);

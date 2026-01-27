@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Services;
 using Microsoft.Extensions.DependencyInjection;
+using System.Runtime.InteropServices;
 using SevenZip;
 using BatchConvertIsoToXiso.Services.XisoServices;
 using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
@@ -161,7 +162,9 @@ public partial class App
     {
         try
         {
-            const string dllName = "7z_x64.dll";
+            var isArm64 = RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
+            var dllName = isArm64 ? "7z_arm64.dll" : "7z_x64.dll";
+
             var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
 
             if (File.Exists(dllPath))
@@ -171,9 +174,9 @@ public partial class App
             else
             {
                 // Inform the user about the issue.
-                const string userErrorMessage = $"Could not find the required 7-Zip x64 library: {dllName}. " +
-                                                "This application is designed for x64 systems only. Please ensure '7z_x64.dll' is in the same folder as the application. " +
-                                                "Archive extraction features (.zip, .7z, .rar) will not work.";
+                var userErrorMessage = $"Could not find the required 7-Zip library: {dllName}. " +
+                                       $"Please ensure '{dllName}' is in the same folder as the application. " +
+                                       "Archive extraction features (.zip, .7z, .rar) will not work.";
                 _messageBoxService?.ShowError(userErrorMessage);
             }
         }
