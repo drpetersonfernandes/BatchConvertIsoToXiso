@@ -133,6 +133,10 @@ public partial class MainWindow
             LogViewer.Clear();
             ResetSummaryStats();
 
+            // Immediate visual feedback while the background thread scans the filesystem
+            ProgressBar.IsIndeterminate = true;
+            ProgressTextBlock.Text = "Scanning folders for files...";
+
             UpdateStatus("Cleaning up temporary files...");
             await PreOperationCleanupAsync();
 
@@ -159,9 +163,12 @@ public partial class MainWindow
             {
                 if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
                 if (p.StatusText != null) UpdateStatus(p.StatusText);
+
                 if (p.TotalFiles.HasValue)
                 {
                     _uiTotalFiles = p.TotalFiles.Value;
+                    // Switch from "Scanning" (Indeterminate) to "Processing" (Determinate)
+                    ProgressBar.IsIndeterminate = false;
                     UpdateSummaryStatsUi();
                 }
 
@@ -178,7 +185,7 @@ public partial class MainWindow
                 {
                     _uiFailedCount += p.FailedCount.Value;
                     _totalProcessedFiles += p.FailedCount.Value;
-                    _invalidIsoErrorCount += p.FailedCount.Value; // Assume failure is often due to invalid ISO
+                    _invalidIsoErrorCount += p.FailedCount.Value;
                     UpdateSummaryStatsUi();
                 }
 
@@ -191,7 +198,12 @@ public partial class MainWindow
 
                 if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
                 if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
-                ProgressBar.IsIndeterminate = p.IsIndeterminate;
+
+                // Allow the orchestrator to toggle indeterminate mode (e.g., during a long extraction)
+                if (p.IsIndeterminate)
+                {
+                    ProgressBar.IsIndeterminate = true;
+                }
             });
 
             _operationStartTime = DateTime.Now;
@@ -232,6 +244,10 @@ public partial class MainWindow
             LogViewer.Clear();
             ResetSummaryStats();
 
+            // Immediate visual feedback while the background thread scans the filesystem
+            ProgressBar.IsIndeterminate = true;
+            ProgressTextBlock.Text = "Scanning folders for ISOs...";
+
             UpdateStatus("Cleaning up temporary files...");
             await PreOperationCleanupAsync();
 
@@ -250,9 +266,12 @@ public partial class MainWindow
             {
                 if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
                 if (p.StatusText != null) UpdateStatus(p.StatusText);
+
                 if (p.TotalFiles.HasValue)
                 {
                     _uiTotalFiles = p.TotalFiles.Value;
+                    // Switch from "Scanning" (Indeterminate) to "Processing" (Determinate)
+                    ProgressBar.IsIndeterminate = false;
                     UpdateSummaryStatsUi();
                 }
 
@@ -275,7 +294,12 @@ public partial class MainWindow
 
                 if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
                 if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
-                ProgressBar.IsIndeterminate = p.IsIndeterminate;
+
+                // Allow the orchestrator to toggle indeterminate mode
+                if (p.IsIndeterminate)
+                {
+                    ProgressBar.IsIndeterminate = true;
+                }
             });
 
             _operationStartTime = DateTime.Now;
@@ -496,9 +520,13 @@ public partial class MainWindow
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
-            ProgressBar.Maximum = total > 0 ? total : 1;
+            // Don't update determinate text if we haven't received a total yet
+            if (total <= 0) return;
+
+            ProgressBar.Maximum = total;
             ProgressBar.Value = current;
-            if (total > 0 && ProgressBar.Visibility == Visibility.Visible)
+
+            if (ProgressBar.Visibility == Visibility.Visible && !ProgressBar.IsIndeterminate)
             {
                 var percentage = (double)current / total * 100;
                 ProgressTextBlock.Text = $"{current} of {total} ({percentage:F0}%)";
@@ -579,8 +607,14 @@ public partial class MainWindow
         _invalidIsoErrorCount = 0;
         _totalProcessedFiles = 0;
         _failedFilePaths.Clear();
+
         UpdateSummaryStatsUi();
-        UpdateProgressUi(0, 0);
+
+        // Reset Progress Bar to a clean state
+        ProgressBar.Value = 0;
+        ProgressBar.Maximum = 1;
+        ProgressBar.IsIndeterminate = false;
+        ProgressTextBlock.Text = "";
     }
 
     private void NavConvert_Click(object sender, RoutedEventArgs e)

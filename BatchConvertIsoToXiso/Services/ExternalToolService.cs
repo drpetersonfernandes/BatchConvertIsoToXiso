@@ -12,13 +12,11 @@ public interface IExternalToolService
 public partial class ExternalToolService : IExternalToolService
 {
     private readonly ILogger _logger;
-    private readonly IBugReportService _bugReportService;
     private readonly string _bchunkPath;
 
-    public ExternalToolService(ILogger logger, IBugReportService bugReportService)
+    public ExternalToolService(ILogger logger)
     {
         _logger = logger;
-        _bugReportService = bugReportService;
         var appDir = AppDomain.CurrentDomain.BaseDirectory;
         _bchunkPath = Path.Combine(appDir, "bchunk.exe");
     }

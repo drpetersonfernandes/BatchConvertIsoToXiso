@@ -19,9 +19,9 @@ public class XisoWriter
         _integrityService = integrityService;
     }
 
-    public async Task<bool> RewriteIsoAsync(string sourcePath, string destPath, bool skipSystemUpdate, bool checkIntegrity, IProgress<BatchOperationProgress> progress, CancellationToken token)
+    public Task<bool> RewriteIsoAsync(string sourcePath, string destPath, bool skipSystemUpdate, bool checkIntegrity, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
-        return await Task.Run(async () =>
+        return Task.Run(async () =>
         {
             try
             {
@@ -119,7 +119,7 @@ public class XisoWriter
                     else
                     {
                         // Data logic: Copy valid sectors
-                        var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : (targetXisoLength - numBytesProcessed);
+                        var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : targetXisoLength - numBytesProcessed;
                         if (!Utils.WriteBytes(isoFs, xisoFs, -1, bytesToRead))
                         {
                             _logger.LogMessage("[ERROR] Failed writing game partition data.");

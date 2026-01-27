@@ -7,7 +7,6 @@ namespace BatchConvertIsoToXiso.Services.Xiso;
 internal static class Xdvdfs
 {
     private const long XisoHeaderOffset = 0x10000;
-    private static readonly byte[] Filler = "ABCDABCDABCDABCD"u8.ToArray();
     public static readonly byte[] Magic = "XBOX_DVD_LAYOUT_TOOL_SIG"u8.ToArray();
 
     // Traverse file tree to get all valid data sectors in XISO
@@ -96,7 +95,7 @@ internal static class Xdvdfs
         var ranges = new List<(uint, uint)>();
         if (validSectors.Count == 0) return ranges;
 
-        var sortedSectors = validSectors.Distinct().OrderBy(x => x).ToList();
+        var sortedSectors = validSectors.Distinct().OrderBy(static x => x).ToList();
         var start = sortedSectors[0];
         var prev = sortedSectors[0];
 
