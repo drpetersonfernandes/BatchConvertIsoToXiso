@@ -1,7 +1,12 @@
 ﻿using System.IO;
 
-namespace BatchConvertIsoToXiso.Services.XisoServices;
+namespace BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
+/// <summary>
+/// A utility class that provides helper methods for handling file operations
+/// such as reading and writing data and processing sectors. This class is
+/// intended for use in XISO-related operations involving binary file streams.
+/// </summary>
 internal static class Utils
 {
     public const long SectorSize = 2048;

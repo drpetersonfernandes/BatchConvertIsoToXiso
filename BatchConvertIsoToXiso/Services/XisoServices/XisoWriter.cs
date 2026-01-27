@@ -1,9 +1,14 @@
 using System.IO;
 using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
+using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
+using BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
 
 namespace BatchConvertIsoToXiso.Services.XisoServices;
 
+/// <summary>
+/// Provides functionality for rewriting ISO files into XISO format.
+/// </summary>
 public class XisoWriter
 {
     private readonly ILogger _logger;

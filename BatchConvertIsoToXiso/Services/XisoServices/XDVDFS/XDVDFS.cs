@@ -1,9 +1,14 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
-namespace BatchConvertIsoToXiso.Services.XisoServices;
+namespace BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
 
+/// <summary>
+/// Provides functionality for processing and extracting valid data ranges
+/// from an XISO (Xbox ISO) file based on XDVDFS traversal logic.
+/// </summary>
 internal static class Xdvdfs
 {
     private const long XisoHeaderOffset = 0x10000;

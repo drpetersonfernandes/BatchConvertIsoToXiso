@@ -1,7 +1,12 @@
 ﻿using System.IO;
 
-namespace BatchConvertIsoToXiso.Services.XisoServices;
+namespace BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
+/// <summary>
+/// Represents an ISO stream that provides functionality for reading ISO file structures
+/// and accessing data within the ISO at a low level. This includes managing the
+/// file stream, reading file entries, and retrieving file data.
+/// </summary>
 public class IsoSt : IDisposable
 {
     public const int SectorSize = 2048;

@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Threading;
 using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Services;
-using BatchConvertIsoToXiso.Services.XisoServices;
+using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
 namespace BatchConvertIsoToXiso;
 

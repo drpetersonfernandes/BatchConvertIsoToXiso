@@ -1,9 +1,13 @@
 using System.IO;
 using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
+using BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
 
-namespace BatchConvertIsoToXiso.Services.XisoServices;
+namespace BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
+/// <summary>
+/// Provides functionality to validate and retrieve file entries from ISO images using the native XISO binary tree format.
+/// </summary>
 public class NativeIsoIntegrityService : INativeIsoIntegrityService
 {
     private readonly ILogger _logger;

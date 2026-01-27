@@ -1,7 +1,8 @@
 ﻿using System.Windows;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
-using BatchConvertIsoToXiso.Services.XisoServices;
+using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
+using BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
 using Microsoft.Win32;
 
 namespace BatchConvertIsoToXiso;

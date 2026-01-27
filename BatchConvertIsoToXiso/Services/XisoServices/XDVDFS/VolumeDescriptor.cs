@@ -1,7 +1,21 @@
 ﻿using System.IO;
+using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
-namespace BatchConvertIsoToXiso.Services.XisoServices;
+namespace BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
 
+/// <summary>
+/// Represents a volume descriptor in an XDVDFS (Xbox Disc Volume Descriptor File System).
+/// The class is used to read and parse volume descriptor data from ISO files.
+/// It provides details like the root directory table sector, which is essential for file operations on the ISO structure.
+/// </summary>
+/// <remarks>
+/// This class attempts to locate and interpret the volume descriptor using several strategies:
+/// 1. The Standard position (Sector 32, Offset 0).
+/// 2. The Game Partition Offset, applicable for dual-layer ISOs.
+/// 3. A rebuilt XISO structure starting at Sector 0.
+/// If none of these strategies succeed, an exception is thrown indicating the absence of a valid volume descriptor.
+/// </remarks>
+/// <exception cref="InvalidDataException">Thrown when a valid XDVDFS volume descriptor cannot be located.</exception>
 public class VolumeDescriptor
 {
     private const int VolumeDescriptorSector = 32;
