@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Threading;
@@ -63,7 +64,7 @@ public partial class MainWindow
         _processingTimer.Tick += ProcessingTimer_Tick;
 
         ResetSummaryStats();
-        DisplayInitialInstructions();
+        DisplayInstructions.DisplayInitialInstructions();
         _ = CheckForUpdatesAsync();
     }
 
@@ -72,6 +73,21 @@ public partial class MainWindow
     private void UpdateStatus(string status)
     {
         StatusTextBlock.Text = status;
+    }
+
+    private void SetCurrentOperationDrive(string? driveLetter)
+    {
+        _diskMonitorService.StartMonitoring(driveLetter);
+    }
+
+    private void StopPerformanceCounter()
+    {
+        _diskMonitorService.StopMonitoring();
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            WriteSpeedValue?.Text = "N/A";
+            WriteSpeedDriveIndicator?.Text = "";
+        });
     }
 
     private async Task PreOperationCleanupAsync()
@@ -103,6 +119,68 @@ public partial class MainWindow
             // Log and report the error, but don't bother the user.
             _logger.LogMessage($"Error checking for updates: {ex.Message}");
             _ = ReportBugAsync("Error during update check", ex);
+        }
+    }
+
+    public async Task ReportBugAsync(string message, Exception? exception = null)
+    {
+        try
+        {
+            // --- Filter out common environmental exceptions ---
+            if (exception != null)
+            {
+                switch (exception)
+                {
+                    case DirectoryNotFoundException:
+                    case FileNotFoundException:
+                    case OperationCanceledException:
+                    // Filter out specific IOExceptions related to disconnected drives/network
+                    // "The specified network resource or device is no longer available"
+                    // "The device is not ready"
+                    case IOException ioEx when ioEx.Message.Contains("network resource", StringComparison.OrdinalIgnoreCase) ||
+                                               ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+                                               ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase):
+                        // Do not report these as bugs
+                        return;
+                }
+            }
+
+            var fullReport = new StringBuilder();
+            fullReport.AppendLine("=== Bug Report ===");
+            fullReport.AppendLine($"Application: {App.ApplicationName}");
+            fullReport.AppendLine(CultureInfo.InvariantCulture, $"Version: {GetType().Assembly.GetName().Version}");
+            fullReport.AppendLine(CultureInfo.InvariantCulture, $"OS: {Environment.OSVersion}");
+            fullReport.AppendLine(CultureInfo.InvariantCulture, $".NET Version: {Environment.Version}");
+            fullReport.AppendLine(CultureInfo.InvariantCulture, $"Date/Time: {DateTime.Now}");
+            fullReport.AppendLine();
+            fullReport.AppendLine("=== Error Message ===");
+            fullReport.AppendLine(message);
+            fullReport.AppendLine();
+            if (exception != null)
+            {
+                fullReport.AppendLine("=== Exception Details ===");
+                ExceptionFormatter.AppendExceptionDetails(fullReport, exception);
+            }
+
+            if (LogViewer != null)
+            {
+                var logContent = string.Empty;
+                Dispatcher.Invoke(() => { logContent = LogViewer.Text; });
+                if (!string.IsNullOrEmpty(logContent))
+                {
+                    fullReport.AppendLine();
+                    fullReport.AppendLine("=== Application Log (last part) ===");
+                    const int maxLogLength = 10000;
+                    var start = Math.Max(0, logContent.Length - maxLogLength);
+                    fullReport.Append(logContent.AsSpan(start));
+                }
+            }
+
+            await _bugReportService.SendBugReportAsync(fullReport.ToString());
+        }
+        catch
+        {
+            // ignore
         }
     }
 
