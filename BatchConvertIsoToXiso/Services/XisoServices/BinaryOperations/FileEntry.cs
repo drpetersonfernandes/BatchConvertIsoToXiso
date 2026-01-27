@@ -56,12 +56,10 @@ public class FileEntry
         EntrySector = sector;
         EntryOffset = offset;
 
+        // [FIX] Removed the early return check (if (LeftSubTree == 0xFFFF) return;)
+        // We must read the rest of the entry regardless of whether a left child exists.
+
         LeftSubTree = reader.ReadUInt16();
-
-        // 0xFFFF indicates an empty directory table.
-        // Stop reading immediately to avoid reading garbage or EndOfStream.
-        if (LeftSubTree == 0xFFFF) return;
-
         RightSubTree = reader.ReadUInt16();
         StartSector = reader.ReadUInt32();
         FileSize = reader.ReadUInt32();
@@ -74,6 +72,10 @@ public class FileEntry
             var rawString = Encoding.ASCII.GetString(nameBytes);
             var nullIndex = rawString.IndexOf('\0');
             FileName = nullIndex >= 0 ? rawString.Substring(0, nullIndex).Trim() : rawString.Trim();
+        }
+        else
+        {
+            FileName = string.Empty;
         }
 
         // Skip padding

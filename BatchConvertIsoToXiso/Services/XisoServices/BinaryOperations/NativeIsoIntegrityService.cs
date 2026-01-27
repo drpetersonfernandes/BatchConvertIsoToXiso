@@ -111,7 +111,11 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
         var visited = new HashSet<(long, long)>(); // Cycle detection
 
         var firstChild = dir.GetFirstChild(isoSt);
-        if (firstChild == null || firstChild.LeftSubTree == 0xFFFF) return results;
+
+        // [FIX] Removed "|| firstChild.LeftSubTree == 0xFFFF"
+        // A valid file entry can have 0xFFFF as a LeftSubTree.
+        // We only return if firstChild is null (which happens if the directory table is truly empty/0-byte).
+        if (firstChild == null) return results;
 
         var stack = new Stack<FileEntry>();
         var current = firstChild;
@@ -135,6 +139,7 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
 
             current = stack.Pop();
 
+            // [FIX] Ensure we don't add entries with empty names (which might happen if we hit a padding/empty sector entry)
             if (!string.IsNullOrEmpty(current.FileName))
             {
                 results.Add(current);
