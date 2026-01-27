@@ -1,13 +1,9 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
+using BatchConvertIsoToXiso.interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
-
-public interface IExternalToolService
-{
-    Task<string?> ConvertCueBinToIsoAsync(string cuePath, string tempOutputDir, CancellationToken token);
-}
 
 public partial class ExternalToolService : IExternalToolService
 {

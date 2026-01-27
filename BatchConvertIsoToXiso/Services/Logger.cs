@@ -1,13 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using BatchConvertIsoToXiso.interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
-
-public interface ILogger
-{
-    void Initialize(TextBox logViewer);
-    void LogMessage(string message);
-}
 
 public class LoggerService : ILogger
 {

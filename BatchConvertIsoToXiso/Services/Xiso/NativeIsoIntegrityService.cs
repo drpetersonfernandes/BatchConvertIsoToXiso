@@ -1,13 +1,8 @@
 using System.IO;
+using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.Services.Xiso;
-
-public interface INativeIsoIntegrityService
-{
-    Task<bool> TestIsoIntegrityAsync(string isoPath, IProgress<BatchOperationProgress> progress, CancellationToken token);
-    List<FileEntry> GetDirectoryEntries(IsoSt isoSt, FileEntry dir);
-}
 
 public class NativeIsoIntegrityService : INativeIsoIntegrityService
 {

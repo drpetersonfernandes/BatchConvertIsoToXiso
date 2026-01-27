@@ -1,12 +1,8 @@
 using System.Net.Http;
 using System.Net.Http.Json;
+using BatchConvertIsoToXiso.interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
-
-public interface IBugReportService
-{
-    Task<bool> SendBugReportAsync(string message);
-}
 
 public class BugReportService : IBugReportService, IDisposable
 {

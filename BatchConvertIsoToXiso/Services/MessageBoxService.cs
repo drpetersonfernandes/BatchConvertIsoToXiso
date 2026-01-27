@@ -1,13 +1,7 @@
 using System.Windows;
+using BatchConvertIsoToXiso.interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
-
-public interface IMessageBoxService
-{
-    MessageBoxResult Show(string message, string title, MessageBoxButton buttons, MessageBoxImage icon);
-    void ShowError(string message);
-    void ShowWarning(string message, string title);
-}
 
 public class MessageBoxService : IMessageBoxService
 {

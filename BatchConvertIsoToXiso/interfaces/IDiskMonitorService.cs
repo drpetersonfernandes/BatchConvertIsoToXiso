@@ -1,4 +1,4 @@
-﻿namespace BatchConvertIsoToXiso.Services;
+﻿namespace BatchConvertIsoToXiso.interfaces;
 
 public interface IDiskMonitorService
 {

@@ -3,14 +3,10 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.Services;
-
-public interface IUpdateChecker
-{
-    Task<(bool IsNewVersionAvailable, string? LatestVersion, string? DownloadUrl)> CheckForUpdateAsync();
-}
 
 public partial class UpdateChecker : IUpdateChecker, IDisposable
 {
