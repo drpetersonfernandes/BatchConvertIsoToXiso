@@ -117,12 +117,15 @@ public class XisoWriter
                         // Wipe logic: Write zeroes to the output XISO
                         Utils.WriteZeroes(xisoFs, -1, bytesToWipe);
                         numBytesProcessed += bytesToWipe;
+
+                        // [FIX] Moves the input stream forward when wiping.
                         isoFs.Seek(bytesToWipe, SeekOrigin.Current);
                     }
                     else
                     {
                         // Data logic: Copy valid sectors
                         var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : targetXisoLength - numBytesProcessed;
+
                         if (!Utils.WriteBytes(isoFs, xisoFs, -1, bytesToRead))
                         {
                             _logger.LogMessage("[ERROR] Failed writing game partition data.");

@@ -29,9 +29,9 @@ internal static class Xdvdfs
 
         isoFs.Seek(cur, SeekOrigin.Begin);
 
-        // 0xFFFF is the marker for an empty directory table
+        // [FIX] Read LeftSubTree but DO NOT return if 0xFFFF.
+        // We must continue to read the RightSubTree and the Entry itself.
         var leftChildOffset = Utils.ReadUShort(isoFs);
-        if (leftChildOffset == 0xFFFF) return;
 
         var rightChildOffset = Utils.ReadUShort(isoFs);
         var entryOffsetRaw = Utils.ReadUInt(isoFs);
@@ -50,8 +50,8 @@ internal static class Xdvdfs
 
         var isDirectory = (attributes & 0x10) != 0;
 
-        // Traverse Left Child
-        if (leftChildOffset != 0)
+        // Traverse Left Child (only if valid offset)
+        if (leftChildOffset != 0xFFFF && leftChildOffset != 0)
             GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)leftChildOffset * 4, quiet, skipSystemUpdate);
 
         // Process Current Entry
@@ -76,8 +76,8 @@ internal static class Xdvdfs
                 validSectors.Add((uint)i);
         }
 
-        // Traverse Right Child
-        if (rightChildOffset != 0)
+        // Traverse Right Child (only if valid offset)
+        if (rightChildOffset != 0xFFFF && rightChildOffset != 0)
             GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)rightChildOffset * 4, quiet, skipSystemUpdate);
     }
 
