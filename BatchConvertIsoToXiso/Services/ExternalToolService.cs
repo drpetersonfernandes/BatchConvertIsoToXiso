@@ -73,8 +73,6 @@ public partial class ExternalToolService : IExternalToolService
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            // Use 'await using' to ensure the registration is disposed (unregistered)
-            // BEFORE the process itself is disposed at the end of this block.
             // ReSharper disable once AccessToDisposedClosure
             await using (token.Register(() => ProcessTerminatorHelper.TerminateProcess(process, contextName, _logger)))
             {
@@ -93,7 +91,6 @@ public partial class ExternalToolService : IExternalToolService
             return null;
         }
     }
-
 
     private static async Task<string?> ParseCueForBinFileAsync(string cuePath, CancellationToken token)
     {

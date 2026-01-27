@@ -1,6 +1,6 @@
 using System.IO;
 using System.Text;
-using BatchConvertIsoToXiso.Models.Xiso;
+using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.Services.Xiso;
 
@@ -36,7 +36,7 @@ public class FileEntry
 
         LeftSubTree = reader.ReadUInt16();
 
-        // XboxKit Logic: 0xFFFF indicates an empty directory table.
+        // 0xFFFF indicates an empty directory table.
         // Stop reading immediately to avoid reading garbage or EndOfStream.
         if (LeftSubTree == 0xFFFF) return;
 

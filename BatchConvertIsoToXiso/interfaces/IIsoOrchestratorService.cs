@@ -1,13 +1,6 @@
 using BatchConvertIsoToXiso.Models;
 
-namespace BatchConvertIsoToXiso.Services;
-
-public enum CloudRetryResult
-{
-    Retry,
-    Skip,
-    Cancel
-}
+namespace BatchConvertIsoToXiso.interfaces;
 
 public interface IIsoOrchestratorService
 {

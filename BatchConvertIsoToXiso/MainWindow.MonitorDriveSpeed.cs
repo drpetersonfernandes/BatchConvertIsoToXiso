@@ -6,7 +6,6 @@ public partial class MainWindow
 {
     private void SetCurrentOperationDrive(string? driveLetter)
     {
-        // Simply delegate to the service
         _diskMonitorService.StartMonitoring(driveLetter);
     }
 

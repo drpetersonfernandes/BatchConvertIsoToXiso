@@ -1,4 +1,5 @@
 using System.IO;
+using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services.Xiso;
 
@@ -351,9 +352,6 @@ public class IsoOrchestratorService : IIsoOrchestratorService
 
     private async Task<IsoTestResultStatus> TestSingleIsoInternalAsync(string isoPath, int index, Func<string, Task<CloudRetryResult>> cloudRetry, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
-        // We can now test directly without copying to temp, unless it's a cloud file that needs downloading
-        // However, the NativeIsoIntegrityService requires a FileStream.
-
         // 1. Handle Cloud/OneDrive files (download to temp if necessary)
         var pathToCheck = isoPath;
         string? tempCloudCopy = null;

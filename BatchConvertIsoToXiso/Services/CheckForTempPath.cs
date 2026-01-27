@@ -2,7 +2,7 @@
 
 namespace BatchConvertIsoToXiso.Services;
 
-public class CheckForTempPath
+public static class CheckForTempPath
 {
     /// <summary>
     /// Checks if the selected path is the system's temporary directory or a subfolder within it.

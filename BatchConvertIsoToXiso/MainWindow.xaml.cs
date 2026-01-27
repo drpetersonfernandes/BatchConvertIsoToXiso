@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using Microsoft.Win32;
 using System.Windows.Threading;
+using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
 using BatchConvertIsoToXiso.Services.Xiso;

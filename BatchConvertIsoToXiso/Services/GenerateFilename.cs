@@ -1,6 +1,6 @@
 ﻿namespace BatchConvertIsoToXiso.Services;
 
-public class GenerateFilename
+public static class GenerateFilename
 {
     public static string GenerateSimpleFilename(int fileIndex)
     {

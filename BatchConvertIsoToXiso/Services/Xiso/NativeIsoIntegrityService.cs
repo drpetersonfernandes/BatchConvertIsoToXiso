@@ -47,7 +47,6 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
 
     private bool VerifyDirectory(FileEntry dirEntry, IsoSt isoSt, byte[] buffer, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
-        // Use the public method to get children
         var children = GetDirectoryEntries(isoSt, dirEntry);
 
         foreach (var child in children)

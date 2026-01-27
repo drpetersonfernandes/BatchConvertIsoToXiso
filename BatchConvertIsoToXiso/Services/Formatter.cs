@@ -1,6 +1,6 @@
 ﻿namespace BatchConvertIsoToXiso.Services;
 
-public class Formatter
+public static class Formatter
 {
     public static string FormatBytes(long bytes)
     {

@@ -37,8 +37,6 @@ public partial class UpdateChecker : IUpdateChecker, IDisposable
                 return (false, null, null);
             }
 
-            // Use a regular expression to extract a semantic version number (e.g., X.Y.Z)
-            // This makes the parsing more robust against varying tag prefixes like "release-" or "v".
             var versionMatch = MyRegex().Match(releaseInfo.TagName);
             if (!versionMatch.Success)
             {

@@ -1,11 +1,7 @@
 using System.Diagnostics;
+using BatchConvertIsoToXiso.interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
-
-public interface IUrlOpener
-{
-    void OpenUrl(string url);
-}
 
 public class UrlOpenerService : IUrlOpener
 {

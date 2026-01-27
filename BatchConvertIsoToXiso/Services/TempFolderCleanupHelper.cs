@@ -7,18 +7,17 @@ public static class TempFolderCleanupHelper
     /// <summary>
     /// Deletes a directory with retry logic for locked files
     /// </summary>
-    public static async Task<bool> TryDeleteDirectoryWithRetryAsync(string directoryPath, int maxRetries, int delayMs, ILogger? logger)
+    public static async Task TryDeleteDirectoryWithRetryAsync(string directoryPath, int maxRetries, int delayMs, ILogger? logger)
     {
         for (var attempt = 1; attempt <= maxRetries; attempt++)
         {
             try
             {
-                if (!Directory.Exists(directoryPath))
-                    return true;
+                if (!Directory.Exists(directoryPath)) return;
 
                 Directory.Delete(directoryPath, true);
                 logger?.LogMessage($"Successfully deleted temp folder: {Path.GetFileName(directoryPath)}");
-                return true;
+                return;
             }
             catch (IOException) when (attempt < maxRetries)
             {
@@ -33,12 +32,11 @@ public static class TempFolderCleanupHelper
             catch (Exception ex)
             {
                 logger?.LogMessage($"Failed to delete '{Path.GetFileName(directoryPath)}': {ex.Message}");
-                return false;
+                return;
             }
         }
 
         logger?.LogMessage($"WARNING: Could not delete '{Path.GetFileName(directoryPath)}' after {maxRetries} attempts. Manual cleanup may be needed.");
-        return false;
     }
 
     /// <summary>

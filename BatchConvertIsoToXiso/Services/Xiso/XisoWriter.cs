@@ -7,8 +7,6 @@ public class XisoWriter
 {
     private readonly ILogger _logger;
     private readonly INativeIsoIntegrityService _integrityService;
-
-    // Constants matched with XboxKit
     private static readonly long[] XisoOffset = [0x18300000, 0xFD90000, 0x89D80000, 0x2080000];
     private static readonly long[] XisoLength = [0x1A2DB0000, 0x1B3880000, 0xBF8A0000, 0x204510000];
     private static readonly long[] RedumpIsoLength = [0x1D26A8000, 0x1D3301800, 0x1D2FEF800, 0x1D3082000, 0x1D3390000, 0x1D31A0000, 0x208E05800, 0x208E03800];
@@ -75,10 +73,10 @@ public class XisoWriter
                     token.ThrowIfCancellationRequested();
 
                     var currentPhysicalByte = inputOffset + numBytesProcessed;
-                    // XboxKit Logic: Calculate sector index relative to start of disc
+                    // Calculate sector index relative to start of disc
                     var currentSector = (currentPhysicalByte + Utils.SectorSize - 1) / Utils.SectorSize;
 
-                    // XboxKit Logic: Trim everything after the last valid file extent
+                    // Trim everything after the last valid file extent
                     if (validRanges.Count > 0 && currentSector > lastValidSector)
                     {
                         break;
@@ -104,7 +102,6 @@ public class XisoWriter
 
                     if (bytesToWipe > 0)
                     {
-                        // Alignment check from XboxKit
                         if (bytesToWipe % Utils.SectorSize != 0)
                         {
                             _logger.LogMessage("[ERROR] Unexpected Error: Filler data is not sector aligned.");

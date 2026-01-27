@@ -22,14 +22,9 @@ public class BugReportService : IBugReportService, IDisposable
         _applicationName = applicationName;
 
         _httpClient.Timeout = TimeSpan.FromSeconds(15);
-        _httpClient.DefaultRequestHeaders.Add("X-API-KEY", _apiKey); // Set API key once
+        _httpClient.DefaultRequestHeaders.Add("X-API-KEY", _apiKey);
     }
 
-    /// <summary>
-    /// Silently sends a bug report to the API
-    /// </summary>
-    /// <param name="message">The error message or bug report</param>
-    /// <returns>A task representing the asynchronous operation</returns>
     public async Task<bool> SendBugReportAsync(string message)
     {
         try
@@ -55,7 +50,7 @@ public class BugReportService : IBugReportService, IDisposable
 
     public void Dispose()
     {
-        _httpClient?.Dispose();
+        _httpClient.Dispose();
         GC.SuppressFinalize(this);
     }
 }

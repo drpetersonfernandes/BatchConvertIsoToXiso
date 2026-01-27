@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
+using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Services;
 using Microsoft.Extensions.DependencyInjection;
 using SevenZip;
@@ -57,7 +58,6 @@ public partial class App
 
     protected override void OnExit(ExitEventArgs e)
     {
-        // Dispose registered services that implement IDisposable
         if (ServiceProvider != null)
         {
             var disposableServices = ServiceProvider.GetServices<object>()
@@ -97,8 +97,6 @@ public partial class App
         services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<AboutWindow>();
         services.AddSingleton<IExternalToolService, ExternalToolService>();
-        // If you use IsoOrchestratorServiceUsingTool, make sure it receives the tester
-        // services.AddSingleton<IIsoOrchestratorService, IsoOrchestratorServiceUsingTool>();
         services.AddSingleton<IIsoOrchestratorService, IsoOrchestratorService>();
         services.AddSingleton<INativeIsoIntegrityService, NativeIsoIntegrityService>();
         services.AddSingleton<XisoWriter>();
@@ -134,7 +132,6 @@ public partial class App
             _ = _bugReportService?.SendBugReportAsync(message);
 
             // Inform the user that a critical error occurred
-            // Use Dispatcher.InvokeAsync to ensure UI operations are on the UI thread
             Current.Dispatcher.InvokeAsync(() => _messageBoxService?.ShowError("A critical error occurred and has been reported. The application may need to close."));
         }
         catch

@@ -1,6 +1,6 @@
 ﻿namespace BatchConvertIsoToXiso.Services;
 
-public class ConvertToPastTense
+public static class ConvertToPastTense
 {
     public static string GetPastTense(string verb)
     {

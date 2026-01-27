@@ -16,7 +16,7 @@ internal static class Xdvdfs
 
         var cur = isoOffset + rootOffset + childOffset;
 
-        // XboxKit Logic: Add the directory table sectors themselves as valid
+        // Add the directory table sectors themselves as valid
         var curOffset = cur / Utils.SectorSize;
         var curSize = (rootSize - childOffset + Utils.SectorSize - 1) / Utils.SectorSize;
         for (var i = curOffset; i < curOffset + curSize; i++)
@@ -24,7 +24,7 @@ internal static class Xdvdfs
 
         isoFs.Seek(cur, SeekOrigin.Begin);
 
-        // XboxKit Logic: 0xFFFF is the marker for an empty directory table
+        // 0xFFFF is the marker for an empty directory table
         var leftChildOffset = Utils.ReadUShort(isoFs);
         if (leftChildOffset == 0xFFFF) return;
 
@@ -52,7 +52,7 @@ internal static class Xdvdfs
         // Process Current Entry
         if (isDirectory)
         {
-            // Custom logic for BatchConvert: Skip contents of $SystemUpdate if requested
+            // Skip contents of $SystemUpdate if requested
             if (skipSystemUpdate && fileName.Equals("$SystemUpdate", StringComparison.OrdinalIgnoreCase))
             {
                 if (!quiet) Debug.WriteLine("Skipping $SystemUpdate directory contents.");

@@ -29,11 +29,4 @@ public static class ExceptionFormatter
             break;
         }
     }
-
-    public class CriticalToolFailureException : Exception
-    {
-        public CriticalToolFailureException(string message, Exception inner) : base(message, inner)
-        {
-        }
-    }
 }
