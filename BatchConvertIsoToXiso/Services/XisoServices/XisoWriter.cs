@@ -61,7 +61,7 @@ public class XisoWriter
                 {
                     inputOffset = 0;
                     targetXisoLength = isoSize;
-                    _logger.LogMessage("Detected XISO. Optimizing and trimming...");
+                    _logger.LogMessage("Detected XISO. Trimming...");
                 }
 
                 await using FileStream isoFs = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -147,7 +147,7 @@ public class XisoWriter
 
                 // Finalize file size (Trimming)
                 xisoFs.SetLength(xisoFs.Position);
-                _logger.LogMessage($"Successfully created optimized XISO. Final size: {xisoFs.Length / (1024 * 1024)} MB");
+                _logger.LogMessage($"Successfully created trimmed XISO. Final size: {xisoFs.Length / (1024 * 1024)} MB");
             }
             catch (OperationCanceledException)
             {

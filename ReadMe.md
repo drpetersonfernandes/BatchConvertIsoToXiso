@@ -1,6 +1,6 @@
 # Batch Convert ISO to XISO
 
-A high-performance Windows WPF application for batch converting Xbox ISO files to the optimized XISO format and testing their integrity. This application supports both **Xbox 360 ISOs** and **original Xbox ISOs**. It features a native C# XISO engine for fast, reliable processing without external dependencies for core ISO operations.
+A high-performance Windows WPF application for batch converting Xbox ISO files to the trimmed XISO format and testing their integrity. This application supports both **Xbox 360 ISOs** and **original Xbox ISOs**. It features a native C# XISO engine for fast, reliable processing without external dependencies for core ISO operations.
 
 ⭐ **If you find this tool useful, please give us a Star on GitHub!** ⭐
 
@@ -21,9 +21,9 @@ The application features real-time progress tracking, detailed summary statistic
 *   **Batch ISO Integrity Testing**: Test the integrity of multiple ISO files.
 *   **Xbox Compatibility**: Supports both **Xbox 360 ISOs** and **original Xbox ISOs**.
 *   **ISO/XISO Support**:
-    *   Converts standard Xbox ISO images to the optimized XISO format.
+    *   Converts standard Xbox ISO images to the trimmed XISO format.
     *   Tests ISO integrity by verifying the XDVDFS file system structure and data readability.
-    *   Can also process existing XISO files to optimize and trim unnecessary padding.
+    *   Can also process existing XISO files to trim unnecessary padding.
 *   **Archive Support (for Conversion only)**: Automatically extracts ISO files from `.zip`, `.7z`, and `.rar` archives found in the input folder for conversion using the SevenZipExtractor library.
 *   **CUE/BIN Support (for Conversion only)**: Automatically converts `.cue`/`.bin` disc images to `.iso` format using the bundled `bchunk.exe` before processing them into XISOs.
 *   **Skip System Update Folder**: Option to skip the `$SystemUpdate` folder during conversion, which can reduce output file size and is often desired for game ISOs.
@@ -89,13 +89,13 @@ The application features real-time progress tracking, detailed summary statistic
 ## About XISO Format
 
 XISO is the native disk image format used by Xbox consoles. It is essentially an ISO 9660 image with specific padding and structure optimized for Xbox hardware.
-*   Converting standard ISOs (often created from disc dumps) to XISO ensures they are in the correct format for use with modded Xbox consoles, emulators like Xemu, or other Xbox development tools. This process rebuilds the ISO to the correct XISO structure, removing unnecessary padding and optimizing the file layout.
+*   Converting standard ISOs (often created from disc dumps) to XISO ensures they are in the correct format for use with modded Xbox consoles, emulators like Xemu, or other Xbox development tools. This process rebuilds the ISO to the correct XISO structure, removing unnecessary padding and trimming the file layout.
 *   Testing ISOs involves traversing the XDVDFS file system and verifying that every file entry is readable and the directory tree is valid.
 
 ## Why Use XISO / Test ISOs?
 
 *   **Compatibility**: XISO is the standard format expected by modded Xbox consoles and emulators, ensuring games load correctly on both original Xbox and Xbox 360 systems.
-*   **Optimization (Conversion)**: The conversion process optimizes the file structure and removes padding, potentially reducing file size. Skipping the `$SystemUpdate` folder further helps in reducing size.
+*   **Trimming (Conversion)**: The conversion process trims the file structure and removes padding, potentially reducing file size. Skipping the `$SystemUpdate` folder further helps in reducing size.
 *   **Data Integrity (Conversion & Testing)**: The tool verifies the structure of the ISO and rebuilds it correctly (conversion) or checks for readability and potential corruption (testing).
 
 ## Troubleshooting
