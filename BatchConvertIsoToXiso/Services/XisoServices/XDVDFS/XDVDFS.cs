@@ -15,7 +15,9 @@ internal static class Xdvdfs
     public static readonly byte[] Magic = "XBOX_DVD_LAYOUT_TOOL_SIG"u8.ToArray();
 
     // Traverse file tree to get all valid data sectors in XISO
-    private static void GetValidSectors(FileStream isoFs, long isoOffset, List<uint> validSectors, long rootOffset, uint rootSize, long childOffset, bool quiet, bool skipSystemUpdate, HashSet<long> visited)
+    private static void GetValidSectors(FileStream isoFs, long isoOffset, List<uint> validSectors,
+        long rootOffset, uint rootSize, long childOffset, bool quiet, bool skipSystemUpdate,
+        HashSet<long> visited)
     {
         if (childOffset >= rootSize) return;
 
@@ -32,10 +34,17 @@ internal static class Xdvdfs
 
         isoFs.Seek(cur, SeekOrigin.Begin);
 
-        // [FIX] Read LeftSubTree but DO NOT return if 0xFFFF.
-        // We must continue to read the RightSubTree and the Entry itself.
+        // Read LeftSubTree
         var leftChildOffset = Utils.ReadUShort(isoFs);
 
+        // Check for empty directory (at start offset with 0xFFFF)
+        if (leftChildOffset == 0xFFFF && childOffset == 0)
+        {
+            // Empty directory - no entries to process
+            return;
+        }
+
+        // Continue reading the rest of the entry
         var rightChildOffset = Utils.ReadUShort(isoFs);
         var entryOffsetRaw = Utils.ReadUInt(isoFs);
         var entryOffset = (long)entryOffsetRaw * Utils.SectorSize;
@@ -54,8 +63,11 @@ internal static class Xdvdfs
         var isDirectory = (attributes & 0x10) != 0;
 
         // Traverse Left Child (only if valid offset)
-        if (leftChildOffset != 0xFFFF && leftChildOffset != 0)
-            GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize, (long)leftChildOffset * 4, quiet, skipSystemUpdate, visited);
+        if (leftChildOffset != 0xFFFF && leftChildOffset != 0 && childOffset != leftChildOffset * 4)
+        {
+            GetValidSectors(isoFs, isoOffset, validSectors, rootOffset, rootSize,
+                (long)leftChildOffset * 4, quiet, skipSystemUpdate, visited);
+        }
 
         // Process Current Entry
         if (isDirectory)
