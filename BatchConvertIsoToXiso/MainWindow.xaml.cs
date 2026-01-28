@@ -56,6 +56,7 @@ public partial class MainWindow
         _processingTimer.Tick += ProcessingTimer_Tick;
 
         ResetSummaryStats();
+        DisplayInstructions.Initialize(_logger);
         DisplayInstructions.DisplayInitialInstructions();
         _ = CheckForUpdatesAsync();
     }

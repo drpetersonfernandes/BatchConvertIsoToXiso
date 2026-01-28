@@ -32,7 +32,7 @@ internal static class Utils
     }
 
     // Ensure proper writing to byte array
-    public static bool WriteBytes(FileStream fs, byte[] outBa, long offset)
+    public static bool FillBuffer(FileStream fs, byte[] outBa, long offset)
     {
         long numBytes = 0;
         if (offset >= 0)
@@ -50,7 +50,7 @@ internal static class Utils
     }
 
     // Ensure proper writing to filestream
-    public static bool WriteBytes(FileStream inFs, FileStream outFs, long offset, long length, byte[] buf)
+    public static bool FillBuffer(FileStream inFs, FileStream outFs, long offset, long length, byte[] buf)
     {
         long numBytes = 0;
         if (offset >= 0)

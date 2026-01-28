@@ -152,7 +152,7 @@ public class XisoWriter
                             // Data logic: Copy valid sectors
                             var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : targetXisoLength - numBytesProcessed;
 
-                            if (!Utils.WriteBytes(isoFs, xisoFs, -1, bytesToRead, buffer))
+                            if (!Utils.FillBuffer(isoFs, xisoFs, -1, bytesToRead, buffer))
                             {
                                 _logger.LogMessage("[ERROR] Failed writing game partition data.");
                                 return FileProcessingStatus.Failed;

@@ -4,11 +4,11 @@ using System.Runtime.InteropServices;
 
 namespace BatchConvertIsoToXiso.Services;
 
-public abstract class DisplayInstructions
+public static class DisplayInstructions
 {
     private static ILogger? _logger;
 
-    protected DisplayInstructions(ILogger logger)
+    public static void Initialize(ILogger logger)
     {
         _logger = logger;
     }

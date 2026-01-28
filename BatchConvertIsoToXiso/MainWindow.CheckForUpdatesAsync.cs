@@ -12,7 +12,7 @@ public partial class MainWindow
 
             if (isNewVersionAvailable && !string.IsNullOrEmpty(downloadUrl) && !string.IsNullOrEmpty(latestVersion))
             {
-                var result = MessageBox.Show(this, $"A new version ({latestVersion}) is available. Would you like to go to the download page?",
+                var result = _messageBoxService.Show($"A new version ({latestVersion}) is available. Would you like to go to the download page?",
                     "Update Available", MessageBoxButton.YesNo, MessageBoxImage.Information);
 
                 if (result == MessageBoxResult.Yes)
