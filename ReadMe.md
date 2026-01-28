@@ -8,7 +8,9 @@
 
 Built with a **native C# XDVDFS engine**, this tool eliminates the need for legacy external command-line tools for core ISO operations, offering superior speed and modern features like real-time disk write monitoring.
 
-![Main Screenshot](screenshot.png)
+![Convert Screenshot](screenshot.png)
+![Test Screenshot](screenshot2.png)
+![Explorer Screenshot](screenshot3.png)
 
 ---
 
