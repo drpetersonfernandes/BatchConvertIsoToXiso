@@ -177,7 +177,7 @@ public class XisoWriter
                 if (checkIntegrity)
                 {
                     _logger.LogMessage("Verifying output XISO integrity...");
-                    var isValid = await _integrityService.TestIsoIntegrityAsync(destPath, false, new Progress<BatchOperationProgress>(), token);
+                    var isValid = await _integrityService.TestIsoIntegrityAsync(destPath, false, progress, token);
 
                     if (!isValid)
                     {

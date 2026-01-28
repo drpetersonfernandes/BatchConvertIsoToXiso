@@ -87,48 +87,60 @@ public partial class MainWindow
 
             var progress = new Progress<BatchOperationProgress>(p =>
             {
-                if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
-                if (p.StatusText != null) UpdateStatus(p.StatusText);
-
-                if (p.TotalFiles.HasValue)
+                try
                 {
-                    _uiTotalFiles = p.TotalFiles.Value;
-                    // Switch from "Scanning" (Indeterminate) to "Processing" (Determinate)
-                    ProgressBar.IsIndeterminate = false;
-                    UpdateSummaryStatsUi();
+                    if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
+                    if (p.StatusText != null) UpdateStatus(p.StatusText);
+
+                    if (p.TotalFiles.HasValue)
+                    {
+                        _uiTotalFiles = p.TotalFiles.Value;
+                        UpdateSummaryStatsUi();
+                    }
+
+                    if (p.ProcessedCount.HasValue)
+                    {
+                        UpdateProgressUi(p.ProcessedCount.Value, _uiTotalFiles);
+                    }
+
+                    if (p.SuccessCount.HasValue)
+                    {
+                        _uiSuccessCount += p.SuccessCount.Value;
+                        _totalProcessedFiles += p.SuccessCount.Value;
+                        UpdateSummaryStatsUi();
+                    }
+
+                    if (p.FailedCount.HasValue)
+                    {
+                        _uiFailedCount += p.FailedCount.Value;
+                        _totalProcessedFiles += p.FailedCount.Value;
+                        _invalidIsoErrorCount += p.FailedCount.Value;
+                        UpdateSummaryStatsUi();
+                    }
+
+                    if (p.SkippedCount.HasValue)
+                    {
+                        _uiSkippedCount += p.SkippedCount.Value;
+                        _totalProcessedFiles += p.SkippedCount.Value;
+                        UpdateSummaryStatsUi();
+                    }
+
+                    if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
+                    if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
+
+                    // Allow the orchestrator to toggle indeterminate mode (e.g., during a long extraction)
+                    if (p.IsIndeterminate)
+                    {
+                        ProgressBar.IsIndeterminate = true;
+                    }
+                    else if (p.TotalFiles.HasValue || p.ProcessedCount.HasValue)
+                    {
+                        ProgressBar.IsIndeterminate = false;
+                    }
                 }
-
-                if (p.ProcessedCount.HasValue) UpdateProgressUi(p.ProcessedCount.Value, _uiTotalFiles);
-
-                if (p.SuccessCount.HasValue)
+                catch (OperationCanceledException)
                 {
-                    _uiSuccessCount += p.SuccessCount.Value;
-                    _totalProcessedFiles += p.SuccessCount.Value;
-                    UpdateSummaryStatsUi();
-                }
-
-                if (p.FailedCount.HasValue)
-                {
-                    _uiFailedCount += p.FailedCount.Value;
-                    _totalProcessedFiles += p.FailedCount.Value;
-                    _invalidIsoErrorCount += p.FailedCount.Value;
-                    UpdateSummaryStatsUi();
-                }
-
-                if (p.SkippedCount.HasValue)
-                {
-                    _uiSkippedCount += p.SkippedCount.Value;
-                    _totalProcessedFiles += p.SkippedCount.Value;
-                    UpdateSummaryStatsUi();
-                }
-
-                if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
-                if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
-
-                // Allow the orchestrator to toggle indeterminate mode (e.g., during a long extraction)
-                if (p.IsIndeterminate)
-                {
-                    ProgressBar.IsIndeterminate = true;
+                    // Ignore cancellation exceptions during UI updates
                 }
             });
 
@@ -190,41 +202,52 @@ public partial class MainWindow
 
             var progress = new Progress<BatchOperationProgress>(p =>
             {
-                if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
-                if (p.StatusText != null) UpdateStatus(p.StatusText);
-
-                if (p.TotalFiles.HasValue)
+                try
                 {
-                    _uiTotalFiles = p.TotalFiles.Value;
-                    // Switch from "Scanning" (Indeterminate) to "Processing" (Determinate)
-                    ProgressBar.IsIndeterminate = false;
-                    UpdateSummaryStatsUi();
+                    if (p.LogMessage != null) _logger.LogMessage(p.LogMessage);
+                    if (p.StatusText != null) UpdateStatus(p.StatusText);
+
+                    if (p.TotalFiles.HasValue)
+                    {
+                        _uiTotalFiles = p.TotalFiles.Value;
+                        UpdateSummaryStatsUi();
+                    }
+
+                    if (p.ProcessedCount.HasValue)
+                    {
+                        UpdateProgressUi(p.ProcessedCount.Value, _uiTotalFiles);
+                    }
+
+                    if (p.SuccessCount.HasValue)
+                    {
+                        _uiSuccessCount += p.SuccessCount.Value;
+                        _totalProcessedFiles += p.SuccessCount.Value;
+                        UpdateSummaryStatsUi();
+                    }
+
+                    if (p.FailedCount.HasValue)
+                    {
+                        _uiFailedCount += p.FailedCount.Value;
+                        _totalProcessedFiles += p.FailedCount.Value;
+                        _invalidIsoErrorCount += p.FailedCount.Value;
+                        UpdateSummaryStatsUi();
+                    }
+
+                    if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
+                    if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
+
+                    if (p.IsIndeterminate)
+                    {
+                        ProgressBar.IsIndeterminate = true;
+                    }
+                    else if (p.TotalFiles.HasValue || p.ProcessedCount.HasValue)
+                    {
+                        ProgressBar.IsIndeterminate = false;
+                    }
                 }
-
-                if (p.ProcessedCount.HasValue) UpdateProgressUi(p.ProcessedCount.Value, _uiTotalFiles);
-
-                if (p.SuccessCount.HasValue)
+                catch (OperationCanceledException)
                 {
-                    _uiSuccessCount += p.SuccessCount.Value;
-                    _totalProcessedFiles += p.SuccessCount.Value;
-                    UpdateSummaryStatsUi();
-                }
-
-                if (p.FailedCount.HasValue)
-                {
-                    _uiFailedCount += p.FailedCount.Value;
-                    _totalProcessedFiles += p.FailedCount.Value;
-                    _invalidIsoErrorCount += p.FailedCount.Value;
-                    UpdateSummaryStatsUi();
-                }
-
-                if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
-                if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
-
-                // Allow the orchestrator to toggle indeterminate mode
-                if (p.IsIndeterminate)
-                {
-                    ProgressBar.IsIndeterminate = true;
+                    // Ignore cancellation exceptions during UI updates
                 }
             });
 

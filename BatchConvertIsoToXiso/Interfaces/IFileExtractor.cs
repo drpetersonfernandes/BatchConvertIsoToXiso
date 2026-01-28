@@ -2,6 +2,6 @@
 
 public interface IFileExtractor
 {
-    Task<bool> ExtractArchiveAsync(string archivePath, string extractionPath, CancellationTokenSource cts);
+    Task<bool> ExtractArchiveAsync(string archivePath, string extractionPath, CancellationToken token);
     Task<long> GetUncompressedArchiveSizeAsync(string archivePath, CancellationToken token);
 }

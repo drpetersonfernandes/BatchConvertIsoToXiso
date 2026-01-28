@@ -58,7 +58,18 @@ public partial class MainWindow
         ResetSummaryStats();
         DisplayInstructions.Initialize(_logger);
         DisplayInstructions.DisplayInitialInstructions();
-        _ = CheckForUpdatesAsync();
+    }
+
+    private async void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await CheckForUpdatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _ = _bugReportService.SendBugReportAsync($"Error checking for updates: {ex.Message}");
+        }
     }
 
     private void Window_Closing(object sender, CancelEventArgs e)

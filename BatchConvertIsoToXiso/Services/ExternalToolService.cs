@@ -103,10 +103,8 @@ public partial class ExternalToolService : IExternalToolService
 
                 var rawBinName = !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Groups[2].Value;
 
-                // Fix: Ignore absolute paths in CUE (e.g. C:\Games\image.bin) and look in the CUE's directory
-                var binFileName = Path.GetFileName(rawBinName);
-
-                var binPath = Path.Combine(cueDir, binFileName);
+                // Combine with CUE directory while preserving relative paths (e.g. "data\file.bin")
+                var binPath = Path.Combine(cueDir, rawBinName);
                 if (File.Exists(binPath)) return binPath;
             }
         }

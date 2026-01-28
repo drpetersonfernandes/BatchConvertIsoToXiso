@@ -5,6 +5,7 @@
         Title="Batch Convert ISO to XISO"
         Height="750" Width="1150" MinHeight="650" MinWidth="700"
         Closing="Window_Closing"
+        Loaded="Window_Loaded"
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>

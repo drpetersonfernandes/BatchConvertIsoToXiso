@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
 using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
@@ -98,19 +98,21 @@ public partial class MainWindow
     {
         if (_explorerIsoSt == null) return;
 
-        if (_explorerHistory.Count <= 1)
+        // Remove the current directory from history
+        _explorerHistory.Pop();
+        _explorerPathNames.Pop();
+
+        if (_explorerHistory.Count == 0)
         {
+            // If no history left, we go back to Root
             var volume = VolumeDescriptor.ReadFrom(_explorerIsoSt);
             LoadDirectory(FileEntry.CreateRootEntry(volume.RootDirTableSector), "Root");
         }
         else
         {
-            _explorerHistory.Pop();
-            _explorerPathNames.Pop();
-
+            // Pop the parent so LoadDirectory can push it back during reload
             var parentEntry = _explorerHistory.Pop();
             var parentName = _explorerPathNames.Pop();
-
             LoadDirectory(parentEntry, parentName);
         }
     }

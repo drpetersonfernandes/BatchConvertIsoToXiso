@@ -15,7 +15,7 @@ public class FileExtractorService : IFileExtractor
         _bugReportService = bugReportService;
     }
 
-    public async Task<bool> ExtractArchiveAsync(string archivePath, string extractionPath, CancellationTokenSource cts)
+    public async Task<bool> ExtractArchiveAsync(string archivePath, string extractionPath, CancellationToken token)
     {
         var archiveFileName = Path.GetFileName(archivePath);
         _logger.LogMessage($"Starting extraction: {archiveFileName}");
@@ -39,7 +39,7 @@ public class FileExtractorService : IFileExtractor
                 // Manually extract files to prevent "Zip Slip" (absolute paths or path traversal in archives)
                 for (var i = 0; i < extractor.FilesCount; i++)
                 {
-                    cts.Token.ThrowIfCancellationRequested();
+                    token.ThrowIfCancellationRequested();
                     var fileData = extractor.ArchiveFileData[i];
                     if (fileData.IsDirectory) continue;
 
@@ -77,7 +77,7 @@ public class FileExtractorService : IFileExtractor
                     using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);
                     extractor.ExtractFile(fileData.Index, fs);
                 }
-            }, cts.Token);
+            }, token);
 
             _logger.LogMessage($"  Successfully extracted: {archiveFileName}");
             return true;

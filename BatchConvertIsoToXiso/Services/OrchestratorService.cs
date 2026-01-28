@@ -132,7 +132,8 @@ public class OrchestratorService : IOrchestratorService
         try
         {
             Directory.CreateDirectory(tempDir);
-            extracted = await _fileExtractor.ExtractArchiveAsync(archivePath, tempDir, CancellationTokenSource.CreateLinkedTokenSource(token));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            extracted = await _fileExtractor.ExtractArchiveAsync(archivePath, tempDir, linkedCts.Token);
 
             if (extracted)
             {

@@ -31,31 +31,38 @@ public partial class App
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
     }
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
-        base.OnStartup(e);
-
-        var serviceCollection = new ServiceCollection();
-        ConfigureServices(serviceCollection);
-        ServiceProvider = serviceCollection.BuildServiceProvider();
-
-        _bugReportService = ServiceProvider.GetRequiredService<IBugReportService>();
-        _messageBoxService = ServiceProvider.GetRequiredService<IMessageBoxService>();
-        _logger = ServiceProvider.GetRequiredService<ILogger>();
-
-        _ = CleanupTemporaryFolders();
-        _ = InitializeSevenZipSharp();
-
-        // Startup cleanup
-        if (_logger != null)
+        try
         {
-            _ = TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_logger);
-        }
+            base.OnStartup(e);
 
-        // Create and show the main window
-        using var scope = ServiceProvider.CreateScope();
-        var mainWindow = scope.ServiceProvider.GetRequiredService<MainWindow>();
-        mainWindow.Show();
+            var serviceCollection = new ServiceCollection();
+            ConfigureServices(serviceCollection);
+            ServiceProvider = serviceCollection.BuildServiceProvider();
+
+            _bugReportService = ServiceProvider.GetRequiredService<IBugReportService>();
+            _messageBoxService = ServiceProvider.GetRequiredService<IMessageBoxService>();
+            _logger = ServiceProvider.GetRequiredService<ILogger>();
+
+            await CleanupTemporaryFolders();
+            await InitializeSevenZipSharp();
+
+            // Startup cleanup
+            if (_logger != null)
+            {
+                await TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_logger);
+            }
+
+            // Create and show the main window
+            using var scope = ServiceProvider.CreateScope();
+            var mainWindow = scope.ServiceProvider.GetRequiredService<MainWindow>();
+            mainWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            _ = ReportException(ex, "Bug OnStartup");
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
