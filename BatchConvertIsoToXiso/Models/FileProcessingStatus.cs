@@ -1,8 +1,9 @@
-﻿namespace BatchConvertIsoToXiso.Models;
+namespace BatchConvertIsoToXiso.Models;
 
 public enum FileProcessingStatus
 {
     Converted,
     Skipped,
-    Failed
+    Failed,
+    AlreadyOptimized
 }

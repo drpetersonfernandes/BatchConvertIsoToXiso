@@ -282,9 +282,10 @@ public class OrchestratorService : IOrchestratorService
             progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Rewriting to output...", CurrentDrive = PathHelper.GetDriveLetter(outputFolder) });
 
             // Use Native Writer
-            var success = await _xisoWriter.RewriteIsoAsync(sourcePath, destinationPath, skipSystemUpdate, checkIntegrity, progress, token);
+            var status = await _xisoWriter.RewriteIsoAsync(sourcePath, destinationPath, skipSystemUpdate, checkIntegrity, progress, token);
 
-            if (!success) return FileProcessingStatus.Failed;
+            if (status == FileProcessingStatus.AlreadyOptimized) return FileProcessingStatus.Skipped;
+            if (status != FileProcessingStatus.Converted) return FileProcessingStatus.Failed;
 
             if (deleteOriginal && !isTempFile)
             {
@@ -425,6 +426,7 @@ public class OrchestratorService : IOrchestratorService
         switch (status)
         {
             case FileProcessingStatus.Converted: progress.Report(new BatchOperationProgress { SuccessCount = 1 }); break;
+            case FileProcessingStatus.AlreadyOptimized:
             case FileProcessingStatus.Skipped: progress.Report(new BatchOperationProgress { SkippedCount = 1 }); break;
             case FileProcessingStatus.Failed: progress.Report(new BatchOperationProgress { FailedCount = 1, FailedPathToAdd = path }); break;
         }

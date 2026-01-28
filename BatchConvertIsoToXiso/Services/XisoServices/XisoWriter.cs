@@ -23,7 +23,7 @@ public class XisoWriter
         _integrityService = integrityService;
     }
 
-    public Task<bool> RewriteIsoAsync(string sourcePath, string destPath, bool skipSystemUpdate, bool checkIntegrity, IProgress<BatchOperationProgress> progress, CancellationToken token)
+    public Task<FileProcessingStatus> RewriteIsoAsync(string sourcePath, string destPath, bool skipSystemUpdate, bool checkIntegrity, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
         return Task.Run(async () =>
         {
@@ -32,13 +32,6 @@ public class XisoWriter
                 FileInfo isoInfo = new(sourcePath);
                 var isoSize = isoInfo.Length;
                 var redumpIsoType = Array.IndexOf(RedumpIsoLength, isoSize);
-                var xisoType = Array.IndexOf(XisoLength, isoSize);
-
-                if (redumpIsoType < 0 && xisoType < 0)
-                {
-                    _logger.LogMessage($"[ERROR] Unknown ISO type. Size: {isoSize}");
-                    return false;
-                }
 
                 long inputOffset;
                 long targetXisoLength;
@@ -59,20 +52,49 @@ public class XisoWriter
                 }
                 else
                 {
+                    // If it's not a Redump size, treat it as an XISO (Standard or already trimmed)
                     inputOffset = 0;
                     targetXisoLength = isoSize;
-                    _logger.LogMessage("Detected XISO. Trimming...");
                 }
 
                 await using FileStream isoFs = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+                // Generate valid ranges based on XDVDFS traversal
+                List<(uint Start, uint End)> validRanges;
+                try
+                {
+                    validRanges = Xdvdfs.GetXisoRanges(isoFs, inputOffset, true, skipSystemUpdate);
+                }
+                catch
+                {
+                    _logger.LogMessage($"[ERROR] '{Path.GetFileName(sourcePath)}' is not a valid Xbox ISO image.");
+                    return FileProcessingStatus.Failed;
+                }
+
+                // If only the header sectors were found, it's not a valid Xbox ISO
+                if (validRanges.Count <= 1)
+                {
+                    _logger.LogMessage($"[ERROR] '{Path.GetFileName(sourcePath)}' contains no valid Xbox filesystem.");
+                    return FileProcessingStatus.Failed;
+                }
+
+                var lastValidSector = validRanges.Count > 0 ? validRanges[^1].End : 0;
+
+                // Check if already optimized:
+                // If it's an XISO (offset 0) and current size is <= calculated trimmed size
+                var optimizedSize = (lastValidSector + 1) * Utils.SectorSize;
+                if (inputOffset == 0 && isoSize <= optimizedSize)
+                {
+                    _logger.LogMessage($"[INFO] File '{Path.GetFileName(sourcePath)}' is already optimized. Skipping.");
+                    return FileProcessingStatus.AlreadyOptimized;
+                }
+
+                _logger.LogMessage(inputOffset == 0 ? "Detected XISO. Trimming..." : "Detected Redump ISO. Extracting...");
+
                 await using FileStream xisoFs = new(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
                 // Pre-allocate buffer to avoid GC pressure in the loop
                 var buffer = new byte[64 * Utils.SectorSize];
-
-                // Generate valid ranges based on XDVDFS traversal
-                var validRanges = Xdvdfs.GetXisoRanges(isoFs, inputOffset, true, skipSystemUpdate);
-                var lastValidSector = validRanges.Count > 0 ? validRanges[^1].End : 0;
 
                 isoFs.Seek(inputOffset, SeekOrigin.Begin);
                 long numBytesProcessed = 0;
@@ -114,7 +136,7 @@ public class XisoWriter
                         if (bytesToWipe % Utils.SectorSize != 0)
                         {
                             _logger.LogMessage("[ERROR] Unexpected Error: Filler data is not sector aligned.");
-                            return false;
+                            return FileProcessingStatus.Failed;
                         }
 
                         // Wipe logic: Write zeroes to the output XISO
@@ -132,7 +154,7 @@ public class XisoWriter
                         if (!Utils.WriteBytes(isoFs, xisoFs, -1, bytesToRead, buffer))
                         {
                             _logger.LogMessage("[ERROR] Failed writing game partition data.");
-                            return false;
+                            return FileProcessingStatus.Failed;
                         }
 
                         numBytesProcessed += bytesToRead;
@@ -148,6 +170,32 @@ public class XisoWriter
                 // Finalize file size (Trimming)
                 xisoFs.SetLength(xisoFs.Position);
                 _logger.LogMessage($"Successfully created trimmed XISO. Final size: {xisoFs.Length / (1024 * 1024)} MB");
+
+                // Move integrity check INSIDE the try block
+                if (checkIntegrity)
+                {
+                    _logger.LogMessage("Verifying output XISO integrity...");
+                    var isValid = await _integrityService.TestIsoIntegrityAsync(destPath, false, new Progress<BatchOperationProgress>(), token);
+
+                    if (!isValid)
+                    {
+                        _logger.LogMessage("[ERROR] Rewritten XISO failed structural validation! Deleting corrupt output.");
+                        try
+                        {
+                            if (File.Exists(destPath)) File.Delete(destPath);
+                        }
+                        catch
+                        {
+                            /* ignore */
+                        }
+
+                        return FileProcessingStatus.Failed;
+                    }
+
+                    _logger.LogMessage("Output XISO passed structural validation.");
+                }
+
+                return FileProcessingStatus.Converted;
             }
             catch (OperationCanceledException)
             {
@@ -156,35 +204,8 @@ public class XisoWriter
             catch (Exception ex)
             {
                 _logger.LogMessage($"Rewrite failed: {ex.Message}");
-                return false;
+                return FileProcessingStatus.Failed;
             }
-
-            // Optional Post-Rewrite Integrity Check
-            if (checkIntegrity)
-            {
-                _logger.LogMessage("Verifying output XISO integrity...");
-                // We pass a dummy progress here to avoid spamming the main UI with file-level details during this automated check
-                var isValid = await _integrityService.TestIsoIntegrityAsync(destPath, false, new Progress<BatchOperationProgress>(), token);
-
-                if (!isValid)
-                {
-                    _logger.LogMessage("[ERROR] Rewritten XISO failed structural validation! Deleting corrupt output.");
-                    try
-                    {
-                        if (File.Exists(destPath)) File.Delete(destPath);
-                    }
-                    catch
-                    {
-                        /* ignore deletion errors */
-                    }
-
-                    return false;
-                }
-
-                _logger.LogMessage("Output XISO passed structural validation.");
-            }
-
-            return true;
         }, token);
     }
 }
