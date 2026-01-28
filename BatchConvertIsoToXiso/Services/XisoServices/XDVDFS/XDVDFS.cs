@@ -26,11 +26,15 @@ internal static class Xdvdfs
         // Cycle detection
         if (!visited.Add(cur)) return;
 
-        // Add the directory table sectors themselves as valid
-        var curOffset = cur / Utils.SectorSize;
-        var curSize = (rootSize - childOffset + Utils.SectorSize - 1) / Utils.SectorSize;
-        for (var i = curOffset; i < curOffset + curSize; i++)
-            validSectors.Add((uint)i);
+        // Add the directory table sectors themselves as valid, but only once per table.
+        // We only need to do this when childOffset == 0 (first entry in the table).
+        if (childOffset == 0)
+        {
+            var curOffset = cur / Utils.SectorSize;
+            var curSize = (rootSize + Utils.SectorSize - 1) / Utils.SectorSize;
+            for (var i = curOffset; i < curOffset + curSize; i++)
+                validSectors.Add((uint)i);
+        }
 
         isoFs.Seek(cur, SeekOrigin.Begin);
 

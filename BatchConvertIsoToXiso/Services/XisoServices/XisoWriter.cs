@@ -91,85 +91,87 @@ public class XisoWriter
 
                 _logger.LogMessage(inputOffset == 0 ? "Detected XISO. Trimming..." : "Detected Redump ISO. Extracting...");
 
-                await using FileStream xisoFs = new(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
-
-                // Pre-allocate buffer to avoid GC pressure in the loop
-                var buffer = new byte[64 * Utils.SectorSize];
-
-                isoFs.Seek(inputOffset, SeekOrigin.Begin);
-                long numBytesProcessed = 0;
-
-                while (numBytesProcessed < targetXisoLength)
                 {
-                    token.ThrowIfCancellationRequested();
+                    await using FileStream xisoFs = new(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
-                    var currentPhysicalByte = inputOffset + numBytesProcessed;
-                    // Calculate sector index relative to start of disc
-                    var currentSector = (currentPhysicalByte + Utils.SectorSize - 1) / Utils.SectorSize;
+                    // Pre-allocate buffer to avoid GC pressure in the loop
+                    var buffer = new byte[64 * Utils.SectorSize];
 
-                    // Trim everything after the last valid file extent
-                    if (validRanges.Count > 0 && currentSector > lastValidSector)
+                    isoFs.Seek(inputOffset, SeekOrigin.Begin);
+                    long numBytesProcessed = 0;
+
+                    while (numBytesProcessed < targetXisoLength)
                     {
-                        break;
-                    }
+                        token.ThrowIfCancellationRequested();
 
-                    long bytesUntilEndOfExtent = 0;
-                    long bytesToWipe = 0;
+                        var currentPhysicalByte = inputOffset + numBytesProcessed;
+                        // Calculate sector index relative to start of disc
+                        var currentSector = (currentPhysicalByte + Utils.SectorSize - 1) / Utils.SectorSize;
 
-                    // Determine if current sector is data or filler
-                    for (var i = 0; i < validRanges.Count; i++)
-                    {
-                        if (currentSector >= validRanges[i].Start && currentSector <= validRanges[i].End)
+                        // Trim everything after the last valid file extent
+                        if (validRanges.Count > 0 && currentSector > lastValidSector)
                         {
-                            bytesUntilEndOfExtent = (validRanges[i].End + 1) * Utils.SectorSize - currentPhysicalByte;
                             break;
                         }
-                        else if (currentSector < validRanges[i].Start && (i == 0 || currentSector > validRanges[i - 1].End))
+
+                        long bytesUntilEndOfExtent = 0;
+                        long bytesToWipe = 0;
+
+                        // Determine if current sector is data or filler
+                        for (var i = 0; i < validRanges.Count; i++)
                         {
-                            bytesToWipe = validRanges[i].Start * Utils.SectorSize - currentPhysicalByte;
-                            break;
+                            if (currentSector >= validRanges[i].Start && currentSector <= validRanges[i].End)
+                            {
+                                bytesUntilEndOfExtent = (validRanges[i].End + 1) * Utils.SectorSize - currentPhysicalByte;
+                                break;
+                            }
+                            else if (currentSector < validRanges[i].Start && (i == 0 || currentSector > validRanges[i - 1].End))
+                            {
+                                bytesToWipe = validRanges[i].Start * Utils.SectorSize - currentPhysicalByte;
+                                break;
+                            }
+                        }
+
+                        if (bytesToWipe > 0)
+                        {
+                            if (bytesToWipe % Utils.SectorSize != 0)
+                            {
+                                _logger.LogMessage("[ERROR] Unexpected Error: Filler data is not sector aligned.");
+                                return FileProcessingStatus.Failed;
+                            }
+
+                            // Wipe logic: Write zeroes to the output XISO
+                            Utils.WriteZeroes(xisoFs, -1, bytesToWipe, buffer);
+                            numBytesProcessed += bytesToWipe;
+
+                            // [FIX] Moves the input stream forward when wiping.
+                            isoFs.Seek(bytesToWipe, SeekOrigin.Current);
+                        }
+                        else
+                        {
+                            // Data logic: Copy valid sectors
+                            var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : targetXisoLength - numBytesProcessed;
+
+                            if (!Utils.WriteBytes(isoFs, xisoFs, -1, bytesToRead, buffer))
+                            {
+                                _logger.LogMessage("[ERROR] Failed writing game partition data.");
+                                return FileProcessingStatus.Failed;
+                            }
+
+                            numBytesProcessed += bytesToRead;
+                        }
+
+                        // UI Progress Update
+                        if (numBytesProcessed % (100 * 1024 * 1024) == 0)
+                        {
+                            progress.Report(new BatchOperationProgress { StatusText = $"Processing: {numBytesProcessed / (1024 * 1024)} MB" });
                         }
                     }
 
-                    if (bytesToWipe > 0)
-                    {
-                        if (bytesToWipe % Utils.SectorSize != 0)
-                        {
-                            _logger.LogMessage("[ERROR] Unexpected Error: Filler data is not sector aligned.");
-                            return FileProcessingStatus.Failed;
-                        }
-
-                        // Wipe logic: Write zeroes to the output XISO
-                        Utils.WriteZeroes(xisoFs, -1, bytesToWipe, buffer);
-                        numBytesProcessed += bytesToWipe;
-
-                        // [FIX] Moves the input stream forward when wiping.
-                        isoFs.Seek(bytesToWipe, SeekOrigin.Current);
-                    }
-                    else
-                    {
-                        // Data logic: Copy valid sectors
-                        var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : targetXisoLength - numBytesProcessed;
-
-                        if (!Utils.WriteBytes(isoFs, xisoFs, -1, bytesToRead, buffer))
-                        {
-                            _logger.LogMessage("[ERROR] Failed writing game partition data.");
-                            return FileProcessingStatus.Failed;
-                        }
-
-                        numBytesProcessed += bytesToRead;
-                    }
-
-                    // UI Progress Update
-                    if (numBytesProcessed % (100 * 1024 * 1024) == 0)
-                    {
-                        progress.Report(new BatchOperationProgress { StatusText = $"Processing: {numBytesProcessed / (1024 * 1024)} MB" });
-                    }
+                    // Finalize file size (Trimming)
+                    xisoFs.SetLength(xisoFs.Position);
+                    _logger.LogMessage($"Successfully created trimmed XISO. Final size: {xisoFs.Length / (1024 * 1024)} MB");
                 }
-
-                // Finalize file size (Trimming)
-                xisoFs.SetLength(xisoFs.Position);
-                _logger.LogMessage($"Successfully created trimmed XISO. Final size: {xisoFs.Length / (1024 * 1024)} MB");
 
                 // Move integrity check INSIDE the try block
                 if (checkIntegrity)

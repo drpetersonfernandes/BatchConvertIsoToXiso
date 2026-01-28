@@ -43,8 +43,8 @@ public partial class App
         _messageBoxService = ServiceProvider.GetRequiredService<IMessageBoxService>();
         _logger = ServiceProvider.GetRequiredService<ILogger>();
 
-        CleanupTemporaryFolders();
-        InitializeSevenZipSharp();
+        _ = CleanupTemporaryFolders();
+        _ = InitializeSevenZipSharp();
 
         // Startup cleanup
         if (_logger != null)
@@ -109,32 +109,32 @@ public partial class App
     {
         if (e.ExceptionObject is Exception exception)
         {
-            ReportException(exception, "AppDomain.UnhandledException");
+            _ = ReportException(exception, "AppDomain.UnhandledException");
         }
     }
 
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        ReportException(e.Exception, "Application.DispatcherUnhandledException");
+        _ = ReportException(e.Exception, "Application.DispatcherUnhandledException");
         e.Handled = true;
     }
 
     private void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
-        ReportException(e.Exception, "TaskScheduler.UnobservedTaskException");
+        _ = ReportException(e.Exception, "TaskScheduler.UnobservedTaskException");
         e.SetObserved();
     }
 
-    private void ReportException(Exception exception, string source)
+    private async Task ReportException(Exception exception, string source)
     {
         try
         {
             var message = BuildExceptionReport(exception, source);
 
-            _ = _bugReportService?.SendBugReportAsync(message);
+            if (_bugReportService != null) await _bugReportService.SendBugReportAsync(message);
 
             // Inform the user that a critical error occurred
-            Current.Dispatcher.InvokeAsync(() => _messageBoxService?.ShowError("A critical error occurred and has been reported. The application may need to close."));
+            await Current.Dispatcher.InvokeAsync(() => _messageBoxService?.ShowError("A critical error occurred and has been reported. The application may need to close."));
         }
         catch
         {
@@ -158,11 +158,22 @@ public partial class App
         return sb.ToString();
     }
 
-    private void InitializeSevenZipSharp()
+    private async Task InitializeSevenZipSharp()
     {
         try
         {
-            var isArm64 = RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
+            var architecture = RuntimeInformation.ProcessArchitecture;
+
+            // Check for 32-bit (x86) compatibility
+            if (architecture == Architecture.X86)
+            {
+                const string errorMessage = "This application is not compatible with 32-bit (x86) Windows. Please use the 64-bit version of the application.";
+                _logger?.LogMessage($"[ERROR] {errorMessage}");
+                _messageBoxService?.ShowError(errorMessage);
+                return;
+            }
+
+            var isArm64 = architecture == Architecture.Arm64;
             var dllName = isArm64 ? "7z_arm64.dll" : "7z_x64.dll";
 
             var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
@@ -184,14 +195,14 @@ public partial class App
         {
             if (_bugReportService != null)
             {
-                _ = _bugReportService.SendBugReportAsync(ex.Message);
+                await _bugReportService.SendBugReportAsync(ex.Message);
             }
 
             _messageBoxService?.ShowError($"An error occurred while initializing the archive extraction library: {ex.Message}");
         }
     }
 
-    private void CleanupTemporaryFolders()
+    private async Task CleanupTemporaryFolders()
     {
         var tempPath = Path.GetTempPath();
         const string tempFolderPrefix = "BatchConvertIsoToXiso_";
@@ -216,13 +227,13 @@ public partial class App
                 }
                 catch (Exception ex)
                 {
-                    _ = _bugReportService?.SendBugReportAsync($"Error cleaning orphaned temp folder {dir}: {ex.Message}");
+                    if (_bugReportService != null) await _bugReportService.SendBugReportAsync($"Error cleaning orphaned temp folder {dir}: {ex.Message}");
                 }
             }
         }
         catch (Exception ex)
         {
-            _ = _bugReportService?.SendBugReportAsync($"Error enumerating temp folders for cleanup: {ex.Message}");
+            if (_bugReportService != null) await _bugReportService.SendBugReportAsync($"Error enumerating temp folders for cleanup: {ex.Message}");
         }
     }
 }
