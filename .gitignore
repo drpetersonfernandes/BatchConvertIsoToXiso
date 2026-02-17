@@ -2,7 +2,5 @@ bin/
 obj/
 /packages/
 riderModule.iml
-/_ReSharper.Caches/!/BatchConvertIsoToXiso/obj/
+/_ReSharper.Caches/
 !/.idea/
-!/BatchConvertIsoToXiso/obj/
-!/BatchConvertIsoToXiso/obj/
