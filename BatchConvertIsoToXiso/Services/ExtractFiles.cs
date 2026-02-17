@@ -99,8 +99,15 @@ public class FileExtractorService : IFileExtractor
         {
             _logger.LogMessage($"Error extracting {archiveFileName}: {ex.Message}");
 
+            // Filter out environmental/hardware errors (disconnected drives, etc.)
+            var isEnvironmentalError = ex is IOException ioEx &&
+                                       (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase));
+
             // Filter out common archive errors (corruption, wrong password, etc.) from bug reports
             if (ex is not (SevenZipArchiveException or ExtractionFailedException or FileNotFoundException) &&
+                !isEnvironmentalError &&
                 !ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase))
             {
@@ -115,6 +122,25 @@ public class FileExtractorService : IFileExtractor
     {
         try
         {
+            // Verify drive is ready before attempting operation
+            try
+            {
+                var driveLetter = Path.GetPathRoot(archivePath);
+                if (!string.IsNullOrEmpty(driveLetter))
+                {
+                    var driveInfo = new DriveInfo(driveLetter);
+                    if (!driveInfo.IsReady)
+                    {
+                        _logger.LogMessage($"ERROR: Drive {driveLetter} is not ready. Cannot process {Path.GetFileName(archivePath)}");
+                        throw new IOException($"The device is not ready. : '{archivePath}'");
+                    }
+                }
+            }
+            catch
+            {
+                /* Ignore drive info errors, let the actual operation fail if needed */
+            }
+
             return await Task.Run(() =>
             {
                 _logger.LogMessage($"  Calculating uncompressed size for: {Path.GetFileName(archivePath)}");

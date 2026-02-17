@@ -110,7 +110,17 @@ public class OrchestratorService : IOrchestratorService
             catch (Exception ex)
             {
                 progress.Report(new BatchOperationProgress { LogMessage = $"Critical error processing {fileName}: {ex.Message}", FailedCount = 1, FailedPathToAdd = entryPath });
-                _ = _bugReportService.SendBugReportAsync($"Orchestrator error on {fileName}: {ex}");
+
+                // Filter environmental errors (disconnected drives, etc.)
+                var isEnvironmentalError = ex is IOException ioEx &&
+                                           (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+                                            ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                                            ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase));
+
+                if (!isEnvironmentalError)
+                {
+                    _ = _bugReportService.SendBugReportAsync($"Orchestrator error on {fileName}: {ex}");
+                }
             }
 
             topLevelProcessed++;
