@@ -50,16 +50,7 @@ public static class DisplayInstructions
                 }
             }
 
-            var sevenZipLibraryX64 = Path.Combine(appDirectory, "7z_x64.dll");
-            var sevenZipLibraryArm64 = Path.Combine(appDirectory, "7z_arm64.dll");
-            if (File.Exists(sevenZipLibraryX64) || File.Exists(sevenZipLibraryArm64))
-            {
-                _logger.LogMessage("INFO: SevenZipExtractor library found. Archive extraction is enabled.");
-            }
-            else
-            {
-                _logger.LogMessage("WARNING: SevenZipExtractor library not found. Archive extraction will fail.");
-            }
+            _logger.LogMessage("INFO: Archive extraction is enabled (SharpCompress library loaded).");
 
             _logger.LogMessage("--- Ready ---");
         }

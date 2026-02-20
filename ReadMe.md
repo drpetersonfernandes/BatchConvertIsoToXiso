@@ -8,6 +8,8 @@
 
 Built with a **native C# XDVDFS engine**, this tool eliminates the need for legacy external command-line tools for core ISO operations, offering superior speed and modern features like real-time disk write monitoring.
 
+The application follows modern software architecture principles with **Dependency Injection (DI)** and a **service-oriented design**, ensuring maintainability, testability, and clean separation of concerns.
+
 ![Convert Screenshot](screenshot.png)
 ![Test Screenshot](screenshot2.png)
 ![Explorer Screenshot](screenshot3.png)
@@ -34,6 +36,40 @@ Built with a **native C# XDVDFS engine**, this tool eliminates the need for lega
 ### 4. Advanced Monitoring
 *   **Real-time Stats**: Track success/fail counts, elapsed time, and processed file lists.
 *   **Disk Monitor**: Live monitoring of write speeds and drive activity to identify hardware bottlenecks.
+
+---
+
+## 🏗️ Architecture
+
+The application is built with a **modern, modular architecture** using:
+
+### Dependency Injection (DI)
+- Services are registered and resolved through a central DI container (`Microsoft.Extensions.DependencyInjection`)
+- Promotes loose coupling and enables easy unit testing
+- Proper service lifecycle management (singletons, transients)
+
+### Service-Oriented Design
+The codebase is organized into well-defined interfaces and implementations:
+
+| Interface | Service | Purpose |
+| :--- | :--- | :--- |
+| `ILogger` | `LoggerService` | Centralized logging to the UI |
+| `IBugReportService` | `BugReportService` | Automatic error reporting |
+| `IDiskMonitorService` | `DiskMonitorService` | Real-time disk write speed monitoring |
+| `IFileExtractor` | `FileExtractorService` | Archive extraction (.zip, .7z, .rar) |
+| `IFileMover` | `FileMoverService` | Safe file moving with retry logic |
+| `IMessageBoxService` | `MessageBoxService` | Abstracted UI dialogs for testability |
+| `INativeIsoIntegrityService` | `NativeIsoIntegrityService` | XDVDFS filesystem validation |
+| `IOrchestratorService` | `OrchestratorService` | Coordinates batch operations |
+| `IExternalToolService` | `ExternalToolService` | External tool execution (bchunk) |
+| `IUpdateChecker` | `UpdateChecker` | GitHub release checking |
+| `IUrlOpener` | `UrlOpenerService` | Cross-platform URL handling |
+
+### Key Benefits
+- **Testability**: Interfaces enable mocking for unit tests
+- **Maintainability**: Clear separation of concerns between UI and business logic
+- **Extensibility**: New features can be added by implementing existing interfaces
+- **Reliability**: Proper disposal patterns and exception handling throughout
 
 ---
 
@@ -81,6 +117,7 @@ Built with a **native C# XDVDFS engine**, this tool eliminates the need for lega
 *   **Temp Folder Protection**: To prevent data loss, the app restricts users from selecting system temporary directories as source or destination folders.
 *   **Cloud-Aware**: Detects if files are stored in the cloud (e.g., OneDrive) and prompts for hydration/download instead of crashing.
 *   **Atomic Operations**: Converted files are verified before the original is deleted (if that option is enabled).
+*   **Robust Error Handling**: Comprehensive exception handling with automatic bug reporting and graceful degradation.
 
 ---
 

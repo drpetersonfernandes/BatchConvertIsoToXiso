@@ -7,11 +7,13 @@ public class FileMoverService : IFileMover
 {
     private readonly ILogger _logger;
     private readonly IBugReportService _bugReportService;
+    private readonly IDiskMonitorService _diskMonitorService;
 
-    public FileMoverService(ILogger logger, IBugReportService bugReportService)
+    public FileMoverService(ILogger logger, IBugReportService bugReportService, IDiskMonitorService diskMonitorService)
     {
         _logger = logger;
         _bugReportService = bugReportService;
+        _diskMonitorService = diskMonitorService;
     }
 
     public async Task MoveTestedFileAsync(string sourceFile, string destinationFolder, string moveReason, CancellationToken token)
@@ -39,6 +41,17 @@ public class FileMoverService : IFileMover
             if (!await Task.Run(() => File.Exists(sourceFile), token))
             {
                 _logger.LogMessage($"  Cannot move {fileName}: Source file no longer exists. It may have already been moved.");
+                return;
+            }
+
+            // Check available disk space before moving
+            var sourceFileInfo = new FileInfo(sourceFile);
+            var availableSpace = _diskMonitorService.GetAvailableFreeSpace(destinationFolder);
+            if (availableSpace > 0 && sourceFileInfo.Length > availableSpace)
+            {
+                var requiredSpace = Formatter.FormatBytes(sourceFileInfo.Length);
+                var availableSpaceFormatted = Formatter.FormatBytes(availableSpace);
+                _logger.LogMessage($"  Cannot move {fileName}: Insufficient disk space. Required: {requiredSpace}, Available: {availableSpaceFormatted}");
                 return;
             }
 

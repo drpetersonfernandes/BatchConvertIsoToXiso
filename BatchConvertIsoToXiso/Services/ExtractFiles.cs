@@ -1,6 +1,6 @@
 using System.IO;
 using BatchConvertIsoToXiso.interfaces;
-using SevenZip;
+using SharpCompress.Archives;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -27,9 +27,9 @@ public class FileExtractorService : IFileExtractor
 
             await Task.Run(() =>
             {
-                using var extractor = new SevenZipExtractor(archivePath);
-                var fileCount = extractor.FilesCount;
-                var archiveFormat = extractor.Format;
+                using var archive = ArchiveFactory.OpenArchive(archivePath);
+                var fileCount = archive.Entries.Count(static e => !e.IsDirectory);
+                var archiveFormat = archive.Type;
 
                 _logger.LogMessage($"  Archive format: {archiveFormat}, Files to extract: {fileCount}");
                 _logger.LogMessage($"  Extracting files from {archiveFileName}...");
@@ -37,23 +37,23 @@ public class FileExtractorService : IFileExtractor
                 var isoExtracted = false;
 
                 // Manually extract files to prevent "Zip Slip" (absolute paths or path traversal in archives)
-                for (var i = 0; i < extractor.FilesCount; i++)
+                foreach (var entry in archive.Entries)
                 {
                     token.ThrowIfCancellationRequested();
-                    var fileData = extractor.ArchiveFileData[i];
-                    if (fileData.IsDirectory) continue;
 
-                    var entryPath = fileData.FileName;
+                    if (entry.IsDirectory) continue;
+
+                    var entryPath = entry.Key;
 
                     // Strict Zip Slip check: Skip suspicious paths entirely
-                    if (Path.IsPathRooted(entryPath) || entryPath.Contains(".."))
+                    if (entryPath != null && (Path.IsPathRooted(entryPath) || entryPath.Contains("..")))
                     {
                         _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
                         continue;
                     }
 
                     // Check for multiple ISOs
-                    if (Path.GetExtension(entryPath).Equals(".iso", StringComparison.OrdinalIgnoreCase))
+                    if (entryPath != null && Path.GetExtension(entryPath).Equals(".iso", StringComparison.OrdinalIgnoreCase))
                     {
                         if (isoExtracted)
                         {
@@ -64,18 +64,21 @@ public class FileExtractorService : IFileExtractor
                         isoExtracted = true;
                     }
 
-                    var fullDestPath = Path.GetFullPath(Path.Combine(extractionPath, entryPath));
-
-                    // Ensure the resulting path is still inside our extraction directory
-                    if (!fullDestPath.StartsWith(Path.GetFullPath(extractionPath), StringComparison.OrdinalIgnoreCase))
+                    if (entryPath != null)
                     {
-                        _logger.LogMessage($"  WARNING: Skipping entry '{fileData.FileName}' - potential path traversal (Zip Slip) detected.");
-                        continue;
-                    }
+                        var fullDestPath = Path.GetFullPath(Path.Combine(extractionPath, entryPath));
 
-                    Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath) ?? throw new InvalidOperationException("fullDestPath cannot be null"));
-                    using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);
-                    extractor.ExtractFile(fileData.Index, fs);
+                        // Ensure the resulting path is still inside our extraction directory
+                        if (!fullDestPath.StartsWith(Path.GetFullPath(extractionPath), StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
+                            continue;
+                        }
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath) ?? throw new InvalidOperationException("fullDestPath cannot be null"));
+                        using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);
+                        entry.WriteTo(fs);
+                    }
                 }
             }, token);
 
@@ -87,13 +90,13 @@ public class FileExtractorService : IFileExtractor
             _logger.LogMessage($"Extraction of {archiveFileName} was canceled.");
             throw;
         }
-        catch (SevenZipLibraryException ex)
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Archive"))
         {
-            var errorMessage = $"Error extracting {archiveFileName}: Could not load the 7-Zip x64 library.\n" +
-                               "Please ensure 7z_x64.dll is in the application folder.\n" +
+            var errorMessage = $"Error extracting {archiveFileName}: Could not open the archive.\n" +
+                               "The archive may be corrupted or in an unsupported format.\n" +
                                $"Exception: {ex.Message}";
             _logger.LogMessage($"  {errorMessage}");
-            throw; // Re-throw the exception for the caller to handle UI
+            throw;
         }
         catch (Exception ex)
         {
@@ -106,15 +109,15 @@ public class FileExtractorService : IFileExtractor
                                         ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase));
 
             // Filter out common archive errors (corruption, wrong password, etc.) from bug reports
-            if (ex is not (SevenZipArchiveException or ExtractionFailedException or FileNotFoundException) &&
-                !isEnvironmentalError &&
+            if (!isEnvironmentalError &&
                 !ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase))
+                !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase))
             {
                 _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. Exception: {ex}");
             }
 
-            throw; // Re-throw the exception for the caller to handle UI
+            throw;
         }
     }
 
@@ -145,8 +148,8 @@ public class FileExtractorService : IFileExtractor
             {
                 _logger.LogMessage($"  Calculating uncompressed size for: {Path.GetFileName(archivePath)}");
 
-                using var extractor = new SevenZipExtractor(archivePath);
-                return extractor.ArchiveFileData.Sum(static x => (long)x.Size);
+                using var archive = ArchiveFactory.OpenArchive(archivePath);
+                return archive.Entries.Where(static e => !e.IsDirectory).Sum(static x => x.Size);
             }, token);
         }
         catch (OperationCanceledException)
@@ -157,7 +160,7 @@ public class FileExtractorService : IFileExtractor
         {
             _logger.LogMessage($"Error getting uncompressed size of archive {Path.GetFileName(archivePath)}: {ex.Message}");
             _ = _bugReportService.SendBugReportAsync($"Error getting uncompressed archive size: {archivePath}. Exception: {ex}");
-            throw; // Re-throw the exception for the caller to handle
+            throw;
         }
     }
 }

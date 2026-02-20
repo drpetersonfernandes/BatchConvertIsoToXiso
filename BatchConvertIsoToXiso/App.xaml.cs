@@ -6,8 +6,6 @@ using System.Windows.Threading;
 using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Services;
 using Microsoft.Extensions.DependencyInjection;
-using System.Runtime.InteropServices;
-using SevenZip;
 using BatchConvertIsoToXiso.Services.XisoServices;
 using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
@@ -46,7 +44,6 @@ public partial class App
             _logger = ServiceProvider.GetRequiredService<ILogger>();
 
             await CleanupTemporaryFolders();
-            await InitializeSevenZipSharp();
 
             // Startup cleanup
             if (_logger != null)
@@ -103,7 +100,7 @@ public partial class App
         services.AddSingleton<IMessageBoxService, MessageBoxService>();
         services.AddSingleton<IUrlOpener, UrlOpenerService>();
         services.AddTransient<IFileExtractor, FileExtractorService>(static provider => new FileExtractorService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
-        services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
+        services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>(), provider.GetRequiredService<IDiskMonitorService>()));
         services.AddTransient<AboutWindow>();
         services.AddSingleton<IExternalToolService, ExternalToolService>();
         services.AddSingleton<IOrchestratorService, OrchestratorService>();
@@ -163,50 +160,6 @@ public partial class App
         ExceptionFormatter.AppendExceptionDetails(sb, exception);
 
         return sb.ToString();
-    }
-
-    private async Task InitializeSevenZipSharp()
-    {
-        try
-        {
-            var architecture = RuntimeInformation.ProcessArchitecture;
-
-            // Check for 32-bit (x86) compatibility
-            if (architecture == Architecture.X86)
-            {
-                const string errorMessage = "This application is not compatible with 32-bit (x86) Windows. Please use the 64-bit version of the application.";
-                _logger?.LogMessage($"[ERROR] {errorMessage}");
-                _messageBoxService?.ShowError(errorMessage);
-                return;
-            }
-
-            var isArm64 = architecture == Architecture.Arm64;
-            var dllName = isArm64 ? "7z_arm64.dll" : "7z_x64.dll";
-
-            var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dllName);
-
-            if (File.Exists(dllPath))
-            {
-                SevenZipBase.SetLibraryPath(dllPath);
-            }
-            else
-            {
-                // Inform the user about the issue.
-                var userErrorMessage = $"Could not find the required 7-Zip library: {dllName}. " +
-                                       $"Please ensure '{dllName}' is in the same folder as the application. " +
-                                       "Archive extraction features (.zip, .7z, .rar) will not work.";
-                _messageBoxService?.ShowError(userErrorMessage);
-            }
-        }
-        catch (Exception ex)
-        {
-            if (_bugReportService != null)
-            {
-                await _bugReportService.SendBugReportAsync(ex.Message);
-            }
-
-            _messageBoxService?.ShowError($"An error occurred while initializing the archive extraction library: {ex.Message}");
-        }
     }
 
     private async Task CleanupTemporaryFolders()

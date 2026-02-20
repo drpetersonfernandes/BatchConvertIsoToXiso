@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using BatchConvertIsoToXiso.interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
@@ -72,6 +73,29 @@ public class DiskMonitorService : IDiskMonitorService, IDisposable
             StopMonitoring();
             return "N/A";
         }
+    }
+
+    public long GetAvailableFreeSpace(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return 0;
+        }
+
+        try
+        {
+            var driveInfo = new DriveInfo(PathHelper.GetDriveLetter(path) ?? path);
+            if (driveInfo.IsReady)
+            {
+                return driveInfo.AvailableFreeSpace;
+            }
+        }
+        catch
+        {
+            // Ignore errors and return 0
+        }
+
+        return 0;
     }
 
     public void Dispose()

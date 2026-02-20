@@ -6,4 +6,5 @@ public interface IDiskMonitorService
     void StartMonitoring(string? path);
     void StopMonitoring();
     string GetCurrentWriteSpeedFormatted();
+    long GetAvailableFreeSpace(string? path);
 }
