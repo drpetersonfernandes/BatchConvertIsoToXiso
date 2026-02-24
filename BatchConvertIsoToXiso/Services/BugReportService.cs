@@ -1,5 +1,9 @@
+using System.Globalization;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Runtime.InteropServices;
+using System.Text;
 using BatchConvertIsoToXiso.interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
@@ -25,10 +29,12 @@ public class BugReportService : IBugReportService, IDisposable
     {
         try
         {
+            var fullMessage = BuildFullMessage(message);
+
             // Create the request payload
             var content = JsonContent.Create(new
             {
-                message,
+                message = fullMessage,
                 applicationName = _applicationName
             });
 
@@ -42,6 +48,30 @@ public class BugReportService : IBugReportService, IDisposable
             // Silently fail if there's an exception
             return false;
         }
+    }
+
+    private static string BuildFullMessage(string message)
+    {
+        if (message.Contains("=== Environment Details ===", StringComparison.OrdinalIgnoreCase))
+        {
+            return message;
+        }
+
+        var sb = new StringBuilder(message);
+        sb.AppendLine();
+        sb.AppendLine();
+        sb.AppendLine("=== Environment Details ===");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"OS Version: {Environment.OSVersion}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Windows Version: {Environment.OSVersion.Version}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $".NET Version: {RuntimeInformation.FrameworkDescription.Replace(".NET ", "", StringComparison.OrdinalIgnoreCase)}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Process Architecture: {RuntimeInformation.ProcessArchitecture}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Processor Count: {Environment.ProcessorCount}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Application Version: {GetApplicationVersion.GetProgramVersion()}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Base Directory: {AppDomain.CurrentDomain.BaseDirectory}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Temp Path: {Path.GetTempPath()}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"User: {Environment.UserName}");
+
+        return sb.ToString();
     }
 
     public void Dispose()

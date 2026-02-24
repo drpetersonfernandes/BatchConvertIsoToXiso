@@ -151,8 +151,6 @@ public partial class App
         var sb = new StringBuilder();
         sb.AppendLine(CultureInfo.InvariantCulture, $"Error Source: {source}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Date and Time: {DateTime.Now}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"OS Version: {Environment.OSVersion}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $".NET Version: {Environment.Version}");
         sb.AppendLine();
 
         // Add exception details

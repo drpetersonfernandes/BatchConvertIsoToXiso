@@ -33,9 +33,6 @@ public partial class MainWindow
             var fullReport = new StringBuilder();
             fullReport.AppendLine("=== Bug Report ===");
             fullReport.AppendLine($"Application: {App.ApplicationName}");
-            fullReport.AppendLine(CultureInfo.InvariantCulture, $"Version: {GetType().Assembly.GetName().Version}");
-            fullReport.AppendLine(CultureInfo.InvariantCulture, $"OS: {Environment.OSVersion}");
-            fullReport.AppendLine(CultureInfo.InvariantCulture, $".NET Version: {Environment.Version}");
             fullReport.AppendLine(CultureInfo.InvariantCulture, $"Date/Time: {DateTime.Now}");
             fullReport.AppendLine();
             fullReport.AppendLine("=== Error Message ===");
