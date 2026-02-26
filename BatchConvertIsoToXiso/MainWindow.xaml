@@ -165,7 +165,7 @@
                         </StackPanel>
 
                         <!-- File List -->
-                        <ListView x:Name="ExplorerListView" Grid.Row="1" MouseDoubleClick="ExplorerListView_MouseDoubleClick" BorderThickness="0" Background="#0a0a0a">
+                        <ListView x:Name="ExplorerListView" Grid.Row="1" MouseDoubleClick="ExplorerListView_MouseDoubleClick" PreviewMouseLeftButtonDown="ExplorerListView_PreviewMouseLeftButtonDown" MouseMove="ExplorerListView_MouseMove" BorderThickness="0" Background="#0a0a0a">
                             <ListView.ItemContainerStyle>
                                 <Style TargetType="ListViewItem">
                                     <Setter Property="Padding" Value="10,5" />

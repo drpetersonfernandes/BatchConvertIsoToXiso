@@ -53,6 +53,8 @@ Whether you're managing a large collection of Xbox game backups or verifying the
 ### 🔍 XISO Explorer
 - **Native Browsing**: Open any Xbox ISO to browse files and directories without extraction
 - **Metadata View**: View file sizes, attributes, and directory structures directly in the UI
+- **Double-Click to Open**: Open files directly from the ISO with their default associated applications
+- **Drag & Drop Extraction**: Drag files out of the explorer to extract them to any folder (Windows Explorer, Desktop, etc.)
 
 ### 📊 Advanced Monitoring
 - **Real-time Statistics**: Track success/fail counts, elapsed time, and processed files
@@ -100,6 +102,8 @@ No installation required – the application is fully portable.
 1. Switch to the **"XISO Explorer"** tab
 2. Click **"Open ISO"** and select an Xbox ISO file
 3. Browse the file tree to view contents without extraction
+4. **Open Files**: Double-click any file to open it with its default application
+5. **Extract Files**: Drag and drop files from the explorer to Windows Explorer, Desktop, or any folder to extract them
 
 ---
 
