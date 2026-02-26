@@ -73,84 +73,89 @@ public class OrchestratorService : IOrchestratorService
         var context = new ProcessingContext();
         var topLevelProcessed = 0;
 
-        foreach (var entryPath in topLevelEntries)
+        try
         {
-            token.ThrowIfCancellationRequested();
-
-            // Check file existence on a background thread to avoid blocking UI for cloud/slow files
-            var fileExists = await Task.Run(() => File.Exists(entryPath), token);
-            if (!fileExists)
+            foreach (var entryPath in topLevelEntries)
             {
-                progress.Report(new BatchOperationProgress { LogMessage = $"Error: Source file not found: {entryPath}. Skipping.", FailedCount = 1, FailedPathToAdd = entryPath });
+                token.ThrowIfCancellationRequested();
+
+                // Check file existence on a background thread to avoid blocking UI for cloud/slow files
+                var fileExists = await Task.Run(() => File.Exists(entryPath), token);
+                if (!fileExists)
+                {
+                    progress.Report(new BatchOperationProgress { LogMessage = $"Error: Source file not found: {entryPath}. Skipping.", FailedCount = 1, FailedPathToAdd = entryPath });
+                    topLevelProcessed++;
+                    progress.Report(new BatchOperationProgress { ProcessedCount = topLevelProcessed });
+                    continue;
+                }
+
+                var fileName = Path.GetFileName(entryPath);
+                var extension = Path.GetExtension(entryPath).ToLowerInvariant();
+                progress.Report(new BatchOperationProgress { StatusText = $"Processing: {fileName}", CurrentDrive = PathHelper.GetDriveLetter(entryPath) });
+
+                try
+                {
+                    switch (extension)
+                    {
+                        case ".iso":
+                            var isoStatus = await ConvertFileInternalAsync(entryPath, outputFolder, deleteOriginals, context.GlobalFileIndex++, skipSystemUpdate, checkIntegrity, useExtractXiso, progress, onCloudRetryRequired, token);
+                            ReportStatus(isoStatus, entryPath, progress);
+                            break;
+
+                        case ".zip" or ".7z" or ".rar":
+                            await ProcessArchiveAsync(entryPath, outputFolder, deleteOriginals, skipSystemUpdate, checkIntegrity, useExtractXiso, context, tempFoldersToCleanUp, progress, onCloudRetryRequired, token);
+                            break;
+
+                        case ".cue":
+                            await ProcessCueAsync(entryPath, outputFolder, deleteOriginals, skipSystemUpdate, checkIntegrity, useExtractXiso, context, tempFoldersToCleanUp, progress, onCloudRetryRequired, token);
+                            break;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Provide user-friendly message for corrupt archives
+                    string logMessage;
+                    if (ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase))
+                    {
+                        logMessage = $"ERROR: {fileName} appears to be corrupt or incomplete. The file may have been damaged during download or transfer. Please re-download the archive and try again.";
+                    }
+                    else
+                    {
+                        logMessage = $"Critical error processing {fileName}: {ex.Message}";
+                    }
+
+                    progress.Report(new BatchOperationProgress { LogMessage = logMessage, FailedCount = 1, FailedPathToAdd = entryPath });
+
+                    // Filter environmental errors (disconnected drives, etc.)
+                    var isEnvironmentalError = ex is IOException ioEx &&
+                                               (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+                                                ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                                                ex.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase));
+
+                    // Filter common archive errors (corruption, incomplete downloads, etc.)
+                    var isArchiveError = ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) ||
+                                         ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) ||
+                                         ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) ||
+                                         ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase);
+
+                    if (!isEnvironmentalError && !isArchiveError)
+                    {
+                        _ = _bugReportService.SendBugReportAsync($"Orchestrator error on {fileName}: {ex}");
+                    }
+                }
+
                 topLevelProcessed++;
                 progress.Report(new BatchOperationProgress { ProcessedCount = topLevelProcessed });
-                continue;
             }
-
-            var fileName = Path.GetFileName(entryPath);
-            var extension = Path.GetExtension(entryPath).ToLowerInvariant();
-            progress.Report(new BatchOperationProgress { StatusText = $"Processing: {fileName}", CurrentDrive = PathHelper.GetDriveLetter(entryPath) });
-
-            try
-            {
-                switch (extension)
-                {
-                    case ".iso":
-                        var isoStatus = await ConvertFileInternalAsync(entryPath, outputFolder, deleteOriginals, context.GlobalFileIndex++, skipSystemUpdate, checkIntegrity, useExtractXiso, progress, onCloudRetryRequired, token);
-                        ReportStatus(isoStatus, entryPath, progress);
-                        break;
-
-                    case ".zip" or ".7z" or ".rar":
-                        await ProcessArchiveAsync(entryPath, outputFolder, deleteOriginals, skipSystemUpdate, checkIntegrity, useExtractXiso, context, tempFoldersToCleanUp, progress, onCloudRetryRequired, token);
-                        break;
-
-                    case ".cue":
-                        await ProcessCueAsync(entryPath, outputFolder, deleteOriginals, skipSystemUpdate, checkIntegrity, useExtractXiso, context, tempFoldersToCleanUp, progress, onCloudRetryRequired, token);
-                        break;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // Provide user-friendly message for corrupt archives
-                string logMessage;
-                if (ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase))
-                {
-                    logMessage = $"ERROR: {fileName} appears to be corrupt or incomplete. The file may have been damaged during download or transfer. Please re-download the archive and try again.";
-                }
-                else
-                {
-                    logMessage = $"Critical error processing {fileName}: {ex.Message}";
-                }
-
-                progress.Report(new BatchOperationProgress { LogMessage = logMessage, FailedCount = 1, FailedPathToAdd = entryPath });
-
-                // Filter environmental errors (disconnected drives, etc.)
-                var isEnvironmentalError = ex is IOException ioEx &&
-                                           (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
-                                            ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
-                                            ex.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase));
-
-                // Filter common archive errors (corruption, incomplete downloads, etc.)
-                var isArchiveError = ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) ||
-                                     ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) ||
-                                     ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) ||
-                                     ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase);
-
-                if (!isEnvironmentalError && !isArchiveError)
-                {
-                    _ = _bugReportService.SendBugReportAsync($"Orchestrator error on {fileName}: {ex}");
-                }
-            }
-
-            topLevelProcessed++;
-            progress.Report(new BatchOperationProgress { ProcessedCount = topLevelProcessed });
         }
-
-        await CleanupTempFoldersAsync(tempFoldersToCleanUp, progress);
+        finally
+        {
+            await CleanupTempFoldersAsync(tempFoldersToCleanUp, progress);
+        }
     }
 
     private async Task ProcessArchiveAsync(string archivePath, string outputFolder, bool deleteOriginal, bool skipUpdate, bool checkIntegrity, bool useExtractXiso, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
@@ -246,11 +251,13 @@ public class OrchestratorService : IOrchestratorService
                 {
                     try
                     {
+                        // Parse the CUE file to find and delete only the referenced BIN files
+                        // This MUST be done before deleting the CUE file
+                        var referencedBinFiles = GetReferencedBinFilesFromCue(cuePath);
+
                         // Delete only the specific CUE file being processed
                         File.Delete(cuePath);
 
-                        // Parse the CUE file to find and delete only the referenced BIN files
-                        var referencedBinFiles = GetReferencedBinFilesFromCue(cuePath);
                         foreach (var binFile in referencedBinFiles)
                         {
                             if (File.Exists(binFile))

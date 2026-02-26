@@ -36,6 +36,7 @@ public partial class MainWindow
     private IsoSt? _explorerIsoSt;
     private readonly Stack<FileEntry> _parentDirectoryStack = new();
     private readonly Stack<string> _explorerPathNames = new();
+    private FileEntry? _currentDirectoryEntry;
 
     public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
         IMessageBoxService messageBoxService, IUrlOpener urlOpener,

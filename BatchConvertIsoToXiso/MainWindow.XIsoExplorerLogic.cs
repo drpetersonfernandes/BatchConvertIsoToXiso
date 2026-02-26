@@ -30,6 +30,7 @@ public partial class MainWindow
             _explorerIsoSt?.Dispose();
             _parentDirectoryStack.Clear();
             _explorerPathNames.Clear();
+            _currentDirectoryEntry = null;
 
             _explorerIsoSt = new IsoSt(isoPath);
             var volume = VolumeDescriptor.ReadFrom(_explorerIsoSt);
@@ -64,12 +65,16 @@ public partial class MainWindow
             {
                 _parentDirectoryStack.Clear();
                 _explorerPathNames.Clear();
+                _currentDirectoryEntry = null;
             }
             else
             {
                 // Track this directory in the path for display purposes
                 _explorerPathNames.Push(folderName);
             }
+
+            // Track the current directory entry for "Up" navigation
+            _currentDirectoryEntry = dirEntry;
 
             UpdateExplorerUiState();
         }
@@ -91,15 +96,11 @@ public partial class MainWindow
         if (ExplorerListView.SelectedItem is XisoExplorerItem { IsDirectory: true } item)
         {
             // Save current directory entry to stack before navigating deeper
-            // The current items are displayed via ExplorerListView.ItemsSource, but we need
-            // to save the parent directory entry for the "Up" navigation
-            if (ExplorerListView.ItemsSource is IEnumerable<XisoExplorerItem> currentItems)
+            // XDVDFS filesystem doesn't store . or .. entries, so we track the current
+            // directory at the class level and push it to the stack before navigating
+            if (_currentDirectoryEntry != null)
             {
-                var currentDirEntry = currentItems.FirstOrDefault(static i => i is { IsDirectory: true, Name: ".." })?.Entry;
-                if (currentDirEntry != null)
-                {
-                    _parentDirectoryStack.Push(currentDirEntry);
-                }
+                _parentDirectoryStack.Push(_currentDirectoryEntry);
             }
 
             LoadDirectory(item.Entry, item.Name);

@@ -50,6 +50,17 @@ public static class DisplayInstructions
                 }
             }
 
+            // Check for extract-xiso.exe
+            var extractXisoPath = Path.Combine(appDirectory, "extract-xiso.exe");
+            if (File.Exists(extractXisoPath))
+            {
+                _logger.LogMessage("INFO: extract-xiso.exe found. XISO conversion is enabled.");
+            }
+            else
+            {
+                _logger.LogMessage("WARNING: extract-xiso.exe not found. XISO conversion will fail.");
+            }
+
             _logger.LogMessage("INFO: Archive extraction is enabled (SharpCompress library loaded).");
 
             _logger.LogMessage("--- Ready ---");

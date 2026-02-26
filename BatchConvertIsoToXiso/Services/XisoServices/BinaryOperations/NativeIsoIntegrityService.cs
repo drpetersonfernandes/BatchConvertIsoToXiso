@@ -162,9 +162,9 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
             var toRead = (int)Math.Min(buffer.Length, bytesRemaining);
             var read = isoSt.Read(file, buffer.AsSpan(0, toRead), currentOffset);
 
-            if (read != toRead)
+            if (read == 0)
             {
-                return false;
+                return false; // Unexpected EOF - file is corrupted
             }
 
             bytesRemaining -= read;
