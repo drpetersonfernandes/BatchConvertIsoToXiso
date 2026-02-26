@@ -49,6 +49,9 @@ public class ExtractXisoService : IExtractXisoService
             // Ensure output directory exists
             Directory.CreateDirectory(outputFolder);
 
+            // Record start time before starting the process to detect newly created/modified files
+            var conversionStartTime = DateTime.UtcNow;
+
             // Build arguments for extract-xiso
             // -r = rewrite (convert to XISO)
             // -o = output directory
@@ -98,7 +101,8 @@ public class ExtractXisoService : IExtractXisoService
                     var p = (Process?)state;
                     if (p != null)
                     {
-                        ProcessTerminatorHelper.TerminateProcess(p, "extract-xiso", _logger);
+                        // Offload to background thread to avoid blocking UI thread
+                        _ = Task.Run(() => ProcessTerminatorHelper.TerminateProcess(p, "extract-xiso", _logger), token);
                     }
                 }, process);
 
@@ -114,13 +118,30 @@ public class ExtractXisoService : IExtractXisoService
                     }
 
                     // Check for alternative output filename (extract-xiso might use different naming)
+                    // Only consider files created/modified after this conversion started to avoid
+                    // matching stale files from previous runs
                     var possibleOutputs = Directory.GetFiles(outputFolder, "*.iso")
-                        .Where(f => Path.GetFileName(f).Contains(Path.GetFileNameWithoutExtension(fileName), StringComparison.OrdinalIgnoreCase))
+                        .Where(f =>
+                        {
+                            var fileNameMatch = Path.GetFileName(f).Contains(Path.GetFileNameWithoutExtension(fileName), StringComparison.OrdinalIgnoreCase);
+                            if (!fileNameMatch) return false;
+
+                            try
+                            {
+                                var fileInfo = new FileInfo(f);
+                                // File must be created or modified after this conversion started
+                                return fileInfo.LastWriteTimeUtc >= conversionStartTime || fileInfo.CreationTimeUtc >= conversionStartTime;
+                            }
+                            catch
+                            {
+                                return false;
+                            }
+                        })
                         .ToList();
 
                     if (possibleOutputs.Count > 0)
                     {
-                        _logger.LogMessage($"Successfully converted '{fileName}' to XISO format.");
+                        _logger.LogMessage($"Successfully converted '{fileName}' to XISO format (found: {Path.GetFileName(possibleOutputs[0])}).");
                         return true;
                     }
 

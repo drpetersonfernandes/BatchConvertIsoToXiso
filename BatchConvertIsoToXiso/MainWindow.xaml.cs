@@ -34,7 +34,7 @@ public partial class MainWindow
 
     // XIso Explorer State
     private IsoSt? _explorerIsoSt;
-    private readonly Stack<FileEntry> _explorerHistory = new();
+    private readonly Stack<FileEntry> _parentDirectoryStack = new();
     private readonly Stack<string> _explorerPathNames = new();
 
     public MainWindow(IUpdateChecker updateChecker, ILogger logger, IBugReportService bugReportService,
@@ -83,9 +83,51 @@ public partial class MainWindow
                 return;
             }
 
+            // Cancel the operation and prevent immediate window close
             _cts.Cancel();
+            e.Cancel = true;
+
+            // Wait for the operation to complete in the background, then close
+            _ = WaitForOperationAndCloseAsync();
+            return;
         }
 
+        // No operation running, safe to close immediately
+        CleanupResources();
+    }
+
+    private async Task WaitForOperationAndCloseAsync()
+    {
+        _logger.LogMessage("Waiting for current operation to cancel before exiting...");
+
+        // Wait up to 10 seconds for the operation to complete
+        var maxWaitTime = TimeSpan.FromSeconds(10);
+        var startTime = DateTime.Now;
+
+        while (_isOperationRunning && DateTime.Now - startTime < maxWaitTime)
+        {
+            await Task.Delay(100);
+        }
+
+        if (_isOperationRunning)
+        {
+            _logger.LogMessage("Warning: Operation did not complete within timeout. Closing anyway.");
+        }
+        else
+        {
+            _logger.LogMessage("Operation completed. Closing application...");
+        }
+
+        // Now perform cleanup and close on the UI thread
+        await Dispatcher.InvokeAsync(() =>
+        {
+            CleanupResources();
+            Close();
+        });
+    }
+
+    private void CleanupResources()
+    {
         _explorerIsoSt?.Dispose();
         _processingTimer.Stop();
         StopPerformanceCounter();

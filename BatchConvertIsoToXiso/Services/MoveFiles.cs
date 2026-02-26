@@ -73,7 +73,7 @@ public class FileMoverService : IFileMover
     }
 
     /// <summary>
-    /// Moves a file with retry logic to handle transient locks and ensures destination is cleared.
+    /// Moves a file with retry logic to handle transient locks.
     /// </summary>
     public async Task RobustMoveFileAsync(string source, string dest, CancellationToken token)
     {
@@ -81,12 +81,6 @@ public class FileMoverService : IFileMover
         {
             try
             {
-                if (File.Exists(dest))
-                {
-                    File.SetAttributes(dest, FileAttributes.Normal);
-                    File.Delete(dest);
-                }
-
                 await Task.Run(() => File.Move(source, dest, true), token);
                 return;
             }

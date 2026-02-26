@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
@@ -42,8 +41,6 @@ public partial class App
             _bugReportService = ServiceProvider.GetRequiredService<IBugReportService>();
             _messageBoxService = ServiceProvider.GetRequiredService<IMessageBoxService>();
             _logger = ServiceProvider.GetRequiredService<ILogger>();
-
-            await CleanupTemporaryFolders();
 
             // Startup cleanup
             if (_logger != null)
@@ -159,40 +156,5 @@ public partial class App
         ExceptionFormatter.AppendExceptionDetails(sb, exception);
 
         return sb.ToString();
-    }
-
-    private async Task CleanupTemporaryFolders()
-    {
-        var tempPath = Path.GetTempPath();
-        const string tempFolderPrefix = "BatchConvertIsoToXiso_";
-
-        try
-        {
-            var directories = Directory.EnumerateDirectories(tempPath, tempFolderPrefix + "*", SearchOption.TopDirectoryOnly);
-            foreach (var dir in directories)
-            {
-                try
-                {
-                    // Attempt to delete the directory and its contents recursively
-                    Directory.Delete(dir, true);
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    // Ignore
-                }
-                catch (IOException)
-                {
-                    // Ignore
-                }
-                catch (Exception ex)
-                {
-                    if (_bugReportService != null) await _bugReportService.SendBugReportAsync($"Error cleaning orphaned temp folder {dir}: {ex.Message}");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            if (_bugReportService != null) await _bugReportService.SendBugReportAsync($"Error enumerating temp folders for cleanup: {ex.Message}");
-        }
     }
 }

@@ -77,7 +77,9 @@ public class OrchestratorService : IOrchestratorService
         {
             token.ThrowIfCancellationRequested();
 
-            if (!File.Exists(entryPath))
+            // Check file existence on a background thread to avoid blocking UI for cloud/slow files
+            var fileExists = await Task.Run(() => File.Exists(entryPath), token);
+            if (!fileExists)
             {
                 progress.Report(new BatchOperationProgress { LogMessage = $"Error: Source file not found: {entryPath}. Skipping.", FailedCount = 1, FailedPathToAdd = entryPath });
                 topLevelProcessed++;
@@ -244,12 +246,17 @@ public class OrchestratorService : IOrchestratorService
                 {
                     try
                     {
-                        var folder = Path.GetDirectoryName(cuePath);
-                        if (!string.IsNullOrEmpty(folder))
+                        // Delete only the specific CUE file being processed
+                        File.Delete(cuePath);
+
+                        // Parse the CUE file to find and delete only the referenced BIN files
+                        var referencedBinFiles = GetReferencedBinFilesFromCue(cuePath);
+                        foreach (var binFile in referencedBinFiles)
                         {
-                            var filesToDelete = Directory.EnumerateFiles(folder, "*.*")
-                                .Where(static f => Path.GetExtension(f).ToLowerInvariant() is ".cue" or ".bin");
-                            foreach (var f in filesToDelete) File.Delete(f);
+                            if (File.Exists(binFile))
+                            {
+                                File.Delete(binFile);
+                            }
                         }
                     }
                     catch
@@ -285,9 +292,11 @@ public class OrchestratorService : IOrchestratorService
             try
             {
                 // Simple check if file is accessible (triggers cloud download if hydration is automatic, or fails)
-                await using (File.OpenRead(inputFile))
+                // Run on background thread to avoid blocking UI for cloud/slow files
+                await Task.Run(() =>
                 {
-                }
+                    using var stream = File.OpenRead(inputFile);
+                }, token);
             }
             catch (IOException)
             {
@@ -403,9 +412,11 @@ public class OrchestratorService : IOrchestratorService
         try
         {
             // Simple check if file is accessible (triggers cloud download if hydration is automatic, or fails)
-            await using (File.OpenRead(isoPath))
+            // Run on background thread to avoid blocking UI for cloud/slow files
+            await Task.Run(() =>
             {
-            }
+                using var stream = File.OpenRead(isoPath);
+            }, token);
         }
         catch (IOException)
         {
@@ -518,6 +529,61 @@ public class OrchestratorService : IOrchestratorService
         {
             await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(folder, 5, 1000, null);
         }
+    }
+
+    #endregion
+
+    #region CUE File Parsing
+
+    /// <summary>
+    /// Parses a CUE file to extract the referenced BIN file paths.
+    /// CUE files contain lines like: FILE "filename.bin" BINARY
+    /// </summary>
+    /// <param name="cuePath">Path to the CUE file</param>
+    /// <returns>List of full paths to referenced BIN files</returns>
+    private static List<string> GetReferencedBinFilesFromCue(string cuePath)
+    {
+        var binFiles = new List<string>();
+        var cueFolder = Path.GetDirectoryName(cuePath);
+
+        if (string.IsNullOrEmpty(cueFolder) || !File.Exists(cuePath))
+            return binFiles;
+
+        try
+        {
+            var lines = File.ReadAllLines(cuePath);
+            foreach (var line in lines)
+            {
+                var trimmedLine = line.Trim();
+                // Look for FILE "filename" BINARY patterns
+                if (trimmedLine.StartsWith("FILE ", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Extract filename between quotes
+                    var firstQuote = trimmedLine.IndexOf('"');
+                    var secondQuote = trimmedLine.IndexOf('"', firstQuote + 1);
+
+                    if (firstQuote >= 0 && secondQuote > firstQuote)
+                    {
+                        var fileName = trimmedLine.Substring(firstQuote + 1, secondQuote - firstQuote - 1);
+                        // Only include BIN files
+                        if (Path.GetExtension(fileName).Equals(".bin", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var binPath = Path.Combine(cueFolder, fileName);
+                            if (!binFiles.Contains(binPath))
+                            {
+                                binFiles.Add(binPath);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // If parsing fails, return empty list
+        }
+
+        return binFiles;
     }
 
     #endregion

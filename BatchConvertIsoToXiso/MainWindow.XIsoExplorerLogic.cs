@@ -28,14 +28,14 @@ public partial class MainWindow
         try
         {
             _explorerIsoSt?.Dispose();
-            _explorerHistory.Clear();
+            _parentDirectoryStack.Clear();
             _explorerPathNames.Clear();
 
             _explorerIsoSt = new IsoSt(isoPath);
             var volume = VolumeDescriptor.ReadFrom(_explorerIsoSt);
             var root = FileEntry.CreateRootEntry(volume.RootDirTableSector);
 
-            LoadDirectory(root, "Root");
+            LoadDirectory(root, "Root", true);
         }
         catch (Exception ex)
         {
@@ -43,7 +43,7 @@ public partial class MainWindow
         }
     }
 
-    private void LoadDirectory(FileEntry dirEntry, string folderName)
+    private void LoadDirectory(FileEntry dirEntry, string folderName, bool isRoot = false)
     {
         if (_explorerIsoSt == null) return;
 
@@ -60,15 +60,15 @@ public partial class MainWindow
 
             ExplorerListView.ItemsSource = uiItems;
 
-            if (folderName != "Root")
+            if (isRoot)
             {
-                _explorerHistory.Push(dirEntry);
-                _explorerPathNames.Push(folderName);
+                _parentDirectoryStack.Clear();
+                _explorerPathNames.Clear();
             }
             else
             {
-                _explorerHistory.Clear();
-                _explorerPathNames.Clear();
+                // Track this directory in the path for display purposes
+                _explorerPathNames.Push(folderName);
             }
 
             UpdateExplorerUiState();
@@ -81,7 +81,7 @@ public partial class MainWindow
 
     private void UpdateExplorerUiState()
     {
-        ExplorerUpButton.IsEnabled = _explorerHistory.Count > 0;
+        ExplorerUpButton.IsEnabled = _parentDirectoryStack.Count > 0;
         var path = "/" + string.Join("/", _explorerPathNames.Reverse());
         ExplorerPathTextBlock.Text = path;
     }
@@ -90,6 +90,18 @@ public partial class MainWindow
     {
         if (ExplorerListView.SelectedItem is XisoExplorerItem { IsDirectory: true } item)
         {
+            // Save current directory entry to stack before navigating deeper
+            // The current items are displayed via ExplorerListView.ItemsSource, but we need
+            // to save the parent directory entry for the "Up" navigation
+            if (ExplorerListView.ItemsSource is IEnumerable<XisoExplorerItem> currentItems)
+            {
+                var currentDirEntry = currentItems.FirstOrDefault(static i => i is { IsDirectory: true, Name: ".." })?.Entry;
+                if (currentDirEntry != null)
+                {
+                    _parentDirectoryStack.Push(currentDirEntry);
+                }
+            }
+
             LoadDirectory(item.Entry, item.Name);
         }
     }
@@ -97,23 +109,12 @@ public partial class MainWindow
     private void ExplorerUpButton_Click(object sender, RoutedEventArgs e)
     {
         if (_explorerIsoSt == null) return;
+        if (_parentDirectoryStack.Count == 0) return;
 
-        // Remove the current directory from history
-        _explorerHistory.Pop();
-        _explorerPathNames.Pop();
+        // Pop the parent directory from the stack and navigate to it
+        var parentEntry = _parentDirectoryStack.Pop();
+        var parentName = _explorerPathNames.Pop();
 
-        if (_explorerHistory.Count == 0)
-        {
-            // If no history left, we go back to Root
-            var volume = VolumeDescriptor.ReadFrom(_explorerIsoSt);
-            LoadDirectory(FileEntry.CreateRootEntry(volume.RootDirTableSector), "Root");
-        }
-        else
-        {
-            // Pop the parent so LoadDirectory can push it back during reload
-            var parentEntry = _explorerHistory.Pop();
-            var parentName = _explorerPathNames.Pop();
-            LoadDirectory(parentEntry, parentName);
-        }
+        LoadDirectory(parentEntry, parentName);
     }
 }

@@ -74,7 +74,8 @@ public partial class ExternalToolService : IExternalToolService
                              var p = (Process?)state;
                              if (p != null)
                              {
-                                 ProcessTerminatorHelper.TerminateProcess(p, contextName, _logger);
+                                 // Offload to background thread to avoid blocking UI thread
+                                 _ = Task.Run(() => ProcessTerminatorHelper.TerminateProcess(p, contextName, _logger), token);
                              }
                          }, process))
             {

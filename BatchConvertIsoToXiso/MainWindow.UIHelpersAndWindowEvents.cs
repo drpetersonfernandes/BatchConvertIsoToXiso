@@ -70,7 +70,10 @@ public partial class MainWindow
 
     private bool ValidateInputOutputFolders(string inputFolder, string outputFolder)
     {
-        if (inputFolder.Equals(outputFolder, StringComparison.OrdinalIgnoreCase))
+        var normalizedInput = Path.GetFullPath(inputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedOutput = Path.GetFullPath(outputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (normalizedInput.Equals(normalizedOutput, StringComparison.OrdinalIgnoreCase))
         {
             _messageBoxService.ShowError("Input and output folders must be different.");
             return false;
@@ -81,31 +84,25 @@ public partial class MainWindow
 
     private void UpdateSummaryStatsUi()
     {
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            TotalFilesValue.Text = _uiTotalFiles.ToString(CultureInfo.InvariantCulture);
-            SuccessValue.Text = _uiSuccessCount.ToString(CultureInfo.InvariantCulture);
-            FailedValue.Text = _uiFailedCount.ToString(CultureInfo.InvariantCulture);
-            SkippedValue.Text = _uiSkippedCount.ToString(CultureInfo.InvariantCulture);
-        });
+        TotalFilesValue.Text = _uiTotalFiles.ToString(CultureInfo.InvariantCulture);
+        SuccessValue.Text = _uiSuccessCount.ToString(CultureInfo.InvariantCulture);
+        FailedValue.Text = _uiFailedCount.ToString(CultureInfo.InvariantCulture);
+        SkippedValue.Text = _uiSkippedCount.ToString(CultureInfo.InvariantCulture);
     }
 
     private void UpdateProgressUi(int current, int total)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        // Don't update determinate text if we haven't received a total yet
+        if (total <= 0) return;
+
+        ProgressBar.Maximum = total;
+        ProgressBar.Value = current;
+
+        if (ProgressBar.Visibility == Visibility.Visible && !ProgressBar.IsIndeterminate)
         {
-            // Don't update determinate text if we haven't received a total yet
-            if (total <= 0) return;
-
-            ProgressBar.Maximum = total;
-            ProgressBar.Value = current;
-
-            if (ProgressBar.Visibility == Visibility.Visible && !ProgressBar.IsIndeterminate)
-            {
-                var percentage = (double)current / total * 100;
-                ProgressTextBlock.Text = $"{current} of {total} ({percentage:F0}%)";
-            }
-        });
+            var percentage = (double)current / total * 100;
+            ProgressTextBlock.Text = $"{current} of {total} ({percentage:F0}%)";
+        }
     }
 
     private void LogOperationSummary(string operationType)
