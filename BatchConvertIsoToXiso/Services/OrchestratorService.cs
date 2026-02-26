@@ -130,11 +130,10 @@ public class OrchestratorService : IOrchestratorService
 
                     progress.Report(new BatchOperationProgress { LogMessage = logMessage, FailedCount = 1, FailedPathToAdd = entryPath });
 
-                    // Filter environmental errors (disconnected drives, etc.)
+                    // Filter environmental errors (disconnected drives, network issues, etc.)
                     var isEnvironmentalError = ex is IOException ioEx &&
                                                (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
-                                                ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
-                                                ex.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase));
+                                                PathHelper.IsNetworkError(ioEx));
 
                     // Filter common archive errors (corruption, incomplete downloads, etc.)
                     var isArchiveError = ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) ||
@@ -498,12 +497,23 @@ public class OrchestratorService : IOrchestratorService
 
     private static async Task<bool> CopyFileWithCloudRetryAsync(string source, string dest, Func<string, Task<CloudRetryResult>> cloudRetry, IProgress<BatchOperationProgress> progress, CancellationToken token)
     {
+        const int maxNetworkRetries = 5;
+        const int initialRetryDelayMs = 500;
+        var networkRetryCount = 0;
+
         while (true)
         {
             try
             {
                 await Task.Run(() => File.Copy(source, dest, true), token);
                 return true;
+            }
+            catch (IOException ex) when (PathHelper.IsNetworkError(ex) && networkRetryCount < maxNetworkRetries)
+            {
+                networkRetryCount++;
+                var delayMs = initialRetryDelayMs * (int)Math.Pow(2, networkRetryCount - 1);
+                progress.Report(new BatchOperationProgress { LogMessage = $"Network error detected, retrying in {delayMs}ms... (attempt {networkRetryCount}/{maxNetworkRetries})" });
+                await Task.Delay(delayMs, token);
             }
             catch (IOException ex) when (ex.Message.Contains("cloud operation", StringComparison.OrdinalIgnoreCase))
             {
