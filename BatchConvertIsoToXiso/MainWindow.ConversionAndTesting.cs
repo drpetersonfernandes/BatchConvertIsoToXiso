@@ -154,6 +154,7 @@ public partial class MainWindow
                 SkipSystemUpdateCheckBox.IsChecked ?? false,
                 CheckOutputIntegrityCheckBox.IsChecked ?? false,
                 SearchSubfoldersConversionCheckBox.IsChecked ?? false,
+                UseExtractXisoRadioButton.IsChecked ?? true,
                 progress, HandleCloudRetryRequest, _cts.Token);
         }
         catch (OperationCanceledException)

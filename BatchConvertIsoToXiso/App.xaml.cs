@@ -103,6 +103,7 @@ public partial class App
         services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>(), provider.GetRequiredService<IDiskMonitorService>()));
         services.AddTransient<AboutWindow>();
         services.AddSingleton<IExternalToolService, ExternalToolService>();
+        services.AddSingleton<IExtractXisoService, ExtractXisoService>();
         services.AddSingleton<IOrchestratorService, OrchestratorService>();
         services.AddSingleton<INativeIsoIntegrityService, NativeIsoIntegrityService>();
         services.AddSingleton<XisoWriter>();

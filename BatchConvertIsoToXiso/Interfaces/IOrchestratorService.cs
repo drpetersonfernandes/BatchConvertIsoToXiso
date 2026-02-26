@@ -11,6 +11,7 @@ public interface IOrchestratorService
         bool skipSystemUpdate,
         bool checkIntegrity,
         bool searchSubfolders,
+        bool useExtractXiso,
         IProgress<BatchOperationProgress> progress,
         Func<string, Task<CloudRetryResult>> onCloudRetryRequired,
         CancellationToken token);

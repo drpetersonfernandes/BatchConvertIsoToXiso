@@ -77,6 +77,12 @@
                             <CheckBox x:Name="SkipSystemUpdateCheckBox" Content="Skip $SystemUpdate folder during conversion" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Omits the $SystemUpdate folder from the output XISO, reducing file size" />
                             <CheckBox x:Name="CheckOutputIntegrityCheckBox" Content="Check integrity of the output file" Margin="0,8,0,8" HorizontalAlignment="Left" IsChecked="True" ToolTip="Performs a structural integrity check on the newly created XISO file" />
                         </StackPanel>
+                        <GroupBox Header="Conversion Method" Margin="0,5,0,10" Padding="10,5">
+                            <StackPanel Orientation="Vertical">
+                                <RadioButton x:Name="UseExtractXisoRadioButton" Content="Use extract-xiso.exe (External Tool)" Margin="0,2" IsChecked="True" ToolTip="Uses the external extract-xiso.exe tool for conversion (default)" />
+                                <RadioButton x:Name="UseBuiltInLogicRadioButton" Content="Use Built-in Logic (Application Native)" Margin="0,2" ToolTip="Uses the application's built-in XISO conversion logic" />
+                            </StackPanel>
+                        </GroupBox>
                         <Button x:Name="StartConversionButton" Content="Start Conversion" Style="{StaticResource StartButtonStyle}" HorizontalAlignment="Center" Margin="0,5,0,0" Click="StartConversionButton_Click" ToolTip="Begin the batch conversion process" />
                     </StackPanel>
 

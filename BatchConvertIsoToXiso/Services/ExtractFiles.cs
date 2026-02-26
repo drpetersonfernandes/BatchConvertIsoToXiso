@@ -100,7 +100,15 @@ public class FileExtractorService : IFileExtractor
         }
         catch (Exception ex)
         {
-            _logger.LogMessage($"Error extracting {archiveFileName}: {ex.Message}");
+            // Provide user-friendly message for corrupt archives
+            if (ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogMessage($"ERROR: {archiveFileName} appears to be corrupt or incomplete. The file may have been damaged during download or transfer. Please re-download the archive and try again.");
+            }
+            else
+            {
+                _logger.LogMessage($"Error extracting {archiveFileName}: {ex.Message}");
+            }
 
             // Filter out environmental/hardware errors (disconnected drives, etc.)
             var isEnvironmentalError = ex is IOException ioEx &&
@@ -112,7 +120,8 @@ public class FileExtractorService : IFileExtractor
             if (!isEnvironmentalError &&
                 !ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase))
+                !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase))
             {
                 _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. Exception: {ex}");
             }
@@ -159,7 +168,16 @@ public class FileExtractorService : IFileExtractor
         catch (Exception ex)
         {
             _logger.LogMessage($"Error getting uncompressed size of archive {Path.GetFileName(archivePath)}: {ex.Message}");
-            _ = _bugReportService.SendBugReportAsync($"Error getting uncompressed archive size: {archivePath}. Exception: {ex}");
+
+            // Filter out common archive errors from bug reports
+            if (!ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase))
+            {
+                _ = _bugReportService.SendBugReportAsync($"Error getting uncompressed archive size: {archivePath}. Exception: {ex}");
+            }
+
             throw;
         }
     }
