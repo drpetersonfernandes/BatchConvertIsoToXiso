@@ -332,7 +332,7 @@ public class OrchestratorService : IOrchestratorService
             {
                 // Use extract-xiso.exe for conversion
                 progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Converting using extract-xiso.exe...", CurrentDrive = PathHelper.GetDriveLetter(outputFolder) });
-                var success = await _extractXisoService.ConvertIsoToXisoAsync(sourcePath, outputFolder, token);
+                var success = await _extractXisoService.ConvertIsoToXisoAsync(sourcePath, outputFolder, skipSystemUpdate, token);
                 status = success ? FileProcessingStatus.Converted : FileProcessingStatus.Failed;
             }
             else

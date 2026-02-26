@@ -19,7 +19,7 @@ public class ExtractXisoService : IExtractXisoService
         _extractXisoPath = Path.Combine(appDir, "extract-xiso.exe");
     }
 
-    public async Task<bool> ConvertIsoToXisoAsync(string inputFile, string outputFolder, CancellationToken token)
+    public async Task<bool> ConvertIsoToXisoAsync(string inputFile, string outputFolder, bool skipSystemUpdate, CancellationToken token)
     {
         var fileName = Path.GetFileName(inputFile);
         _logger.LogMessage($"Converting '{fileName}' using extract-xiso.exe...");
@@ -65,7 +65,7 @@ public class ExtractXisoService : IExtractXisoService
             // -r = rewrite (convert to XISO)
             // -d = output directory (temp work dir for simplicity)
             // -s = skip $SystemUpdate folder
-            var arguments = $"-r -d \"{tempWorkDir}\" \"{tempInputFile}\"";
+            var arguments = $"-r -d \"{tempWorkDir}\"{(skipSystemUpdate ? " -s" : "")} \"{tempInputFile}\"";
 
             // Use manual disposal instead of 'using' to avoid capturing a disposed variable in the cancellation callback
             Process? process = null;
