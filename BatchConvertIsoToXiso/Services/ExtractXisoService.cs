@@ -55,77 +55,88 @@ public class ExtractXisoService : IExtractXisoService
             // -s = skip $SystemUpdate folder
             var arguments = $"-r -o \"{outputFolder}\" \"{inputFile}\"";
 
-            using var process = new Process();
-            process.StartInfo = new ProcessStartInfo
-            {
-                FileName = _extractXisoPath,
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
-            };
-
-            process.OutputDataReceived += (_, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    _logger.LogMessage($"  [extract-xiso] {e.Data}");
-                }
-            };
-
-            process.ErrorDataReceived += (_, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    _logger.LogMessage($"  [extract-xiso] ERROR: {e.Data}");
-                }
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            // Register cancellation handler - ensure proper disposal order
-            CancellationTokenRegistration? cancellationRegistration = null;
+            // Use manual disposal instead of 'using' to avoid capturing a disposed variable in the cancellation callback
+            Process? process = null;
+            CancellationTokenRegistration cancellationRegistration = default;
             try
             {
-                cancellationRegistration = token.Register(() => ProcessTerminatorHelper.TerminateProcess(process, "extract-xiso", _logger));
+                process = new Process();
+                process.StartInfo = new ProcessStartInfo
+                {
+                    FileName = _extractXisoPath,
+                    Arguments = arguments,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
+                };
+
+                process.OutputDataReceived += (_, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                    {
+                        _logger.LogMessage($"  [extract-xiso] {e.Data}");
+                    }
+                };
+
+                process.ErrorDataReceived += (_, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                    {
+                        _logger.LogMessage($"  [extract-xiso] ERROR: {e.Data}");
+                    }
+                };
+
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                // Register cancellation handler before awaiting
+                cancellationRegistration = token.Register(state =>
+                {
+                    var p = (Process?)state;
+                    if (p != null)
+                    {
+                        ProcessTerminatorHelper.TerminateProcess(p, "extract-xiso", _logger);
+                    }
+                }, process);
+
                 await process.WaitForExitAsync(token);
+
+                if (process.ExitCode == 0)
+                {
+                    // Check if output file was created
+                    if (File.Exists(outputPath))
+                    {
+                        _logger.LogMessage($"Successfully converted '{fileName}' to XISO format.");
+                        return true;
+                    }
+
+                    // Check for alternative output filename (extract-xiso might use different naming)
+                    var possibleOutputs = Directory.GetFiles(outputFolder, "*.iso")
+                        .Where(f => Path.GetFileName(f).Contains(Path.GetFileNameWithoutExtension(fileName), StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    if (possibleOutputs.Count > 0)
+                    {
+                        _logger.LogMessage($"Successfully converted '{fileName}' to XISO format.");
+                        return true;
+                    }
+
+                    _logger.LogMessage($"[WARNING] Conversion completed but output file not found for '{fileName}'.");
+                    return false;
+                }
+
+                _logger.LogMessage($"[ERROR] extract-xiso.exe exited with code {process.ExitCode} for '{fileName}'.");
+                return false;
             }
             finally
             {
                 // Dispose registration before process to avoid accessing disposed process in callback
-                cancellationRegistration?.Dispose();
+                cancellationRegistration.Dispose();
+                process?.Dispose();
             }
-
-            if (process.ExitCode == 0)
-            {
-                // Check if output file was created
-                if (File.Exists(outputPath))
-                {
-                    _logger.LogMessage($"Successfully converted '{fileName}' to XISO format.");
-                    return true;
-                }
-
-                // Check for alternative output filename (extract-xiso might use different naming)
-                var possibleOutputs = Directory.GetFiles(outputFolder, "*.iso")
-                    .Where(f => Path.GetFileName(f).Contains(Path.GetFileNameWithoutExtension(fileName), StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-
-                if (possibleOutputs.Count > 0)
-                {
-                    _logger.LogMessage($"Successfully converted '{fileName}' to XISO format.");
-                    return true;
-                }
-
-                _logger.LogMessage($"[WARNING] Conversion completed but output file not found for '{fileName}'.");
-                return false;
-            }
-
-            _logger.LogMessage($"[ERROR] extract-xiso.exe exited with code {process.ExitCode} for '{fileName}'.");
-            return false;
         }
         catch (OperationCanceledException)
         {

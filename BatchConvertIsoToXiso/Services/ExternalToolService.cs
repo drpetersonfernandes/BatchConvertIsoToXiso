@@ -69,8 +69,14 @@ public partial class ExternalToolService : IExternalToolService
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            // ReSharper disable once AccessToDisposedClosure
-            await using (token.Register(() => ProcessTerminatorHelper.TerminateProcess(process, contextName, _logger)))
+            await using (token.Register(state =>
+                         {
+                             var p = (Process?)state;
+                             if (p != null)
+                             {
+                                 ProcessTerminatorHelper.TerminateProcess(p, contextName, _logger);
+                             }
+                         }, process))
             {
                 await process.WaitForExitAsync(token);
             }
