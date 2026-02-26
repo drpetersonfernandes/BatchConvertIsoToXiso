@@ -69,7 +69,14 @@ public class FileExtractorService : IFileExtractor
                         var fullDestPath = Path.GetFullPath(Path.Combine(extractionPath, entryPath));
 
                         // Ensure the resulting path is still inside our extraction directory
-                        if (!fullDestPath.StartsWith(Path.GetFullPath(extractionPath), StringComparison.OrdinalIgnoreCase))
+                        // Fix: base path must end with directory separator to prevent bypass via similar-named directories
+                        var basePath = Path.GetFullPath(extractionPath);
+                        if (!basePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                        {
+                            basePath += Path.DirectorySeparatorChar;
+                        }
+
+                        if (!fullDestPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
                         {
                             _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
                             continue;
