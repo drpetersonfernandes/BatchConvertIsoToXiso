@@ -39,7 +39,7 @@ internal static class Xdvdfs
             // Cycle detection
             if (!visited.Add(cur)) continue;
 
-            // Add the directory table sectors themselves as valid, but only once per table.
+            // Add the directory table sectors as valid, but only once per table.
             if (item.ChildOffset == 0)
             {
                 var curOffset = cur / Utils.SectorSize;
@@ -50,16 +50,11 @@ internal static class Xdvdfs
 
             isoFs.Seek(cur, SeekOrigin.Begin);
 
-            // Read LeftSubTree
+            // Read LeftSubTree offset.
+            // 0xFFFF means no left child — it does NOT mean the current entry is absent.
             var leftChildOffset = Utils.ReadUShort(isoFs);
 
-            // Check for empty directory (at start offset with 0xFFFF)
-            if (leftChildOffset == 0xFFFF && item.ChildOffset == 0)
-            {
-                continue;
-            }
-
-            // Continue reading the rest of the entry
+            // Always read the full entry regardless of left child status.
             var rightChildOffset = Utils.ReadUShort(isoFs);
             var entryOffsetRaw = Utils.ReadUInt(isoFs);
             var entryOffset = (long)entryOffsetRaw * Utils.SectorSize;
@@ -77,7 +72,7 @@ internal static class Xdvdfs
 
             var isDirectory = (attributes & 0x10) != 0;
 
-            // Push Right Child to stack
+            // Push Right Child to stack (process after current entry)
             if (rightChildOffset != 0xFFFF && rightChildOffset != 0)
             {
                 stack.Push(item with { ChildOffset = (long)rightChildOffset * 4 });
@@ -91,9 +86,9 @@ internal static class Xdvdfs
                 {
                     if (!quiet) Debug.WriteLine("Skipping $SystemUpdate directory contents.");
                 }
-                else if (entryOffsetRaw > 0)
+                else if (entryOffsetRaw > 0 && entrySize > 0)
                 {
-                    // Push Subdirectory to stack
+                    // Push subdirectory onto stack for traversal
                     stack.Push(new DirectoryWorkItem
                     {
                         RootOffset = entryOffset,
@@ -104,7 +99,7 @@ internal static class Xdvdfs
             }
             else if (entryOffsetRaw > 0)
             {
-                // Add file data sectors
+                // Add file data sectors to valid list
                 var fileOffset = (isoOffset + entryOffset) / Utils.SectorSize;
                 var fileSize = (entrySize + Utils.SectorSize - 1) / Utils.SectorSize;
                 for (var i = fileOffset; i < fileOffset + fileSize; i++)
@@ -112,7 +107,7 @@ internal static class Xdvdfs
             }
 
             // Push Left Child to stack
-            if (leftChildOffset != 0xFFFF && leftChildOffset != 0 && item.ChildOffset != leftChildOffset * 4)
+            if (leftChildOffset != 0xFFFF && leftChildOffset != 0)
             {
                 stack.Push(item with { ChildOffset = (long)leftChildOffset * 4 });
             }
@@ -133,10 +128,14 @@ internal static class Xdvdfs
         var rootOffset = Utils.ReadUInt(isoFs);
         var rootSize = Utils.ReadUInt(isoFs);
 
+        var ranges = new List<(uint, uint)>();
+
+        // Guard against empty or invalid filesystem
+        if (rootSize == 0) return ranges;
+
         var visited = new HashSet<long>();
         GetValidSectors(isoFs, offset, validSectors, (long)rootOffset * Utils.SectorSize, rootSize, quiet, skipSystemUpdate, visited);
 
-        var ranges = new List<(uint, uint)>();
         if (validSectors.Count == 0) return ranges;
 
         var sortedSectors = validSectors.Distinct().OrderBy(static x => x).ToList();
