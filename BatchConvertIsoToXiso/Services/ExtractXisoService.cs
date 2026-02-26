@@ -31,18 +31,26 @@ public class ExtractXisoService : IExtractXisoService
             return false;
         }
 
+        // Create a temporary working directory for simplified filenames
+        // extract-xiso has issues with spaces and special characters in paths
+        var tempWorkDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Work", Guid.NewGuid().ToString());
+
         try
         {
-            // Create output filename (replace .iso with .xiso.iso or add .xiso)
-            var outputFileName = Path.GetFileNameWithoutExtension(inputFile);
-            if (!outputFileName.EndsWith(".xiso", StringComparison.OrdinalIgnoreCase))
-            {
-                outputFileName += ".xiso.iso";
-            }
-            else
-            {
-                outputFileName += ".iso";
-            }
+            Directory.CreateDirectory(tempWorkDir);
+
+            // Create simplified filenames without spaces/special characters
+            const string simpleInputName = "input.iso";
+            const string simpleOutputName = "output.iso";
+            var tempInputFile = Path.Combine(tempWorkDir, simpleInputName);
+            var tempOutputFile = Path.Combine(tempWorkDir, simpleOutputName);
+
+            // Copy input file to temp location with simple name
+            _logger.LogMessage("  Preparing file for conversion...");
+            await CopyFileWithProgressAsync(inputFile, tempInputFile, token);
+
+            // Create output filename with .iso extension
+            var outputFileName = Path.GetFileNameWithoutExtension(inputFile) + ".iso";
 
             var outputPath = Path.Combine(outputFolder, outputFileName);
 
@@ -50,13 +58,14 @@ public class ExtractXisoService : IExtractXisoService
             Directory.CreateDirectory(outputFolder);
 
             // Record start time before starting the process to detect newly created/modified files
-            var conversionStartTime = DateTime.UtcNow;
+            // Subtract 2 seconds to account for file system timestamp granularity (FAT32 has 2-second resolution)
+            var conversionStartTime = DateTime.UtcNow.AddSeconds(-2);
 
-            // Build arguments for extract-xiso
+            // Build arguments for extract-xiso using simplified paths
             // -r = rewrite (convert to XISO)
-            // -o = output directory
+            // -d = output directory (temp work dir for simplicity)
             // -s = skip $SystemUpdate folder
-            var arguments = $"-r -o \"{outputFolder}\" \"{inputFile}\"";
+            var arguments = $"-r -d \"{tempWorkDir}\" \"{tempInputFile}\"";
 
             // Use manual disposal instead of 'using' to avoid capturing a disposed variable in the cancellation callback
             Process? process = null;
@@ -110,22 +119,22 @@ public class ExtractXisoService : IExtractXisoService
 
                 if (process.ExitCode == 0)
                 {
-                    // Check if output file was created
-                    if (File.Exists(outputPath))
+                    // Check if output file was created in temp directory
+                    if (File.Exists(tempOutputFile))
                     {
+                        // Move the converted file to the final destination
+                        _logger.LogMessage("  Moving converted file to output folder...");
+                        File.Move(tempOutputFile, outputPath, true);
                         _logger.LogMessage($"Successfully converted '{fileName}' to XISO format.");
                         return true;
                     }
 
-                    // Check for alternative output filename (extract-xiso might use different naming)
+                    // Check for alternative output filename in temp directory
                     // Only consider files created/modified after this conversion started to avoid
                     // matching stale files from previous runs
-                    var possibleOutputs = Directory.GetFiles(outputFolder, "*.iso")
+                    var possibleOutputs = Directory.GetFiles(tempWorkDir, "*.iso")
                         .Where(f =>
                         {
-                            var fileNameMatch = Path.GetFileName(f).Contains(Path.GetFileNameWithoutExtension(fileName), StringComparison.OrdinalIgnoreCase);
-                            if (!fileNameMatch) return false;
-
                             try
                             {
                                 var fileInfo = new FileInfo(f);
@@ -141,6 +150,9 @@ public class ExtractXisoService : IExtractXisoService
 
                     if (possibleOutputs.Count > 0)
                     {
+                        // Move the converted file to the final destination
+                        _logger.LogMessage("  Moving converted file to output folder...");
+                        File.Move(possibleOutputs[0], outputPath, true);
                         _logger.LogMessage($"Successfully converted '{fileName}' to XISO format (found: {Path.GetFileName(possibleOutputs[0])}).");
                         return true;
                     }
@@ -168,6 +180,39 @@ public class ExtractXisoService : IExtractXisoService
         {
             _logger.LogMessage($"[ERROR] Failed to convert '{fileName}': {ex.Message}");
             return false;
+        }
+        finally
+        {
+            // Clean up temp working directory
+            if (Directory.Exists(tempWorkDir))
+            {
+                try
+                {
+                    Directory.Delete(tempWorkDir, true);
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Copies a file with progress reporting (simplified, no progress percentage for now)
+    /// </summary>
+    private static async Task CopyFileWithProgressAsync(string sourcePath, string destPath, CancellationToken token)
+    {
+        const int bufferSize = 81920; // 80KB buffer
+        await using var sourceStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous);
+        await using var destStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, FileOptions.Asynchronous);
+
+        var buffer = new byte[bufferSize];
+        int bytesRead;
+
+        while ((bytesRead = await sourceStream.ReadAsync(buffer, token)) > 0)
+        {
+            await destStream.WriteAsync(buffer.AsMemory(0, bytesRead), token);
         }
     }
 }

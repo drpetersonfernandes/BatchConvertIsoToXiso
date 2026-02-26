@@ -79,6 +79,13 @@ public partial class MainWindow
             return false;
         }
 
+        // Check if output folder is a subfolder of input folder
+        if (normalizedOutput.StartsWith(normalizedInput + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            _messageBoxService.ShowError("Output folder cannot be a subfolder of the input folder. This would cause recursive processing issues.");
+            return false;
+        }
+
         return true;
     }
 

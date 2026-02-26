@@ -338,7 +338,10 @@ public class OrchestratorService : IOrchestratorService
             else
             {
                 // Use built-in Native Writer
-                var destinationPath = Path.Combine(outputFolder, originalFileName);
+                // Generate output filename with .iso extension
+                var outputFileName = Path.GetFileNameWithoutExtension(sourcePath) + ".iso";
+
+                var destinationPath = Path.Combine(outputFolder, outputFileName);
                 progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Rewriting to output...", CurrentDrive = PathHelper.GetDriveLetter(outputFolder) });
                 status = await _xisoWriter.RewriteIsoAsync(sourcePath, destinationPath, skipSystemUpdate, checkIntegrity, progress, token);
             }
