@@ -154,8 +154,21 @@ public partial class MainWindow
     {
         var elapsedTime = DateTime.Now - _operationStartTime;
         ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+
+        // Update read speed
+        ReadSpeedValue.Text = _diskMonitorService.GetCurrentReadSpeedFormatted();
+        ReadSpeedDriveIndicator.Text = _diskMonitorService.CurrentDriveLetter != null ? $"({_diskMonitorService.CurrentDriveLetter})" : "";
+
+        // Update write speed
         WriteSpeedValue.Text = _diskMonitorService.GetCurrentWriteSpeedFormatted();
         WriteSpeedDriveIndicator.Text = _diskMonitorService.CurrentDriveLetter != null ? $"({_diskMonitorService.CurrentDriveLetter})" : "";
+
+        // Show status message in status bar if disk speed is unavailable
+        var statusMessage = _diskMonitorService.StatusMessage;
+        if (!string.IsNullOrEmpty(statusMessage) && !statusMessage.Equals(StatusTextBlock.Text, StringComparison.Ordinal))
+        {
+            StatusTextBlock.Text = statusMessage;
+        }
     }
 
     private void SetControlsState(bool enabled)
@@ -233,6 +246,8 @@ public partial class MainWindow
         _diskMonitorService.StopMonitoring();
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            ReadSpeedValue?.Text = "N/A";
+            ReadSpeedDriveIndicator?.Text = "";
             WriteSpeedValue?.Text = "N/A";
             WriteSpeedDriveIndicator?.Text = "";
         });

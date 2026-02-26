@@ -129,9 +129,10 @@ Utilizes `Microsoft.Extensions.DependencyInjection` for comprehensive service ma
 | [`IExtractXisoService`](BatchConvertIsoToXiso/Interfaces/IExtractXisoService.cs)               | [`ExtractXisoService`](BatchConvertIsoToXiso/Services/ExtractXisoService.cs)                                             | External extract-xiso.exe integration               |
 | [`IExternalToolService`](BatchConvertIsoToXiso/Interfaces/IExternalToolService.cs)             | [`ExternalToolService`](BatchConvertIsoToXiso/Services/ExternalToolService.cs)                                           | External tool orchestration (bchunk)                |
 | [`XisoWriter`](BatchConvertIsoToXiso/Services/XisoServices/XisoWriter.cs)                      | Native Class                                                                                                             | Core C# engine for rewriting and trimming ISO files |
-| [`IFileExtractor`](BatchConvertIsoToXiso/Interfaces/IFileExtractor.cs)                         | [`ExtractFiles`](BatchConvertIsoToXiso/Services/ExtractFiles.cs)                                                         | Archive extraction with error handling              |
-| [`IFileMover`](BatchConvertIsoToXiso/Interfaces/IFileMover.cs)                                 | [`MoveFiles`](BatchConvertIsoToXiso/Services/MoveFiles.cs)                                                               | Safe file relocation with retry logic               |
-| [`IDiskMonitorService`](BatchConvertIsoToXiso/Interfaces/IDiskMonitorService.cs)               | [`DiskMonitorService`](BatchConvertIsoToXiso/Services/DiskMonitorService.cs)                                             | Real-time disk I/O metrics                          |
+| [`IFileExtractor`](BatchConvertIsoToXiso/Interfaces/IFileExtractor.cs)                         | [`FileExtractorService`](BatchConvertIsoToXiso/Services/ExtractFiles.cs)                                                 | Archive extraction with error handling              |
+| [`IFileMover`](BatchConvertIsoToXiso/Interfaces/IFileMover.cs)                                 | [`FileMoverService`](BatchConvertIsoToXiso/Services/MoveFiles.cs)                                                         | Safe file relocation with retry logic               |
+| [`IDiskMonitorService`](BatchConvertIsoToXiso/Interfaces/IDiskMonitorService.cs)               | [`DiskMonitorService`](BatchConvertIsoToXiso/Services/DiskMonitorService.cs)                                             | Real-time disk I/O metrics and free space monitoring |
+| —                                                                                              | [`PathHelper`](BatchConvertIsoToXiso/Services/PathHelper.cs)                                                             | Static utility for path operations (UNC, network drives) |
 | [`IBugReportService`](BatchConvertIsoToXiso/Interfaces/IBugReportService.cs)                   | [`BugReportService`](BatchConvertIsoToXiso/Services/BugReportService.cs)                                                 | Automated error reporting                           |
 | [`ILogger`](BatchConvertIsoToXiso/Interfaces/ILogger.cs)                                       | [`Logger`](BatchConvertIsoToXiso/Services/Logger.cs)                                                                     | Centralized asynchronous logging                    |
 | [`IUpdateChecker`](BatchConvertIsoToXiso/Interfaces/IUpdateChecker.cs)                         | [`UpdateChecker`](BatchConvertIsoToXiso/Services/UpdateChecker.cs)                                                       | Version checks via GitHub API                       |
@@ -177,7 +178,8 @@ The `MainWindow` is organized into logical partial classes for maintainability:
 - **Atomic Operations**: Converted files are verified before originals are deleted
 - **Automatic Cleanup**: [`TempFolderCleanupHelper`](BatchConvertIsoToXiso/Services/TempFolderCleanupHelper.cs) removes orphaned temporary files on startup or after crashes
 - **Robust Error Handling**: Comprehensive exception handling with automatic bug reporting
-- **Retry Logic**: Automatic retries for file operations with cloud-synced files
+- **Network Resilience**: Full support for UNC paths and mapped network drives with automatic retry logic for transient network failures
+- **Cloud-Aware Retry**: Automatic retries with exponential backoff for cloud-synced files (OneDrive, etc.)
 - **Process Isolation**: External tools run in isolated processes with cancellation support
 
 ---

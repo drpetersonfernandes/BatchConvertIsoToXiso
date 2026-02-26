@@ -8,9 +8,11 @@ namespace BatchConvertIsoToXiso.Services;
 public class DiskMonitorService : IDiskMonitorService, IDisposable
 {
     private readonly ILogger _logger;
+    private PerformanceCounter? _diskReadSpeedCounter;
     private PerformanceCounter? _diskWriteSpeedCounter;
 
     public string? CurrentDriveLetter { get; private set; }
+    public string? StatusMessage { get; private set; }
 
     public DiskMonitorService(ILogger logger)
     {
@@ -33,8 +35,17 @@ public class DiskMonitorService : IDiskMonitorService, IDisposable
 
         StopMonitoring();
 
+        // Check for network drives - explicitly excluded from speed monitoring
+        if (PathHelper.IsNetworkPath(path))
+        {
+            StatusMessage = "Disk speed monitoring unavailable for network drives";
+            _logger.LogMessage("Disk speed monitoring unavailable for network drives.");
+            return;
+        }
+
         if (string.IsNullOrEmpty(driveLetter))
         {
+            StatusMessage = "Disk speed monitoring unavailable - unable to determine drive letter";
             return;
         }
 
@@ -42,21 +53,39 @@ public class DiskMonitorService : IDiskMonitorService, IDisposable
 
         try
         {
-            if (!PerformanceCounterCategory.Exists("LogicalDisk") ||
-                !PerformanceCounterCategory.InstanceExists(perfCounterInstanceName, "LogicalDisk"))
+            // Check if LogicalDisk category exists
+            if (!PerformanceCounterCategory.Exists("LogicalDisk"))
             {
+                StatusMessage = "Disk speed monitoring unavailable - performance counters disabled";
+                _logger.LogMessage("Performance counter category 'LogicalDisk' not available. Performance counters may be disabled.");
+                return;
+            }
+
+            // Check if drive instance exists
+            if (!PerformanceCounterCategory.InstanceExists(perfCounterInstanceName, "LogicalDisk"))
+            {
+                StatusMessage = $"Disk speed monitoring unavailable for drive {perfCounterInstanceName}";
                 _logger.LogMessage($"Performance counter for drive {perfCounterInstanceName} not available.");
                 return;
             }
 
-            var counter = new PerformanceCounter("LogicalDisk", "Disk Write Bytes/sec", perfCounterInstanceName, true);
-            counter.NextValue(); // Prime the counter
-            _diskWriteSpeedCounter = counter;
+            // Initialize read speed counter
+            var readCounter = new PerformanceCounter("LogicalDisk", "Disk Read Bytes/sec", perfCounterInstanceName, true);
+            readCounter.NextValue(); // Prime the counter
+            _diskReadSpeedCounter = readCounter;
+
+            // Initialize write speed counter
+            var writeCounter = new PerformanceCounter("LogicalDisk", "Disk Write Bytes/sec", perfCounterInstanceName, true);
+            writeCounter.NextValue(); // Prime the counter
+            _diskWriteSpeedCounter = writeCounter;
+
             CurrentDriveLetter = driveLetter;
-            _logger.LogMessage($"Monitoring write speed for drive: {perfCounterInstanceName}");
+            StatusMessage = null; // Clear any previous status
+            _logger.LogMessage($"Monitoring disk speed for drive: {perfCounterInstanceName}");
         }
         catch (Exception ex)
         {
+            StatusMessage = "Disk speed monitoring unavailable - performance counter error";
             _logger.LogMessage($"Failed to initialize disk monitor for {perfCounterInstanceName}: {ex.Message}");
             StopMonitoring();
         }
@@ -64,9 +93,28 @@ public class DiskMonitorService : IDiskMonitorService, IDisposable
 
     public void StopMonitoring()
     {
+        _diskReadSpeedCounter?.Dispose();
+        _diskReadSpeedCounter = null;
         _diskWriteSpeedCounter?.Dispose();
         _diskWriteSpeedCounter = null;
         CurrentDriveLetter = null;
+        StatusMessage = null;
+    }
+
+    public string GetCurrentReadSpeedFormatted()
+    {
+        if (_diskReadSpeedCounter == null) return "N/A";
+
+        try
+        {
+            var val = _diskReadSpeedCounter.NextValue();
+            return Formatter.FormatBytesPerSecond(val);
+        }
+        catch
+        {
+            StopMonitoring();
+            return "N/A";
+        }
     }
 
     public string GetCurrentWriteSpeedFormatted()

@@ -235,6 +235,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <Border Grid.Column="0" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
                     <StackPanel>
@@ -256,13 +257,21 @@
                         <TextBlock Text="Skipped:" FontWeight="SemiBold" Foreground="Orange" HorizontalAlignment="Center" /><TextBlock x:Name="SkippedValue" Text="0" HorizontalAlignment="Center" />
                     </StackPanel>
                 </Border>
-                <!-- ADDED THIS BORDER BACK -->
                 <Border Grid.Column="4" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
                     <StackPanel>
                         <TextBlock Text="Time:" FontWeight="SemiBold" HorizontalAlignment="Center" /><TextBlock x:Name="ProcessingTimeValue" Text="00:00:00" HorizontalAlignment="Center" />
                     </StackPanel>
                 </Border>
                 <Border Grid.Column="5" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
+                    <StackPanel>
+                        <TextBlock Text="Read Speed:" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock x:Name="ReadSpeedValue" Text="N/A" />
+                            <TextBlock x:Name="ReadSpeedDriveIndicator" Text="" Margin="5,0,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="6" BorderBrush="#BDBDBD" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="White">
                     <StackPanel>
                         <TextBlock Text="Write Speed:" FontWeight="SemiBold" HorizontalAlignment="Center" />
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
