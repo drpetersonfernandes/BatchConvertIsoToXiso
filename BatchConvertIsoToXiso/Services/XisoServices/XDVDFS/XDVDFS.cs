@@ -35,48 +35,63 @@ internal static class Xdvdfs
             0x0FD90000L, // XGD2 standard
             0x2080000L, // Alternative XGD1
             0x10000L, // Standard XISO (no video partition)
-            0x89D80000L // XGD3
+            0x89D80000L, // XGD3
+            0x0L, // Raw XISO (no offset)
+            0x41000000L, // Some XGD1 variants
+            0x50000000L // Some original Xbox variants
         };
 
         // Check common offsets first (fast path)
         foreach (var offset in commonOffsets)
         {
-            if (TryValidateSignatureAtOffset(isoFs, offset, signatureBytes))
+            if (offset + 0x10000 + 0x800 <= fileLength && TryValidateSignatureAtOffset(isoFs, offset, signatureBytes))
             {
                 return offset;
             }
         }
 
         // If not found at common offsets, perform sector-by-sector scan
-        // Start from sector 32 (where XISO header typically is) to avoid video partition false positives
+        // Scan key regions where game partitions are typically found
+        // Video partition on Redump ISOs is usually ~7-10MB, game partition starts after
         const int sectorSize = 2048;
-        const int startSector = 32;
-        var maxOffset = Math.Min(fileLength - signatureBytes.Length, 0x10000000L); // Scan up to ~256MB
-
-        isoFs.Seek(startSector * sectorSize, SeekOrigin.Begin);
-        var buffer = new byte[sectorSize];
-        var position = startSector * sectorSize;
-
-        while (position < maxOffset)
+        var scanRegions = new[]
         {
-            var bytesRead = isoFs.Read(buffer, 0, sectorSize);
-            if (bytesRead < signatureBytes.Length)
-                break;
+            (start: 0x800000L, end: Math.Min(fileLength, 0x20000000L)), // 8MB to 512MB
+            (start: 0x18000000L, end: Math.Min(fileLength, 0x30000000L)), // 384MB to 768MB (XGD1 area)
+            (start: 0x80000000L, end: Math.Min(fileLength, 0xA0000000L)) // 2GB to 2.5GB (XGD3 area)
+        };
 
-            // Check if signature exists in this sector
-            for (var i = 0; i <= bytesRead - signatureBytes.Length; i++)
+        foreach (var (start, end) in scanRegions)
+        {
+            if (start >= fileLength)
+                continue;
+
+            isoFs.Seek(start, SeekOrigin.Begin);
+            var buffer = new byte[sectorSize * 16]; // Read 16 sectors at a time for efficiency
+            var position = start;
+
+            while (position < end)
             {
-                if (buffer.Skip(i).Take(signatureBytes.Length).SequenceEqual(signatureBytes))
+                var bytesToRead = (int)Math.Min(buffer.Length, end - position);
+                var bytesRead = isoFs.Read(buffer, 0, bytesToRead);
+                if (bytesRead < signatureBytes.Length)
+                    break;
+
+                // Check if signature exists in this buffer
+                for (var i = 0; i <= bytesRead - signatureBytes.Length; i++)
                 {
-                    var candidateOffset = position + i - XisoHeaderOffset; // Signature is at header + 0x10000
-                    if (candidateOffset >= 0 && TryValidateSignatureAtOffset(isoFs, candidateOffset, signatureBytes))
+                    if (buffer.Skip(i).Take(signatureBytes.Length).SequenceEqual(signatureBytes))
                     {
-                        return candidateOffset;
+                        var candidateOffset = position + i - XisoHeaderOffset;
+                        if (candidateOffset >= 0 && TryValidateSignatureAtOffset(isoFs, candidateOffset, signatureBytes))
+                        {
+                            return candidateOffset;
+                        }
                     }
                 }
-            }
 
-            position += bytesRead;
+                position += bytesRead;
+            }
         }
 
         return null;
@@ -143,7 +158,50 @@ internal static class Xdvdfs
             if (offset + rootOffsetBytes + rootSize > isoFs.Length)
                 return false;
 
-            return true;
+            // Additional validation: try to read the first file entry in the root directory
+            // This ensures we're not hitting a false positive from video partition data
+            var firstEntryOffset = offset + rootOffsetBytes;
+            if (firstEntryOffset + 14 > isoFs.Length)
+                return false;
+
+            try
+            {
+                isoFs.Seek(firstEntryOffset, SeekOrigin.Begin);
+                var entryBuffer = new byte[14];
+                if (isoFs.Read(entryBuffer, 0, 14) != 14)
+                    return false;
+
+                // Read entry attributes and name length
+                var attributes = entryBuffer[12];
+                var nameLength = entryBuffer[13];
+
+                // Validate entry attributes (should be 0x00-0x1F for files, 0x10-0x1F for directories)
+                // and name length should be reasonable (1-255 for valid files)
+                if (nameLength > 0 && (attributes & 0xE0) == 0)
+                {
+                    // Try to read the filename
+                    if (firstEntryOffset + 14 + nameLength <= isoFs.Length)
+                    {
+                        var nameBuffer = new byte[nameLength];
+                        isoFs.Seek(firstEntryOffset + 14, SeekOrigin.Begin);
+                        if (isoFs.Read(nameBuffer, 0, nameLength) == nameLength)
+                        {
+                            var fileName = Encoding.ASCII.GetString(nameBuffer).TrimEnd('\0');
+                            // If we can read a non-empty filename, this is likely a real game partition
+                            if (!string.IsNullOrWhiteSpace(fileName) && fileName.All(static c => char.IsAscii(c) && !char.IsControl(c)))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
         catch
         {
