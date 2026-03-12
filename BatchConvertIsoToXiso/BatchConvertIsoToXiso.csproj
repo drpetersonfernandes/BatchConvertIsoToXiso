@@ -43,4 +43,13 @@
         <Compile Remove="References\**" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Remove="images\about.png" />
+      <Resource Include="images\about.png" />
+      <None Remove="images\exit.png" />
+      <Resource Include="images\exit.png" />
+      <None Remove="images\logo.png" />
+      <Resource Include="images\logo.png" />
+    </ItemGroup>
+
 </Project>
