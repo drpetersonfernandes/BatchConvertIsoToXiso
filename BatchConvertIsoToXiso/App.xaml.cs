@@ -14,9 +14,11 @@ public partial class App
 {
     private const string BugReportApiUrl = "https://www.purelogiccode.com/bugreport/api/send-bug-report";
     private const string BugReportApiKey = "hjh7yu6t56tyr540o9u8767676r5674534453235264c75b6t7ggghgg76trf564e";
+    private const string StatsApiUrl = "https://www.purelogiccode.com/ApplicationStats/stats";
     public const string ApplicationName = "BatchConvertIsoToXiso";
 
     private IBugReportService? _bugReportService;
+    private IStatsService? _statsService;
     private static IServiceProvider? ServiceProvider { get; set; }
     private IMessageBoxService? _messageBoxService;
     private ILogger? _logger;
@@ -41,12 +43,15 @@ public partial class App
             _bugReportService = ServiceProvider.GetRequiredService<IBugReportService>();
             _messageBoxService = ServiceProvider.GetRequiredService<IMessageBoxService>();
             _logger = ServiceProvider.GetRequiredService<ILogger>();
+            _statsService = ServiceProvider.GetRequiredService<IStatsService>();
 
             // Startup cleanup
             if (_logger != null)
             {
                 await TempFolderCleanupHelper.CleanupBatchConvertTempFoldersAsync(_logger);
             }
+
+            _ = _statsService?.SendStatsAsync();
 
             // Create and show the main window
             using var scope = ServiceProvider.CreateScope();
@@ -72,6 +77,7 @@ public partial class App
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<IBugReportService>(static _ => new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
+        services.AddSingleton<IStatsService>(static _ => new StatsService(StatsApiUrl, BugReportApiKey, ApplicationName));
         services.AddSingleton<IUpdateChecker, UpdateChecker>();
         services.AddSingleton<ILogger, LoggerService>();
         services.AddSingleton<IDiskMonitorService, DiskMonitorService>();
