@@ -83,6 +83,19 @@ internal static class Xdvdfs
     }
 
     /// <summary>
+    /// Validates that a valid XISO signature exists at the specified offset.
+    /// This is a public wrapper around TryValidateSignatureAtOffset for external validation.
+    /// </summary>
+    /// <param name="isoFs">The ISO file stream.</param>
+    /// <param name="offset">The offset to check.</param>
+    /// <returns>True if valid XISO signature found at the offset, false otherwise.</returns>
+    public static bool ValidateXisoSignatureAtOffset(FileStream isoFs, long offset)
+    {
+        var signatureBytes = Encoding.ASCII.GetBytes(XdvdfsSignature);
+        return TryValidateSignatureAtOffset(isoFs, offset, signatureBytes);
+    }
+
+    /// <summary>
     /// Validates that a valid XDVDFS signature exists at the specified offset.
     /// Also checks for secondary signature at offset + 0x7EC for additional validation.
     /// </summary>

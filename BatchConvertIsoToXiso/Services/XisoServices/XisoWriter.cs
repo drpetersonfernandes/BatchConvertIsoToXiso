@@ -85,10 +85,11 @@ public class XisoWriter
 
                 await using FileStream isoFs = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
 
-                // Hybrid Strategy: If no known offset, try to find the signature
-                if (inputOffset == 0 && isoSize > 0x100000) // Only scan for files larger than 1MB
+                // Validate the detected offset by checking for XISO signature
+                // If signature not found at expected offset, scan for it
+                if (!Xdvdfs.ValidateXisoSignatureAtOffset(isoFs, inputOffset))
                 {
-                    _logger.LogMessage("Scanning for XISO signature (unknown Redump format)...");
+                    _logger.LogMessage($"XISO signature not found at expected offset 0x{inputOffset:X}. Scanning for game partition...");
                     var detectedOffset = Xdvdfs.FindXisoSignatureOffset(isoFs);
                     switch (detectedOffset)
                     {
@@ -98,11 +99,20 @@ public class XisoWriter
                             signatureScanned = true;
                             _logger.LogMessage($"Found game partition at offset 0x{inputOffset:X} ({inputOffset / (1024 * 1024)} MB). Extracting...");
                             break;
-                        case 0:
+                        case 0 when redumpIsoType < 0:
                             _logger.LogMessage("XISO signature found at start of file (already trimmed or standard XISO).");
                             break;
                         default:
-                            _logger.LogMessage("No XISO signature found. Treating as standard XISO...");
+                            if (redumpIsoType >= 0)
+                            {
+                                // Was detected as Redump but signature not found - try using the offset anyway
+                                _logger.LogMessage($"Warning: XISO signature not found, but file size matches known Redump format. Attempting extraction at offset 0x{inputOffset:X}...");
+                            }
+                            else
+                            {
+                                _logger.LogMessage("No XISO signature found. Treating as standard XISO...");
+                            }
+
                             break;
                     }
                 }
