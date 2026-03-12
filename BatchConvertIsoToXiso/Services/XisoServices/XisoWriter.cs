@@ -60,6 +60,7 @@ public class XisoWriter
 
                 long inputOffset;
                 long targetXisoLength;
+                var signatureScanned = false;
 
                 if (redumpIsoType >= 0)
                 {
@@ -77,12 +78,34 @@ public class XisoWriter
                 }
                 else
                 {
-                    // If it's not a Redump size, treat it as an XISO (Standard or already trimmed)
+                    // If it's not a known Redump size, treat it as an XISO (Standard or already trimmed)
                     inputOffset = 0;
                     targetXisoLength = isoSize;
                 }
 
                 await using FileStream isoFs = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+                // Hybrid Strategy: If no known offset, try to find the signature
+                if (inputOffset == 0 && isoSize > 0x100000) // Only scan for files larger than 1MB
+                {
+                    _logger.LogMessage("Scanning for XISO signature (unknown Redump format)...");
+                    var detectedOffset = Xdvdfs.FindXisoSignatureOffset(isoFs);
+                    switch (detectedOffset)
+                    {
+                        case > 0:
+                            inputOffset = detectedOffset.Value;
+                            targetXisoLength = isoSize - inputOffset;
+                            signatureScanned = true;
+                            _logger.LogMessage($"Found game partition at offset 0x{inputOffset:X} ({inputOffset / (1024 * 1024)} MB). Extracting...");
+                            break;
+                        case 0:
+                            _logger.LogMessage("XISO signature found at start of file (already trimmed or standard XISO).");
+                            break;
+                        default:
+                            _logger.LogMessage("No XISO signature found. Treating as standard XISO...");
+                            break;
+                    }
+                }
 
                 // Generate valid ranges based on XDVDFS traversal
                 List<(uint Start, uint End)> validRanges;
@@ -116,7 +139,18 @@ public class XisoWriter
                     return FileProcessingStatus.AlreadyOptimized;
                 }
 
-                _logger.LogMessage(inputOffset == 0 ? "Detected XISO. Trimming..." : "Detected Redump ISO. Extracting...");
+                if (signatureScanned)
+                {
+                    _logger.LogMessage("Extracting game partition using detected signature...");
+                }
+                else if (inputOffset == 0)
+                {
+                    _logger.LogMessage("Detected XISO. Trimming...");
+                }
+                else
+                {
+                    _logger.LogMessage("Detected Redump ISO. Extracting...");
+                }
 
                 {
                     await using FileStream xisoFs = new(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
@@ -126,8 +160,8 @@ public class XisoWriter
 
                     // Improvement #2: Buffer size optimization based on architecture
                     var bufferSize = Environment.Is64BitProcess
-                        ? 1024 * 1024  // 1MB for 64-bit (better for SSDs)
-                        : 128 * 1024;   // 128KB for 32-bit
+                        ? 1024 * 1024 // 1MB for 64-bit (better for SSDs)
+                        : 128 * 1024; // 128KB for 32-bit
                     var buffer = new byte[bufferSize];
 
                     isoFs.Seek(inputOffset, SeekOrigin.Begin);
@@ -144,9 +178,10 @@ public class XisoWriter
                         {
                             token.ThrowIfCancellationRequested();
                             var toRead = (int)Math.Min(buffer.Length, remaining);
-                            var read = isoFs.Read(buffer, 0, toRead);
+                            var read = await isoFs.ReadAsync(buffer.AsMemory(0, toRead), token);
                             if (read == 0) break;
-                            xisoFs.Write(buffer, 0, read);
+
+                            await xisoFs.WriteAsync(buffer.AsMemory(0, read), token);
                             remaining -= read;
                             numBytesProcessed += read;
                         }
@@ -158,72 +193,72 @@ public class XisoWriter
 
                         while (numBytesProcessed < targetXisoLength)
                         {
-                        token.ThrowIfCancellationRequested();
+                            token.ThrowIfCancellationRequested();
 
-                        var currentPhysicalByte = inputOffset + numBytesProcessed;
-                        // Calculate sector index relative to start of disc
-                        var currentSector = currentPhysicalByte / Utils.SectorSize;
+                            var currentPhysicalByte = inputOffset + numBytesProcessed;
+                            // Calculate sector index relative to start of disc
+                            var currentSector = currentPhysicalByte / Utils.SectorSize;
 
-                        // Trim everything after the last valid file extent
-                        if (validRanges.Count > 0 && currentSector > lastValidSector)
-                        {
-                            break;
-                        }
-
-                        long bytesUntilEndOfExtent = 0;
-                        long bytesToWipe = 0;
-
-                        // Determine if current sector is data or filler
-                        for (var i = 0; i < validRanges.Count; i++)
-                        {
-                            if (currentSector >= validRanges[i].Start && currentSector <= validRanges[i].End)
+                            // Trim everything after the last valid file extent
+                            if (validRanges.Count > 0 && currentSector > lastValidSector)
                             {
-                                bytesUntilEndOfExtent = (validRanges[i].End + 1) * Utils.SectorSize - currentPhysicalByte;
                                 break;
                             }
-                            else if (currentSector < validRanges[i].Start && (i == 0 || currentSector > validRanges[i - 1].End))
+
+                            long bytesUntilEndOfExtent = 0;
+                            long bytesToWipe = 0;
+
+                            // Determine if current sector is data or filler
+                            for (var i = 0; i < validRanges.Count; i++)
                             {
-                                bytesToWipe = validRanges[i].Start * Utils.SectorSize - currentPhysicalByte;
-                                break;
-                            }
-                        }
-
-                        if (bytesToWipe > 0)
-                        {
-                            if (bytesToWipe % Utils.SectorSize != 0)
-                            {
-                                _logger.LogMessage("[ERROR] Unexpected Error: Filler data is not sector aligned.");
-                                return FileProcessingStatus.Failed;
-                            }
-
-                            // Wipe logic: Write zeroes to the output XISO
-                            Utils.WriteZeroes(xisoFs, -1, bytesToWipe, buffer);
-                            numBytesProcessed += bytesToWipe;
-
-                            // [FIX] Moves the input stream forward when wiping.
-                            isoFs.Seek(bytesToWipe, SeekOrigin.Current);
-                        }
-                        else
-                        {
-                            // Data logic: Copy valid sectors
-                            var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : targetXisoLength - numBytesProcessed;
-
-                            if (!Utils.FillBuffer(isoFs, xisoFs, -1, bytesToRead, buffer))
-                            {
-                                _logger.LogMessage("[ERROR] Failed writing game partition data.");
-                                return FileProcessingStatus.Failed;
+                                if (currentSector >= validRanges[i].Start && currentSector <= validRanges[i].End)
+                                {
+                                    bytesUntilEndOfExtent = (validRanges[i].End + 1) * Utils.SectorSize - currentPhysicalByte;
+                                    break;
+                                }
+                                else if (currentSector < validRanges[i].Start && (i == 0 || currentSector > validRanges[i - 1].End))
+                                {
+                                    bytesToWipe = validRanges[i].Start * Utils.SectorSize - currentPhysicalByte;
+                                    break;
+                                }
                             }
 
-                            numBytesProcessed += bytesToRead;
-                        }
+                            if (bytesToWipe > 0)
+                            {
+                                if (bytesToWipe % Utils.SectorSize != 0)
+                                {
+                                    _logger.LogMessage("[ERROR] Unexpected Error: Filler data is not sector aligned.");
+                                    return FileProcessingStatus.Failed;
+                                }
 
-                        // Improvement #3: Time-based progress reporting (every 500ms max)
-                        if (progressTimer.ElapsedMilliseconds > 500)
-                        {
-                            progress.Report(new BatchOperationProgress { StatusText = $"Processing: {numBytesProcessed / (1024 * 1024)} MB" });
-                            progressTimer.Restart();
+                                // Wipe logic: Write zeroes to the output XISO
+                                Utils.WriteZeroes(xisoFs, -1, bytesToWipe, buffer);
+                                numBytesProcessed += bytesToWipe;
+
+                                // [FIX] Moves the input stream forward when wiping.
+                                isoFs.Seek(bytesToWipe, SeekOrigin.Current);
+                            }
+                            else
+                            {
+                                // Data logic: Copy valid sectors
+                                var bytesToRead = bytesUntilEndOfExtent > 0 ? bytesUntilEndOfExtent : targetXisoLength - numBytesProcessed;
+
+                                if (!Utils.FillBuffer(isoFs, xisoFs, -1, bytesToRead, buffer))
+                                {
+                                    _logger.LogMessage("[ERROR] Failed writing game partition data.");
+                                    return FileProcessingStatus.Failed;
+                                }
+
+                                numBytesProcessed += bytesToRead;
+                            }
+
+                            // Improvement #3: Time-based progress reporting (every 500ms max)
+                            if (progressTimer.ElapsedMilliseconds > 500)
+                            {
+                                progress.Report(new BatchOperationProgress { StatusText = $"Processing: {numBytesProcessed / (1024 * 1024)} MB" });
+                                progressTimer.Restart();
+                            }
                         }
-                    }
                     } // End of else block for standard trimming
 
                     // Finalize file size (Trimming)

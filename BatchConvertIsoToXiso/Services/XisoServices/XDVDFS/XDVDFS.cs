@@ -12,8 +12,131 @@ namespace BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
 internal static class Xdvdfs
 {
     private const long XisoHeaderOffset = 0x10000;
+
     // Standard XDVDFS signature
     private const string XdvdfsSignature = "MICROSOFT*XBOX*MEDIA";
+
+    /// <summary>
+    /// Searches for the XDVDFS signature in the ISO file.
+    /// Scans at common Redump partition offsets first, then performs a sector-by-sector scan if needed.
+    /// </summary>
+    /// <param name="isoFs">The ISO file stream to search.</param>
+    /// <returns>The offset where the game partition starts, or null if not found.</returns>
+    public static long? FindXisoSignatureOffset(FileStream isoFs)
+    {
+        var signatureBytes = Encoding.ASCII.GetBytes(XdvdfsSignature);
+        var fileLength = isoFs.Length;
+
+        // Common Redump game partition offsets to check first (fast path)
+        // These are the most common offsets found in Redump Xbox ISOs
+        var commonOffsets = new[]
+        {
+            0x18300000L, // XGD1 standard
+            0x0FD90000L, // XGD2 standard
+            0x2080000L, // Alternative XGD1
+            0x10000L, // Standard XISO (no video partition)
+            0x89D80000L // XGD3
+        };
+
+        // Check common offsets first (fast path)
+        foreach (var offset in commonOffsets)
+        {
+            if (TryValidateSignatureAtOffset(isoFs, offset, signatureBytes))
+            {
+                return offset;
+            }
+        }
+
+        // If not found at common offsets, perform sector-by-sector scan
+        // Start from sector 32 (where XISO header typically is) to avoid video partition false positives
+        const int sectorSize = 2048;
+        const int startSector = 32;
+        var maxOffset = Math.Min(fileLength - signatureBytes.Length, 0x10000000L); // Scan up to ~256MB
+
+        isoFs.Seek(startSector * sectorSize, SeekOrigin.Begin);
+        var buffer = new byte[sectorSize];
+        var position = startSector * sectorSize;
+
+        while (position < maxOffset)
+        {
+            var bytesRead = isoFs.Read(buffer, 0, sectorSize);
+            if (bytesRead < signatureBytes.Length)
+                break;
+
+            // Check if signature exists in this sector
+            for (var i = 0; i <= bytesRead - signatureBytes.Length; i++)
+            {
+                if (buffer.Skip(i).Take(signatureBytes.Length).SequenceEqual(signatureBytes))
+                {
+                    var candidateOffset = position + i - XisoHeaderOffset; // Signature is at header + 0x10000
+                    if (candidateOffset >= 0 && TryValidateSignatureAtOffset(isoFs, candidateOffset, signatureBytes))
+                    {
+                        return candidateOffset;
+                    }
+                }
+            }
+
+            position += bytesRead;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Validates that a valid XDVDFS signature exists at the specified offset.
+    /// Also checks for secondary signature at offset + 0x7EC for additional validation.
+    /// </summary>
+    private static bool TryValidateSignatureAtOffset(FileStream isoFs, long offset, byte[] signatureBytes)
+    {
+        try
+        {
+            var headerPosition = offset + XisoHeaderOffset;
+            if (headerPosition + 0x800 > isoFs.Length)
+                return false;
+
+            // Check primary signature
+            isoFs.Seek(headerPosition, SeekOrigin.Begin);
+            var primaryBuffer = new byte[signatureBytes.Length];
+            if (isoFs.Read(primaryBuffer, 0, signatureBytes.Length) != signatureBytes.Length)
+                return false;
+
+            if (!primaryBuffer.SequenceEqual(signatureBytes))
+                return false;
+
+            // Check secondary signature at offset + 0x7EC for additional validation
+            isoFs.Seek(headerPosition + 0x7EC, SeekOrigin.Begin);
+            var secondaryBuffer = new byte[signatureBytes.Length];
+            if (isoFs.Read(secondaryBuffer, 0, signatureBytes.Length) != signatureBytes.Length)
+                return false;
+
+            if (!secondaryBuffer.SequenceEqual(signatureBytes))
+                return false;
+
+            // Additional validation: check that root directory offset and size are reasonable
+            isoFs.Seek(headerPosition + 0x14, SeekOrigin.Begin);
+            var rootOffsetBuffer = new byte[4];
+            var rootSizeBuffer = new byte[4];
+            if (isoFs.Read(rootOffsetBuffer, 0, 4) != 4 || isoFs.Read(rootSizeBuffer, 0, 4) != 4)
+                return false;
+
+            var rootOffset = BitConverter.ToUInt32(rootOffsetBuffer, 0);
+            var rootSize = BitConverter.ToUInt32(rootSizeBuffer, 0);
+
+            // Root offset should be within file bounds and not unreasonably large
+            if (rootOffset == 0 || rootSize == 0)
+                return false;
+
+            var rootOffsetBytes = (long)rootOffset * Utils.SectorSize;
+            if (offset + rootOffsetBytes + rootSize > isoFs.Length)
+                return false;
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     private struct DirectoryWorkItem
     {
@@ -131,14 +254,14 @@ internal static class Xdvdfs
         var signatureBuffer = new byte[20];
         if (isoFs.Read(signatureBuffer, 0, 20) != 20)
         {
-            throw new Exception("Could not read XISO header signature (EOF).");
+            throw new EndOfStreamException("Could not read XISO header signature (EOF).");
         }
-        
+
         var signature = Encoding.ASCII.GetString(signatureBuffer);
-        if (!signature.StartsWith(XdvdfsSignature))
+        if (!signature.StartsWith(XdvdfsSignature, StringComparison.Ordinal))
         {
             // If signature is invalid, throw exception to be caught by XisoWriter
-            throw new Exception($"Invalid XISO header signature found: '{signature.Trim()}' at offset {headerOffset}. Expected '{XdvdfsSignature}'.");
+            throw new InvalidDataException($"Invalid XISO header signature found: '{signature.Trim()}' at offset {headerOffset}. Expected '{XdvdfsSignature}'.");
         }
 
         // Add Header sectors (Standard XISO behavior)
