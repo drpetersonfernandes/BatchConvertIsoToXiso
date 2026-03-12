@@ -30,7 +30,7 @@ A high-performance Windows WPF utility for the Xbox preservation and emulation c
 
 ## Overview
 
-**Batch ISO to XISO Converter** streamlines the process of converting standard Xbox and Xbox 360 ISOs into the optimized, trimmed **XISO** format. Built with a flexible dual-engine architecture, the tool combines a **native C# XDVDFS engine** with optional **external tool integration**, delivering superior performance and modern features like real-time disk write monitoring.
+**Batch ISO to XISO Converter** streamlines the process of converting standard Xbox and Xbox 360 ISOs into the optimized, trimmed **XISO** format. Built with a flexible multi-engine architecture, the tool combines a **native C# XDVDFS engine** with robust **external tool integration** (extract-xiso and xdvdfs), delivering superior performance and modern features like real-time disk write monitoring.
 
 Whether you're managing a large collection of Xbox game backups or verifying the integrity of your dumps, this application provides a user-friendly interface with powerful batch processing capabilities.
 
@@ -39,11 +39,11 @@ Whether you're managing a large collection of Xbox game backups or verifying the
 ## Key Features
 
 ### 🔄 Batch Conversion
-- **Dual Engine Support**: Choose between the native C# XDVDFS engine or extract-xiso.exe for conversion
+- **Multi-Engine Support**: Choose between the native C# XDVDFS engine, `extract-xiso.exe`, or `xdvdfs.exe` for conversion
 - **Smart Trimming**: Rebuilds ISOs into XISO format, removing unnecessary system padding and saving gigabytes of storage
 - **Archive Support**: Process `.zip`, `.7z`, and `.rar` files directly with high-performance extraction via SharpCompress
 - **CUE/BIN Support**: Integrated `bchunk` support for converting classic disc images to ISO format
-- **System Update Removal**: Option to skip the `$SystemUpdate` folder for additional space savings
+- **System Update Removal**: Option to skip the `$SystemUpdate` folder for additional space savings (supported by native engine and extract-xiso)
 
 ### ✅ Integrity Testing
 - **Structural Validation**: Deep traversal of the XDVDFS file tree to ensure filesystem validity
@@ -89,7 +89,7 @@ No installation required – the application is fully portable.
     - **Remove System Update**: Skip `$SystemUpdate` folder to save space
     - **Replace Originals**: Replace input files with converted versions
     - **Test After Conversion**: Automatically verify converted ISOs
-    - **Use extract-xiso**: Toggle between native engine and external tool
+    - **Conversion Method**: Select between extract-xiso, xdvdfs, or Native Logic
 5. Click **"Convert"** to start the batch process
 
 ### Testing ISO Integrity
@@ -131,6 +131,7 @@ Utilizes `Microsoft.Extensions.DependencyInjection` for comprehensive service ma
 | [`IOrchestratorService`](BatchConvertIsoToXiso/Interfaces/IOrchestratorService.cs)             | [`OrchestratorService`](BatchConvertIsoToXiso/Services/OrchestratorService.cs)                                           | Coordinates batch operation workflows               |
 | [`INativeIsoIntegrityService`](BatchConvertIsoToXiso/Interfaces/INativeIsoIntegrityService.cs) | [`NativeIsoIntegrityService`](BatchConvertIsoToXiso/Services/XisoServices/BinaryOperations/NativeIsoIntegrityService.cs) | XDVDFS filesystem validation and surface scanning   |
 | [`IExtractXisoService`](BatchConvertIsoToXiso/Interfaces/IExtractXisoService.cs)               | [`ExtractXisoService`](BatchConvertIsoToXiso/Services/ExtractXisoService.cs)                                             | External extract-xiso.exe integration               |
+| [`IXdvdfsService`](BatchConvertIsoToXiso/Interfaces/IXdvdfsService.cs)                         | [`XdvdfsService`](BatchConvertIsoToXiso/Services/XdvdfsService.cs)                                                       | External xdvdfs.exe integration                     |
 | [`IExternalToolService`](BatchConvertIsoToXiso/Interfaces/IExternalToolService.cs)             | [`ExternalToolService`](BatchConvertIsoToXiso/Services/ExternalToolService.cs)                                           | External tool orchestration (bchunk)                |
 | [`XisoWriter`](BatchConvertIsoToXiso/Services/XisoServices/XisoWriter.cs)                      | Native Class                                                                                                             | Core C# engine for rewriting and trimming ISO files |
 | [`IFileExtractor`](BatchConvertIsoToXiso/Interfaces/IFileExtractor.cs)                         | [`FileExtractorService`](BatchConvertIsoToXiso/Services/ExtractFiles.cs)                                                 | Archive extraction with error handling              |
@@ -203,8 +204,9 @@ The `MainWindow` is organized into logical partial classes for maintainability:
 
 ## Acknowledgements
 
-- **[XboxKit](https://github.com/Deterous/XboxKit)** - Reference for core XDVDFS logic
 - **[extract-xiso](https://github.com/XboxDev/extract-xiso)** - External XISO conversion tool
+- **[xdvdfs](https://github.com/antangelo/xdvdfs)** - External XDVDFS tool
+- **[XboxKit](https://github.com/Deterous/XboxKit)** - Reference for core XDVDFS logic
 - **bchunk** - CUE/BIN to ISO conversion
 - **[SharpCompress](https://github.com/adamhathcock/sharpcompress)** - High-performance archive extraction
 - **Pure Logic Code** - Development and maintenance
