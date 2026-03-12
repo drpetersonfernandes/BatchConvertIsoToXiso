@@ -12,7 +12,8 @@ namespace BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
 internal static class Xdvdfs
 {
     private const long XisoHeaderOffset = 0x10000;
-    public static readonly byte[] Magic = "XBOX_DVD_LAYOUT_TOOL_SIG"u8.ToArray();
+    // Standard XDVDFS signature
+    private const string XdvdfsSignature = "MICROSOFT*XBOX*MEDIA";
 
     private struct DirectoryWorkItem
     {
@@ -32,6 +33,7 @@ internal static class Xdvdfs
         {
             var item = stack.Pop();
 
+            // Safety check: Ensure ChildOffset is within the directory table size
             if (item.ChildOffset >= item.RootSize) continue;
 
             var cur = isoOffset + item.RootOffset + item.ChildOffset;
@@ -39,7 +41,7 @@ internal static class Xdvdfs
             // Cycle detection
             if (!visited.Add(cur)) continue;
 
-            // Add the directory table sectors as valid, but only once per table.
+            // Add the directory table sectors as valid, but only once per table (when processing root node)
             if (item.ChildOffset == 0)
             {
                 var curOffset = cur / Utils.SectorSize;
@@ -48,6 +50,7 @@ internal static class Xdvdfs
                     validSectors.Add((uint)i);
             }
 
+            // Seek to the current directory entry
             isoFs.Seek(cur, SeekOrigin.Begin);
 
             // Read LeftSubTree offset.
@@ -66,8 +69,12 @@ internal static class Xdvdfs
             if (nameLength > 0)
             {
                 var nameBuffer = new byte[nameLength];
-                isoFs.ReadExactly(nameBuffer, 0, nameLength);
-                fileName = Encoding.ASCII.GetString(nameBuffer);
+                // Use Read instead of ReadExactly for better compatibility/safety
+                var bytesRead = isoFs.Read(nameBuffer, 0, nameLength);
+                if (bytesRead == nameLength)
+                {
+                    fileName = Encoding.ASCII.GetString(nameBuffer);
+                }
             }
 
             var isDirectory = (attributes & 0x10) != 0;
@@ -119,11 +126,27 @@ internal static class Xdvdfs
         var validSectors = new List<uint>();
         var headerOffset = offset + XisoHeaderOffset;
 
+        // Validate Header Signature
+        isoFs.Seek(headerOffset, SeekOrigin.Begin);
+        var signatureBuffer = new byte[20];
+        if (isoFs.Read(signatureBuffer, 0, 20) != 20)
+        {
+            throw new Exception("Could not read XISO header signature (EOF).");
+        }
+        
+        var signature = Encoding.ASCII.GetString(signatureBuffer);
+        if (!signature.StartsWith(XdvdfsSignature))
+        {
+            // If signature is invalid, throw exception to be caught by XisoWriter
+            throw new Exception($"Invalid XISO header signature found: '{signature.Trim()}' at offset {headerOffset}. Expected '{XdvdfsSignature}'.");
+        }
+
         // Add Header sectors (Standard XISO behavior)
         var headerOffsetSector = headerOffset / Utils.SectorSize;
         validSectors.Add((uint)headerOffsetSector);
         validSectors.Add((uint)headerOffsetSector + 1);
 
+        // Read Root Directory Info
         isoFs.Seek(headerOffset + 20, SeekOrigin.Begin);
         var rootOffset = Utils.ReadUInt(isoFs);
         var rootSize = Utils.ReadUInt(isoFs);

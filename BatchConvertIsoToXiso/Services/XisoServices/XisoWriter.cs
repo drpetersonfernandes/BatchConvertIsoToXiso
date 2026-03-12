@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using BatchConvertIsoToXiso.interfaces;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 using BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
+using Microsoft.Win32.SafeHandles;
 
 namespace BatchConvertIsoToXiso.Services.XisoServices;
 
@@ -16,6 +19,28 @@ public class XisoWriter
     private static readonly long[] XisoOffset = [0x18300000, 0xFD90000, 0x89D80000, 0x2080000];
     private static readonly long[] XisoLength = [0x1A2DB0000, 0x1B3880000, 0xBF8A0000, 0x204510000];
     private static readonly long[] RedumpIsoLength = [0x1D26A8000, 0x1D3301800, 0x1D2FEF800, 0x1D3082000, 0x1D3390000, 0x1D31A0000, 0x208E05800, 0x208E03800];
+
+    // P/Invoke for sparse file support (Improvement #1)
+    private const uint FsctlSetSparse = 0x000900C4;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DeviceIoControl(
+        SafeFileHandle hDevice,
+        uint dwIoControlCode,
+        IntPtr lpInBuffer,
+        uint nInBufferSize,
+        IntPtr lpOutBuffer,
+        uint nOutBufferSize,
+        out uint lpBytesReturned,
+        IntPtr lpOverlapped);
+
+    private static void EnableSparseFile(FileStream fileStream)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            DeviceIoControl(fileStream.SafeFileHandle, FsctlSetSparse, IntPtr.Zero, 0, IntPtr.Zero, 0, out _, IntPtr.Zero);
+        }
+    }
 
     public XisoWriter(ILogger logger, INativeIsoIntegrityService integrityService)
     {
@@ -65,9 +90,9 @@ public class XisoWriter
                 {
                     validRanges = Xdvdfs.GetXisoRanges(isoFs, inputOffset, true, skipSystemUpdate);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    _logger.LogMessage($"[ERROR] '{Path.GetFileName(sourcePath)}' is not a valid Xbox ISO image.");
+                    _logger.LogMessage($"[ERROR] '{Path.GetFileName(sourcePath)}' is not a valid Xbox ISO image. Details: {ex.Message}");
                     return FileProcessingStatus.Failed;
                 }
 
@@ -79,11 +104,13 @@ public class XisoWriter
                 }
 
                 var lastValidSector = validRanges.Count > 0 ? validRanges[^1].End : 0;
+                var headerOffsetSector = (inputOffset + 0x10000) / Utils.SectorSize;
 
-                // Check if already optimized:
-                // If it's an XISO (offset 0) and current size is <= calculated trimmed size
-                var optimizedSize = (lastValidSector + 1) * Utils.SectorSize;
-                if (inputOffset == 0 && isoSize <= optimizedSize)
+                // Improvement #4: More precise already-optimized check with sector alignment validation
+                var expectedOptimizedSize = (lastValidSector + 1) * Utils.SectorSize;
+                var isExactSize = isoSize == expectedOptimizedSize;
+                var isWithinSector = isoSize <= expectedOptimizedSize && isoSize > (lastValidSector * Utils.SectorSize);
+                if (inputOffset == 0 && (isExactSize || isWithinSector))
                 {
                     _logger.LogMessage($"[INFO] File '{Path.GetFileName(sourcePath)}' is already optimized. Skipping.");
                     return FileProcessingStatus.AlreadyOptimized;
@@ -94,14 +121,43 @@ public class XisoWriter
                 {
                     await using FileStream xisoFs = new(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
-                    // Pre-allocate buffer to avoid GC pressure in the loop
-                    var buffer = new byte[64 * Utils.SectorSize];
+                    // Improvement #1: Enable sparse file support on Windows (saves disk space and I/O)
+                    EnableSparseFile(xisoFs);
+
+                    // Improvement #2: Buffer size optimization based on architecture
+                    var bufferSize = Environment.Is64BitProcess
+                        ? 1024 * 1024  // 1MB for 64-bit (better for SSDs)
+                        : 128 * 1024;   // 128KB for 32-bit
+                    var buffer = new byte[bufferSize];
 
                     isoFs.Seek(inputOffset, SeekOrigin.Begin);
                     long numBytesProcessed = 0;
 
-                    while (numBytesProcessed < targetXisoLength)
+                    // Improvement #6: Fast path for already-contiguous files
+                    // If there's only one contiguous range from header to last file, use single copy
+                    if (validRanges.Count == 1 && validRanges[0].Start == headerOffsetSector)
                     {
+                        _logger.LogMessage("[INFO] File has contiguous layout - using fast copy...");
+                        var bytesToCopy = (lastValidSector + 1) * Utils.SectorSize;
+                        var remaining = bytesToCopy;
+                        while (remaining > 0)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            var toRead = (int)Math.Min(buffer.Length, remaining);
+                            var read = isoFs.Read(buffer, 0, toRead);
+                            if (read == 0) break;
+                            xisoFs.Write(buffer, 0, read);
+                            remaining -= read;
+                            numBytesProcessed += read;
+                        }
+                    }
+                    else
+                    {
+                        // Standard sector-by-sector trimming loop
+                        var progressTimer = Stopwatch.StartNew(); // Improvement #3
+
+                        while (numBytesProcessed < targetXisoLength)
+                        {
                         token.ThrowIfCancellationRequested();
 
                         var currentPhysicalByte = inputOffset + numBytesProcessed;
@@ -161,15 +217,25 @@ public class XisoWriter
                             numBytesProcessed += bytesToRead;
                         }
 
-                        // UI Progress Update
-                        if (numBytesProcessed % (100 * 1024 * 1024) == 0)
+                        // Improvement #3: Time-based progress reporting (every 500ms max)
+                        if (progressTimer.ElapsedMilliseconds > 500)
                         {
                             progress.Report(new BatchOperationProgress { StatusText = $"Processing: {numBytesProcessed / (1024 * 1024)} MB" });
+                            progressTimer.Restart();
                         }
                     }
+                    } // End of else block for standard trimming
 
                     // Finalize file size (Trimming)
                     xisoFs.SetLength(xisoFs.Position);
+
+                    // Improvement #5: Validate output size matches expectations
+                    var expectedOutputSize = (lastValidSector + 1) * Utils.SectorSize;
+                    if (xisoFs.Length != expectedOutputSize)
+                    {
+                        _logger.LogMessage($"[WARNING] Output size mismatch. Expected: {expectedOutputSize / (1024 * 1024)} MB, Got: {xisoFs.Length / (1024 * 1024)} MB");
+                    }
+
                     _logger.LogMessage($"Successfully created trimmed XISO. Final size: {xisoFs.Length / (1024 * 1024)} MB");
                 }
 
