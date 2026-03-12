@@ -39,4 +39,8 @@
         <None Remove="References\**" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Remove="References\**" />
+    </ItemGroup>
+
 </Project>
