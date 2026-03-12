@@ -155,6 +155,7 @@ public partial class MainWindow
                 CheckOutputIntegrityCheckBox.IsChecked ?? false,
                 SearchSubfoldersConversionCheckBox.IsChecked ?? false,
                 UseExtractXisoRadioButton.IsChecked ?? true,
+                UseXdvdfsRadioButton.IsChecked ?? false,
                 progress, HandleCloudRetryRequest, _cts.Token);
         }
         catch (OperationCanceledException)
@@ -260,7 +261,7 @@ public partial class MainWindow
                 inputFolder,
                 MoveSuccessFilesCheckBox.IsChecked == true,
                 MoveFailedFilesCheckBox.IsChecked == true,
-                SearchSubfoldersTestCheckBox.IsChecked ?? false,
+                true,
                 PerformDeepScanCheckBox.IsChecked ?? false,
                 progress, HandleCloudRetryRequest, _cts.Token);
         }

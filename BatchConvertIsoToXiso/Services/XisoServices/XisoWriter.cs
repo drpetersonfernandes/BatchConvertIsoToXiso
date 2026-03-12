@@ -106,7 +106,7 @@ public class XisoWriter
 
                         var currentPhysicalByte = inputOffset + numBytesProcessed;
                         // Calculate sector index relative to start of disc
-                        var currentSector = (currentPhysicalByte + Utils.SectorSize - 1) / Utils.SectorSize;
+                        var currentSector = currentPhysicalByte / Utils.SectorSize;
 
                         // Trim everything after the last valid file extent
                         if (validRanges.Count > 0 && currentSector > lastValidSector)

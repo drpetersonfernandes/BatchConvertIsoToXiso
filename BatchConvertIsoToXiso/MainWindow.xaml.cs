@@ -21,12 +21,13 @@ public partial class MainWindow
 
     // Summary Stats
     private DateTime _operationStartTime;
-    private readonly DispatcherTimer _processingTimer;
+    private readonly DispatcherTimer _processingTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private int _uiTotalFiles;
     private int _uiSuccessCount;
     private int _uiFailedCount;
     private int _uiSkippedCount;
     private bool _isOperationRunning;
+    private bool _isForceClosing;
 
     private int _invalidIsoErrorCount;
     private int _totalProcessedFiles;
@@ -53,7 +54,6 @@ public partial class MainWindow
         _diskMonitorService = diskMonitorService;
         _nativeIsoTester = nativeIsoTester;
         _logger.Initialize(LogViewer);
-        _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _processingTimer.Tick += ProcessingTimer_Tick;
 
         ResetSummaryStats();
@@ -75,6 +75,8 @@ public partial class MainWindow
 
     private void Window_Closing(object sender, CancelEventArgs e)
     {
+        if (_isForceClosing) return;
+
         if (_isOperationRunning)
         {
             var result = _messageBoxService.Show("An operation is still running. Exit anyway?", "Warning", MessageBoxButton.YesNo, MessageBoxImage.Warning);
@@ -122,6 +124,7 @@ public partial class MainWindow
         // Now perform cleanup and close on the UI thread
         await Dispatcher.InvokeAsync(() =>
         {
+            _isForceClosing = true;
             CleanupResources();
             Close();
         });

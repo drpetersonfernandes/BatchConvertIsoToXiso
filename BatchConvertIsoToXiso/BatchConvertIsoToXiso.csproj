@@ -1,45 +1,40 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <OutputType>WinExe</OutputType>
-        <TargetFramework>net10.0-windows</TargetFramework>
-        <Nullable>enable</Nullable>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <UseWPF>true</UseWPF>
-        <ApplicationIcon>icon\icon.ico</ApplicationIcon>
-        <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
-        <AssemblyVersion>1.10</AssemblyVersion>
-        <FileVersion>1.10</FileVersion>
-        <IsPackable>false</IsPackable>
-        <NeutralLanguage>en-US</NeutralLanguage>
-        <DebugType>embedded</DebugType>
-        <DebugSymbols>true</DebugSymbols>
-        <LangVersion>14</LangVersion>
-        <PublishSingleFile>true</PublishSingleFile>
-        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    </PropertyGroup>
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>icon\icon.ico</ApplicationIcon>
+    <Authors>PureLogicCode</Authors>
+    <Company>PureLogicCode</Company>
+    <IsPackable>false</IsPackable>
+    <AssemblyVersion>2.0.0</AssemblyVersion>
+    <FileVersion>2.0.0</FileVersion>
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
 
-    <ItemGroup>
-        <Resource Include="icon\icon.ico" />
-        <Resource Include="icon\icon.png" />
-        <Resource Include="images\about.png" />
-        <Resource Include="images\exit.png" />
-        <Resource Include="images\logo.png" />
-    </ItemGroup>
+  <ItemGroup>
+    <Content Include="icon\icon.ico" />
+    <Content Include="bchunk.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="extract-xiso.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="xdvdfs.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
-    <ItemGroup>
-        <None Include="bchunk.exe">
-          <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-          <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-        </None>
-        <None Update="extract-xiso.exe">
-          <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.4" />
+    <PackageReference Include="SharpCompress" Version="0.47.0" />
+  </ItemGroup>
 
-    <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
-        <PackageReference Include="SharpCompress" Version="0.46.3" />
-    </ItemGroup>
+  <ItemGroup>
+    <None Remove="References\**" />
+  </ItemGroup>
 
 </Project>

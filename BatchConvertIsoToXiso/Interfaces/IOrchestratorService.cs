@@ -12,6 +12,7 @@ public interface IOrchestratorService
         bool checkIntegrity,
         bool searchSubfolders,
         bool useExtractXiso,
+        bool useXdvdfs,
         IProgress<BatchOperationProgress> progress,
         Func<string, Task<CloudRetryResult>> onCloudRetryRequired,
         CancellationToken token);

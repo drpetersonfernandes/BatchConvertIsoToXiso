@@ -4,6 +4,7 @@ using System.Windows;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
 using Microsoft.Win32;
+using System.Windows.Input;
 
 namespace BatchConvertIsoToXiso;
 
@@ -156,16 +157,18 @@ public partial class MainWindow
         ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
 
         // Update read speed
-        ReadSpeedValue.Text = _diskMonitorService.GetCurrentReadSpeedFormatted();
-        ReadSpeedDriveIndicator.Text = _diskMonitorService.CurrentDriveLetter != null ? $"({_diskMonitorService.CurrentDriveLetter})" : "";
+        ReadSpeedValue?.Text = _diskMonitorService.GetCurrentReadSpeedFormatted();
+
+        ReadSpeedDriveIndicator?.Text = _diskMonitorService.CurrentDriveLetter != null ? $"({_diskMonitorService.CurrentDriveLetter})" : "";
 
         // Update write speed
-        WriteSpeedValue.Text = _diskMonitorService.GetCurrentWriteSpeedFormatted();
-        WriteSpeedDriveIndicator.Text = _diskMonitorService.CurrentDriveLetter != null ? $"({_diskMonitorService.CurrentDriveLetter})" : "";
+        WriteSpeedValue?.Text = _diskMonitorService.GetCurrentWriteSpeedFormatted();
+
+        WriteSpeedDriveIndicator?.Text = _diskMonitorService.CurrentDriveLetter != null ? $"({_diskMonitorService.CurrentDriveLetter})" : "";
 
         // Show status message in status bar if disk speed is unavailable
         var statusMessage = _diskMonitorService.StatusMessage;
-        if (!string.IsNullOrEmpty(statusMessage) && !statusMessage.Equals(StatusTextBlock.Text, StringComparison.Ordinal))
+        if (!string.IsNullOrEmpty(statusMessage) && StatusTextBlock != null && !statusMessage.Equals(StatusTextBlock.Text, StringComparison.Ordinal))
         {
             StatusTextBlock.Text = statusMessage;
         }
@@ -247,19 +250,37 @@ public partial class MainWindow
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             ReadSpeedValue?.Text = "N/A";
+
             ReadSpeedDriveIndicator?.Text = "";
+
             WriteSpeedValue?.Text = "N/A";
+
             WriteSpeedDriveIndicator?.Text = "";
         });
     }
 
     private void UpdateStatus(string status)
     {
-        StatusTextBlock.Text = status;
+        StatusTextBlock?.Text = status;
     }
 
     private void SetCurrentOperationDrive(string? driveLetter)
     {
         _diskMonitorService.StartMonitoring(driveLetter);
+    }
+
+    private void ExtractXisoUrl_Click(object sender, MouseButtonEventArgs e)
+    {
+        _urlOpener.OpenUrl("https://github.com/XboxDev/extract-xiso");
+    }
+
+    private void XdvdfsUrl_Click(object sender, MouseButtonEventArgs e)
+    {
+        _urlOpener.OpenUrl("https://github.com/antangelo/xdvdfs");
+    }
+
+    private void DeterousUrl_Click(object sender, MouseButtonEventArgs e)
+    {
+        _urlOpener.OpenUrl("https://github.com/Deterous/XboxKit");
     }
 }

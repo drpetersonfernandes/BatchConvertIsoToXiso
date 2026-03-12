@@ -61,7 +61,18 @@ public static class DisplayInstructions
                 _logger.LogMessage("WARNING: extract-xiso.exe not found. XISO conversion will fail.");
             }
 
-            _logger.LogMessage("INFO: Archive extraction is enabled (SharpCompress library loaded).");
+            // Check for xdvdfs.exe
+            var xdvdfsPath = Path.Combine(appDirectory, "xdvdfs.exe");
+            if (File.Exists(xdvdfsPath))
+            {
+                _logger.LogMessage("INFO: xdvdfs.exe found. Xdvdfs conversion is enabled.");
+            }
+            else
+            {
+                _logger.LogMessage("WARNING: xdvdfs.exe not found. Xdvdfs conversion will fail.");
+            }
+
+            _logger.LogMessage("");
 
             _logger.LogMessage("--- Ready ---");
         }

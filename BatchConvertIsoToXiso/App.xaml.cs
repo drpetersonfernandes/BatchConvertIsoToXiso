@@ -61,25 +61,6 @@ public partial class App
 
     protected override void OnExit(ExitEventArgs e)
     {
-        if (ServiceProvider != null)
-        {
-            var disposableServices = ServiceProvider.GetServices<object>()
-                .Where(static s => s is IDisposable)
-                .Cast<IDisposable>();
-
-            foreach (var service in disposableServices)
-            {
-                try
-                {
-                    service.Dispose();
-                }
-                catch
-                {
-                    /* Ignore disposal errors */
-                }
-            }
-        }
-
         if (ServiceProvider is IDisposable disposable)
         {
             disposable.Dispose();
@@ -101,6 +82,7 @@ public partial class App
         services.AddTransient<AboutWindow>();
         services.AddSingleton<IExternalToolService, ExternalToolService>();
         services.AddSingleton<IExtractXisoService, ExtractXisoService>();
+        services.AddSingleton<IXdvdfsService, XdvdfsService>();
         services.AddSingleton<IOrchestratorService, OrchestratorService>();
         services.AddSingleton<INativeIsoIntegrityService, NativeIsoIntegrityService>();
         services.AddSingleton<XisoWriter>();

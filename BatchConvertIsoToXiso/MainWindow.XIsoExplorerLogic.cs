@@ -51,7 +51,7 @@ public partial class MainWindow
         }
     }
 
-    private void LoadDirectory(FileEntry dirEntry, string folderName, bool isRoot = false)
+    private void LoadDirectory(FileEntry dirEntry, string folderName, bool isRoot = false, bool isUpNavigation = false)
     {
         if (_explorerIsoSt == null) return;
 
@@ -74,7 +74,7 @@ public partial class MainWindow
                 _explorerPathNames.Clear();
                 _currentDirectoryEntry = null;
             }
-            else
+            else if (!isUpNavigation)
             {
                 // Track this directory in the path for display purposes
                 _explorerPathNames.Push(folderName);
@@ -297,6 +297,6 @@ public partial class MainWindow
         var parentEntry = _parentDirectoryStack.Pop();
         var parentName = _explorerPathNames.Pop();
 
-        LoadDirectory(parentEntry, parentName);
+        LoadDirectory(parentEntry, parentName, false, true);
     }
 }
