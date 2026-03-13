@@ -22,10 +22,10 @@ internal static class Xdvdfs
     /// </summary>
     private static readonly long[] XdvfsOffsets =
     [
-        0,              // XISO (already trimmed or standard XISO without video partition)
-        34078720,       // XGD3 (0x02080000) - ~32.5MB offset
-        265879552,      // XGD2 (0x0FD90000) - ~253.5MB offset
-        405798912,      // XGD1 (0x18300000) - ~387MB offset
+        0, // XISO (already trimmed or standard XISO without video partition)
+        34078720, // XGD3 (0x02080000) - ~32.5MB offset
+        265879552, // XGD2 (0x0FD90000) - ~253.5MB offset
+        405798912 // XGD1 (0x18300000) - ~387MB offset
     ];
 
     /// <summary>
@@ -109,7 +109,8 @@ internal static class Xdvdfs
 
             // Validate entry attributes (should be 0x00-0x1F for files, 0x10-0x1F for directories)
             // and name length should be reasonable (1-255 for valid files)
-            return nameLength > 0 && nameLength <= 255 && (attributes & 0xE0) == 0;
+            // ReSharper disable once PatternIsRedundant
+            return nameLength is > 0 and <= 255 && (attributes & 0xE0) == 0;
         }
         catch
         {
