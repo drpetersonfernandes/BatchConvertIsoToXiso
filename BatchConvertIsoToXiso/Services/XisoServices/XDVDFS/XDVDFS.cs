@@ -17,40 +17,115 @@ internal static class Xdvdfs
     private const string XdvdfsSignature = "MICROSOFT*XBOX*MEDIA";
 
     /// <summary>
+    /// Known XDVDFS partition offsets for different Xbox game disc formats.
+    /// Based on xdvdfs reference implementation by antangelo.
+    /// </summary>
+    private static readonly long[] XdvfsOffsets =
+    [
+        0,              // XISO (already trimmed or standard XISO without video partition)
+        34078720,       // XGD3 (0x02080000) - ~32.5MB offset
+        265879552,      // XGD2 (0x0FD90000) - ~253.5MB offset
+        405798912,      // XGD1 (0x18300000) - ~387MB offset
+    ];
+
+    /// <summary>
     /// Searches for the XDVDFS signature in the ISO file.
-    /// Scans at common Redump partition offsets first, then performs a sector-by-sector scan if needed.
+    /// Uses the xdvdfs "try-all with validation" approach - tries all known offsets
+    /// and validates by reading the actual volume structure (not just signature).
+    /// Falls back to sector scanning for unknown cases.
     /// </summary>
     /// <param name="isoFs">The ISO file stream to search.</param>
     /// <returns>The offset where the game partition starts, or null if not found.</returns>
     public static long? FindXisoSignatureOffset(FileStream isoFs)
     {
-        var signatureBytes = Encoding.ASCII.GetBytes(XdvdfsSignature);
         var fileLength = isoFs.Length;
 
-        // Common Redump game partition offsets to check first (fast path)
-        // These are the most common offsets found in Redump Xbox ISOs
-        var commonOffsets = new[]
+        // Try all known XDVDFS offsets with full validation
+        // This is the xdvdfs approach - try each offset and validate by reading the volume
+        foreach (var offset in XdvfsOffsets)
         {
-            0x18300000L, // XGD1 standard
-            0x0FD90000L, // XGD2 standard
-            0x2080000L, // Alternative XGD1
-            0x10000L, // Standard XISO (no video partition)
-            0x89D80000L, // XGD3
-            0x0L, // Raw XISO (no offset)
-            0x41000000L, // Some XGD1 variants
-            0x50000000L // Some original Xbox variants
-        };
+            if (offset + XisoHeaderOffset + 0x800 > fileLength)
+                continue;
 
-        // Check common offsets first (fast path)
-        foreach (var offset in commonOffsets)
-        {
-            if (offset + 0x10000 + 0x800 <= fileLength && TryValidateSignatureAtOffset(isoFs, offset, signatureBytes))
+            if (TryValidateVolumeAtOffset(isoFs, offset))
             {
                 return offset;
             }
         }
 
-        // If not found at common offsets, perform sector-by-sector scan
+        // Fallback: sector-by-sector scan for non-standard offsets
+        // This handles unknown Redump variants or corrupted images
+        return ScanForSignature(isoFs);
+    }
+
+    /// <summary>
+    /// Validates that a valid XDVDFS volume exists at the specified offset.
+    /// This performs full validation: signature check + root directory validation.
+    /// Based on xdvdfs reference implementation.
+    /// </summary>
+    private static bool TryValidateVolumeAtOffset(FileStream isoFs, long offset)
+    {
+        try
+        {
+            var fileLength = isoFs.Length;
+
+            // Check for valid XDVDFS signature
+            isoFs.Seek(offset + XisoHeaderOffset, SeekOrigin.Begin);
+            var sigBuffer = new byte[20];
+            if (isoFs.Read(sigBuffer, 0, 20) != 20)
+                return false;
+
+            var signature = Encoding.ASCII.GetString(sigBuffer);
+            if (!signature.StartsWith(XdvdfsSignature, StringComparison.Ordinal))
+                return false;
+
+            // Validate root directory exists and has valid parameters
+            isoFs.Seek(offset + XisoHeaderOffset + 20, SeekOrigin.Begin);
+            var rootOffset = Utils.ReadUInt(isoFs);
+            var rootSize = Utils.ReadUInt(isoFs);
+
+            // Root offset should be reasonable (not 0, within file bounds)
+            if (rootOffset == 0)
+                return false;
+
+            // Root size should be reasonable (not 0, not larger than file)
+            var rootOffsetBytes = (long)rootOffset * Utils.SectorSize;
+            if (rootSize == 0 || rootSize > fileLength || offset + rootOffsetBytes + rootSize > fileLength)
+                return false;
+
+            // Try to read the first directory entry to ensure it's a valid filesystem
+            var firstEntryOffset = offset + rootOffsetBytes;
+            if (firstEntryOffset + 14 > fileLength)
+                return false;
+
+            isoFs.Seek(firstEntryOffset, SeekOrigin.Begin);
+            var entryBuffer = new byte[14];
+            if (isoFs.Read(entryBuffer, 0, 14) != 14)
+                return false;
+
+            // Read entry attributes and name length
+            var attributes = entryBuffer[12];
+            var nameLength = entryBuffer[13];
+
+            // Validate entry attributes (should be 0x00-0x1F for files, 0x10-0x1F for directories)
+            // and name length should be reasonable (1-255 for valid files)
+            return nameLength > 0 && nameLength <= 255 && (attributes & 0xE0) == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Performs a sector-by-sector scan for XDVDFS signature.
+    /// Used as fallback when known offsets don't work.
+    /// </summary>
+    private static long? ScanForSignature(FileStream isoFs)
+    {
+        var signatureBytes = Encoding.ASCII.GetBytes(XdvdfsSignature);
+        var fileLength = isoFs.Length;
+
         // Scan key regions where game partitions are typically found
         // Video partition on Redump ISOs is usually ~7-10MB, game partition starts after
         const int sectorSize = 2048;
@@ -83,7 +158,7 @@ internal static class Xdvdfs
                     if (buffer.Skip(i).Take(signatureBytes.Length).SequenceEqual(signatureBytes))
                     {
                         var candidateOffset = position + i - XisoHeaderOffset;
-                        if (candidateOffset >= 0 && TryValidateSignatureAtOffset(isoFs, candidateOffset, signatureBytes))
+                        if (candidateOffset >= 0 && TryValidateVolumeAtOffset(isoFs, candidateOffset))
                         {
                             return candidateOffset;
                         }
