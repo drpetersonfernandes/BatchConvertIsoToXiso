@@ -8,8 +8,6 @@
 
 A high-performance Windows WPF utility for the Xbox preservation and emulation community. Convert, verify, and explore Xbox and Xbox 360 ISO files with dual-engine support: a native C# XDVDFS engine and external tool integration.
 
-![Application Screenshots](screenshot.png)
-
 ---
 
 ## 📋 Table of Contents
@@ -71,8 +69,9 @@ Whether you're managing a large collection of Xbox game backups or verifying the
 ### Prerequisites
 - **Operating System**: Windows 10 (version 1809) or later / Windows 11
 - **Runtime**: [.NET 10.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
-- **Architecture**: x64 (64-bit) - All 3 trim logic will work.
-                    arm64 - the modified Deterous Logic (built-in) will work. The other 2 logics may work.
+- **Architecture Support**:
+    - **x64 (64-bit)**: All three trim logics are supported.
+    - **ARM64**: The built-in modified "Deterous Logic" is supported; the other two logics may also work.
 
 ### Steps
 1. Download the latest release from the [Releases](https://github.com/drpetersonfernandes/BatchConvertIsoToXiso/releases) page
