@@ -39,8 +39,11 @@ Whether you're managing a large collection of Xbox game backups or verifying the
 ## Key Features
 
 ### 🔄 Batch Conversion
-- **Multi-Engine Support**: Choose between the native C# XDVDFS engine, `extract-xiso.exe`, or `xdvdfs.exe` for conversion
-- **Smart Trimming**: Rebuilds ISOs into XISO format, removing unnecessary system padding and saving gigabytes of storage
+- **Multi-Engine Support**: Choose between three conversion methods:
+  - **extract-xiso** (external): Maximum compression by repacking
+  - **xdvdfs** (external): Maximum compression with modern Rust implementation
+  - **Modified Deterous Logic** (built-in): Fast trimming while preserving original structure
+- **Smart Processing**: Removes video partitions and padding, converting Redump ISOs to playable XISO format
 - **Archive Support**: Process `.zip`, `.7z`, and `.rar` files directly with high-performance extraction via SharpCompress
 - **CUE/BIN Support**: Integrated `bchunk` support for converting classic disc images to ISO format
 - **System Update Removal**: Option to skip the `$SystemUpdate` folder for additional space savings (supported by native engine and extract-xiso)
@@ -68,7 +71,8 @@ Whether you're managing a large collection of Xbox game backups or verifying the
 ### Prerequisites
 - **Operating System**: Windows 10 (version 1809) or later / Windows 11
 - **Runtime**: [.NET 10.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
-- **Architecture**: x64 (64-bit) required
+- **Architecture**: x64 (64-bit) - All 3 trim logic will work.
+                    arm64 - the modified Deterous Logic (built-in) will work. The other 2 logics may work.
 
 ### Steps
 1. Download the latest release from the [Releases](https://github.com/drpetersonfernandes/BatchConvertIsoToXiso/releases) page
@@ -89,7 +93,11 @@ No installation required – the application is fully portable.
     - **Remove System Update**: Skip `$SystemUpdate` folder to save space
     - **Replace Originals**: Replace input files with converted versions
     - **Test After Conversion**: Automatically verify converted ISOs
-    - **Conversion Method**: Select between extract-xiso, xdvdfs, or Native Logic
+    - **Conversion Method**: Select between:
+      - **extract-xiso**: Smallest output, external tool
+      - **xdvdfs**: Smallest output, external tool  
+      - **Modified Deterous Logic**: Built-in, fastest, preserves original layout
+      > 💡 See [Conversion Methods Explained](#conversion-methods-explained) for detailed comparison
 5. Click **"Convert"** to start the batch process
 
 ### Testing ISO Integrity
@@ -104,6 +112,84 @@ No installation required – the application is fully portable.
 3. Browse the file tree to view contents without extraction
 4. **Open Files**: Double-click any file to open it with its default application
 5. **Extract Files**: Drag and drop files from the explorer to Windows Explorer, Desktop, or any folder to extract them
+
+---
+
+## Conversion Methods Explained
+
+The application offers **three conversion methods**, each using a different approach to convert Redump ISOs to XISO format:
+
+### Method Comparison
+
+| Feature | extract-xiso | xdvdfs | Deterous Logic (Built-in) |
+|:--------|:-------------|:-------|:--------------------------|
+| **Approach** | Repack | Repack | Trim |
+| **Output Size** | Smallest | Smallest | Slightly Larger |
+| **Safety** | High | High | **Highest** |
+| **Preserves Layout** | No | No | **Yes** |
+| **External Tool** | Required | Required | **Built-in** |
+
+### What Gets Removed
+
+All three methods remove these parts from Redump ISOs:
+- ✅ **Video Partition** (DVD movie/demonstration) - **~7-387 MB removed**
+- ✅ **End Padding** (empty sectors after last file) - **Variable**
+- ✅ **System Update** (optional) - **~100-300 MB removed**
+
+### Key Differences
+
+#### extract-xiso (External Tool)
+- **Developed by**: XboxDev team
+- **Approach**: Reads the entire ISO, creates a new optimized XISO with files packed tightly together
+- **Pros**: Smallest output size, well-tested
+- **Cons**: Requires external executable
+- **Best for**: Maximum storage savings
+
+#### xdvdfs (External Tool)
+- **Developed by**: antangelo
+- **Approach**: Modern Rust implementation that rebuilds the XISO from scratch
+- **Pros**: Smallest output size
+- **Cons**: Requires external executable
+- **Best for**: Maximum compatibility and storage savings
+
+#### Modified Deterous Logic (Built-in)
+- **Approach**: **Trims** the ISO by copying only valid sectors while preserving original file layout
+- **Pros**: 
+  - **Fastest** - No repacking, just sector copying
+  - **Safest** - Original XDVDFS structure preserved exactly
+  - **No external dependencies** - Pure C# implementation
+- **Cons**: Output larger (preserves gaps between files from original ISO)
+- **Best for**: Debugging, preserving exact original structure
+
+### Visual Comparison
+
+```
+Redump ISO (Original):
+[Video Partition][XDVDFS: Header][Dir][File A][gap][File B][gap][File C][Padding]
+
+extract-xiso / xdvdfs Output:
+[XDVDFS: Header][Dir][File A][File B][File C] (gaps removed, tightly packed)
+                      ↑    ↑    ↑
+                 Files repositioned for maximum compression
+
+Deterous Logic Output:
+[XDVDFS: Header][Dir][File A][gap][File B][gap][File C]
+                      ↑         ↑
+                 Original layout preserved, only video/padding removed
+```
+
+### Which Should You Choose?
+
+| Use Case | Recommended Method |
+|:---------|:-------------------|
+| **Maximum storage savings** | xdvdfs or extract-xiso |
+| **Preserving exact game structure** | Deterous Logic |
+| **Debugging / Development** | Deterous Logic |
+| **FTP transfer to Xbox** | xdvdfs or extract-xiso |
+
+### Recommendation
+
+**For most users**: If storage space is critical, use **xdvdfs** or **extract-xiso** for maximum compression.
 
 ---
 
@@ -124,46 +210,6 @@ The application follows modern software engineering principles with a clean, mai
 ### Dependency Injection
 Utilizes `Microsoft.Extensions.DependencyInjection` for comprehensive service management. All core logic is decoupled from the UI, enabling easier testing and modular updates.
 
-### Service Layer
-
-| Interface                                                                                      | Implementation                                                                                                           | Responsibility                                      |
-|:-----------------------------------------------------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------|
-| [`IOrchestratorService`](BatchConvertIsoToXiso/Interfaces/IOrchestratorService.cs)             | [`OrchestratorService`](BatchConvertIsoToXiso/Services/OrchestratorService.cs)                                           | Coordinates batch operation workflows               |
-| [`INativeIsoIntegrityService`](BatchConvertIsoToXiso/Interfaces/INativeIsoIntegrityService.cs) | [`NativeIsoIntegrityService`](BatchConvertIsoToXiso/Services/XisoServices/BinaryOperations/NativeIsoIntegrityService.cs) | XDVDFS filesystem validation and surface scanning   |
-| [`IExtractXisoService`](BatchConvertIsoToXiso/Interfaces/IExtractXisoService.cs)               | [`ExtractXisoService`](BatchConvertIsoToXiso/Services/ExtractXisoService.cs)                                             | External extract-xiso.exe integration               |
-| [`IXdvdfsService`](BatchConvertIsoToXiso/Interfaces/IXdvdfsService.cs)                         | [`XdvdfsService`](BatchConvertIsoToXiso/Services/XdvdfsService.cs)                                                       | External xdvdfs.exe integration                     |
-| [`IExternalToolService`](BatchConvertIsoToXiso/Interfaces/IExternalToolService.cs)             | [`ExternalToolService`](BatchConvertIsoToXiso/Services/ExternalToolService.cs)                                           | External tool orchestration (bchunk)                |
-| [`XisoWriter`](BatchConvertIsoToXiso/Services/XisoServices/XisoWriter.cs)                      | Native Class                                                                                                             | Core C# engine for rewriting and trimming ISO files |
-| [`IFileExtractor`](BatchConvertIsoToXiso/Interfaces/IFileExtractor.cs)                         | [`FileExtractorService`](BatchConvertIsoToXiso/Services/ExtractFiles.cs)                                                 | Archive extraction with error handling              |
-| [`IFileMover`](BatchConvertIsoToXiso/Interfaces/IFileMover.cs)                                 | [`FileMoverService`](BatchConvertIsoToXiso/Services/MoveFiles.cs)                                                         | Safe file relocation with retry logic               |
-| [`IDiskMonitorService`](BatchConvertIsoToXiso/Interfaces/IDiskMonitorService.cs)               | [`DiskMonitorService`](BatchConvertIsoToXiso/Services/DiskMonitorService.cs)                                             | Real-time disk I/O metrics and free space monitoring |
-| —                                                                                              | [`PathHelper`](BatchConvertIsoToXiso/Services/PathHelper.cs)                                                             | Static utility for path operations (UNC, network drives) |
-| [`IBugReportService`](BatchConvertIsoToXiso/Interfaces/IBugReportService.cs)                   | [`BugReportService`](BatchConvertIsoToXiso/Services/BugReportService.cs)                                                 | Automated error reporting                           |
-| [`ILogger`](BatchConvertIsoToXiso/Interfaces/ILogger.cs)                                       | [`Logger`](BatchConvertIsoToXiso/Services/Logger.cs)                                                                     | Centralized asynchronous logging                    |
-| [`IUpdateChecker`](BatchConvertIsoToXiso/Interfaces/IUpdateChecker.cs)                         | [`UpdateChecker`](BatchConvertIsoToXiso/Services/UpdateChecker.cs)                                                       | Version checks via GitHub API                       |
-| [`IMessageBoxService`](BatchConvertIsoToXiso/Interfaces/IMessageBoxService.cs)                 | [`MessageBoxService`](BatchConvertIsoToXiso/Services/MessageBoxService.cs)                                               | Abstracted UI interactions                          |
-
-### XISO Services Namespace
-The [`Services/XisoServices/`](BatchConvertIsoToXiso/Services/XisoServices/) directory contains the core XDVDFS implementation:
-
-| File                                                                                                                                         | Purpose                                     |
-|:---------------------------------------------------------------------------------------------------------------------------------------------|:--------------------------------------------|
-| [`XisoWriter.cs`](BatchConvertIsoToXiso/Services/XisoServices/XisoWriter.cs)                                                                 | Native C# XISO creation and trimming engine |
-| [`BinaryOperations/NativeIsoIntegrityService.cs`](BatchConvertIsoToXiso/Services/XisoServices/BinaryOperations/NativeIsoIntegrityService.cs) | ISO integrity testing and surface scanning  |
-| [`BinaryOperations/FileEntry.cs`](BatchConvertIsoToXiso/Services/XisoServices/BinaryOperations/FileEntry.cs)                                 | XDVDFS file entry parsing                   |
-| [`BinaryOperations/IsoSt.cs`](BatchConvertIsoToXiso/Services/XisoServices/BinaryOperations/IsoSt.cs)                                         | ISO stream operations                       |
-| [`BinaryOperations/Utils.cs`](BatchConvertIsoToXiso/Services/XisoServices/BinaryOperations/Utils.cs)                                         | Binary utility functions                    |
-| [`XDVDFS/XDVDFS.cs`](BatchConvertIsoToXiso/Services/XisoServices/XDVDFS/XDVDFS.cs)                                                           | Core XDVDFS filesystem implementation       |
-| [`XDVDFS/VolumeDescriptor.cs`](BatchConvertIsoToXiso/Services/XisoServices/XDVDFS/VolumeDescriptor.cs)                                       | XDVDFS volume descriptor parsing            |
-
-### Clean Code Structure
-The `MainWindow` is organized into logical partial classes for maintainability:
-- [`MainWindow.ConversionAndTesting.cs`](BatchConvertIsoToXiso/MainWindow.ConversionAndTesting.cs) - Conversion and testing operations
-- [`MainWindow.UIHelpersAndWindowEvents.cs`](BatchConvertIsoToXiso/MainWindow.UIHelpersAndWindowEvents.cs) - UI management and event handling
-- [`MainWindow.XIsoExplorerLogic.cs`](BatchConvertIsoToXiso/MainWindow.XIsoExplorerLogic.cs) - XISO browser functionality
-- [`MainWindow.CheckForUpdatesAsync.cs`](BatchConvertIsoToXiso/MainWindow.CheckForUpdatesAsync.cs) - Update checking
-- [`MainWindow.ReportBugAsync.cs`](BatchConvertIsoToXiso/MainWindow.ReportBugAsync.cs) - Bug reporting
-
 ---
 
 ## System Requirements
@@ -172,7 +218,7 @@ The `MainWindow` is organized into logical partial classes for maintainability:
 |:-------------|:------------------------------------|
 | OS           | Windows 10 (1809) or Windows 11     |
 | .NET Runtime | .NET 10.0 Desktop Runtime           |
-| Processor    | x64 architecture                    |
+| Processor    | x64 or arm64 architecture           |
 | RAM          | 4 GB recommended                    |
 | Storage      | Varies based on ISO collection size |
 
@@ -206,7 +252,7 @@ The `MainWindow` is organized into logical partial classes for maintainability:
 
 - **[extract-xiso](https://github.com/XboxDev/extract-xiso)** - External XISO conversion tool
 - **[xdvdfs](https://github.com/antangelo/xdvdfs)** - External XDVDFS tool
-- **[XboxKit](https://github.com/Deterous/XboxKit)** - Reference for core XDVDFS logic
+- **[XboxKit](https://github.com/Deterous/XboxKit)** - Reference for this application native implementation
 - **bchunk** - CUE/BIN to ISO conversion
 - **[SharpCompress](https://github.com/adamhathcock/sharpcompress)** - High-performance archive extraction
 - **Pure Logic Code** - Development and maintenance
