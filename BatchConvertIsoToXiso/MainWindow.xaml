@@ -95,7 +95,7 @@
                                         <TextBlock Text=" (https://github.com/antangelo/xdvdfs)" Foreground="Blue" Cursor="Hand" MouseLeftButtonDown="XdvdfsUrl_Click" TextDecorations="Underline" Margin="5,0,0,0" VerticalAlignment="Center" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,2">
-                                        <RadioButton x:Name="UseBuiltInLogicRadioButton" GroupName="ConversionMethod" Content="Use Deterous logic" ToolTip="Uses the application's built-in XISO conversion logic" VerticalAlignment="Center" />
+                                        <RadioButton x:Name="UseBuiltInLogicRadioButton" GroupName="ConversionMethod" Content="Use enhanced Deterous logic (built-in)" ToolTip="Uses the application's built-in XISO conversion logic" VerticalAlignment="Center" />
                                         <TextBlock Text=" (https://github.com/Deterous/XboxKit)" Foreground="Blue" Cursor="Hand" MouseLeftButtonDown="DeterousUrl_Click" TextDecorations="Underline" Margin="5,0,0,0" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </StackPanel>
