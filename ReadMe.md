@@ -94,10 +94,10 @@ No installation required – the application is fully portable.
     - **Replace Originals**: Replace input files with converted versions
     - **Test After Conversion**: Automatically verify converted ISOs
     - **Conversion Method**: Select between:
-      - **extract-xiso**: Smallest output, external tool
-      - **xdvdfs**: Smallest output, external tool  
-      - **Modified Deterous Logic**: Built-in, fastest, preserves original layout
-      > 💡 See [Conversion Methods Explained](#conversion-methods-explained) for detailed comparison
+          - **extract-xiso**: Smallest output, external tool
+          - **xdvdfs**: Smallest output, external tool
+          - **Modified Deterous Logic**: Built-in (enhanced from Deterous/XboxKit), preserves original layout
+          > 💡 See [Conversion Methods Explained](#conversion-methods-explained) for detailed comparison
 5. Click **"Convert"** to start the batch process
 
 ### Testing ISO Integrity
@@ -121,8 +121,8 @@ The application offers **three conversion methods**, each using a different appr
 
 ### Method Comparison
 
-| Feature | extract-xiso | xdvdfs | Deterous Logic (Built-in) |
-|:--------|:-------------|:-------|:--------------------------|
+| Feature | extract-xiso | xdvdfs | Modified Deterous Logic (Built-in) |
+|:--------|:-------------|:-------|:----------------------------------|
 | **Approach** | Repack | Repack | Trim |
 | **Output Size** | Smallest | Smallest | Slightly Larger |
 | **Safety** | High | High | **Highest** |
@@ -153,13 +153,21 @@ All three methods remove these parts from Redump ISOs:
 - **Best for**: Maximum compatibility and storage savings
 
 #### Modified Deterous Logic (Built-in)
-- **Approach**: **Trims** the ISO by copying only valid sectors while preserving original file layout
-- **Pros**: 
-  - **Fastest** - No repacking, just sector copying
-  - **Safest** - Original XDVDFS structure preserved exactly
+- **Original Source**: Based on [XboxKit by Deterous](https://github.com/Deterous/XboxKit) `XDVDFS.cs` implementation for traversing XDVDFS filesystem
+- **Approach**: **Trims** the ISO by identifying and copying only valid sectors (header, directory tree, file data) while preserving original file layout and gaps between files
+- **Key Modifications & Enhancements** (compared to original):
+  - Converted recursive directory traversal to **iterative stack-based** approach to avoid stack overflow on deep/complex directories
+  - Added **cycle detection** using `HashSet` to prevent infinite loops
+  - **Enhanced signature detection**: Supports multiple known XGD1/XGD2/XGD3 partition offsets + robust validation + fallback sector scanning for non-standard/Redump variants
+  - **Optional $SystemUpdate skipping**: Can exclude system update files for extra space savings
+  - Improved directory entry parsing, name reading, attribute handling, and comprehensive error handling/validation
+  - Modern C# implementation with better performance and integration into the application
+- **Pros**:
+  - **Fastest** - No repacking, just selective sector copying
+  - **Safest** - Preserves exact original XDVDFS structure and layout
   - **No external dependencies** - Pure C# implementation
 - **Cons**: Output larger (preserves gaps between files from original ISO)
-- **Best for**: Debugging, preserving exact original structure
+- **Best for**: Preserving original structure, debugging, maximum safety/compatibility
 
 ### Visual Comparison
 
@@ -172,10 +180,10 @@ extract-xiso / xdvdfs Output:
                       ↑    ↑    ↑
                  Files repositioned for maximum compression
 
-Deterous Logic Output:
+Modified Deterous Logic Output:
 [XDVDFS: Header][Dir][File A][gap][File B][gap][File C]
-                      ↑         ↑
-                 Original layout preserved, only video/padding removed
+                       ↑         ↑
+                  Original layout preserved, only video/padding removed
 ```
 
 ### Which Should You Choose?
@@ -183,13 +191,13 @@ Deterous Logic Output:
 | Use Case | Recommended Method |
 |:---------|:-------------------|
 | **Maximum storage savings** | xdvdfs or extract-xiso |
-| **Preserving exact game structure** | Deterous Logic |
-| **Debugging / Development** | Deterous Logic |
+| **Preserving exact game structure** | Modified Deterous Logic |
+| **Debugging / Development** | Modified Deterous Logic |
 | **FTP transfer to Xbox** | xdvdfs or extract-xiso |
 
 ### Recommendation
 
-**For most users**: If storage space is critical, use **xdvdfs** or **extract-xiso** for maximum compression.
+**For most users**: If storage space is critical, use **xdvdfs** or **extract-xiso** for maximum compression. Use **Modified Deterous Logic** when you want to preserve the original file layout and structure from the source ISO.
 
 ---
 
@@ -250,9 +258,9 @@ Utilizes `Microsoft.Extensions.DependencyInjection` for comprehensive service ma
 
 ## Acknowledgements
 
-- **[extract-xiso](https://github.com/XboxDev/extract-xiso)** - External XISO conversion tool
-- **[xdvdfs](https://github.com/antangelo/xdvdfs)** - External XDVDFS tool
-- **[XboxKit](https://github.com/Deterous/XboxKit)** - Reference for this application native implementation
+- **[extract-xiso](https://github.com/XboxDev/extract-xiso)** - External XISO conversion tool by XboxDev team
+- **[xdvdfs](https://github.com/antangelo/xdvdfs)** - Modern XDVDFS tool by antangelo
+- **[XboxKit by Deterous](https://github.com/Deterous/XboxKit)** - Original XDVDFS trimming logic which this project's **native engine is based on and significantly enhanced**
 - **bchunk** - CUE/BIN to ISO conversion
 - **[SharpCompress](https://github.com/adamhathcock/sharpcompress)** - High-performance archive extraction
 - **Pure Logic Code** - Development and maintenance
