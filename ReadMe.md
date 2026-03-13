@@ -251,7 +251,7 @@ Utilizes `Microsoft.Extensions.DependencyInjection` for comprehensive service ma
 *ISO integrity testing with batch organization*
 
 ![Explorer Tab](screenshot3.png)
-*XISO file browser without extraction*
+*XISO file browser*
 
 ---
 
