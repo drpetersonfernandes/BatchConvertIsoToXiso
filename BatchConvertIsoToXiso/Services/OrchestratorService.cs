@@ -210,6 +210,18 @@ public class OrchestratorService : IOrchestratorService
                 internalFail = true;
             }
         }
+        catch (OperationCanceledException)
+        {
+            // Re-throw cancellation exceptions to stop the batch
+            throw;
+        }
+        catch (Exception)
+        {
+            // Mark as failed, but don't stop the batch processing
+            // Error has already been logged by the FileExtractor
+            internalFail = true;
+            extracted = false;
+        }
         finally
         {
             await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(tempDir, 3, 1000, null);
