@@ -177,7 +177,12 @@
                         <ListView x:Name="ExplorerListView" Grid.Row="1" MouseDoubleClick="ExplorerListView_MouseDoubleClick" PreviewMouseLeftButtonDown="ExplorerListView_PreviewMouseLeftButtonDown" MouseMove="ExplorerListView_MouseMove" BorderThickness="0" Background="{StaticResource TerminalBackgroundBrush}" ItemContainerStyle="{StaticResource ExplorerListViewItemStyle}">
                             <ListView.View>
                                 <GridView ColumnHeaderContainerStyle="{StaticResource ExplorerGridViewColumnHeaderStyle}">
-                                    <GridViewColumn Header="Name" Width="450">
+                                    <GridViewColumn Width="450">
+                                        <GridViewColumn.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="Name" Foreground="{StaticResource TerminalForegroundBrush}" FontWeight="Bold" HorizontalAlignment="Left" Padding="10,5" />
+                                            </DataTemplate>
+                                        </GridViewColumn.HeaderTemplate>
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal">
@@ -187,14 +192,24 @@
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="Size" Width="120">
+                                    <GridViewColumn Width="120">
+                                        <GridViewColumn.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="Size" Foreground="{StaticResource TerminalForegroundBrush}" FontWeight="Bold" HorizontalAlignment="Left" Padding="10,5" />
+                                            </DataTemplate>
+                                        </GridViewColumn.HeaderTemplate>
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding SizeFormatted}" Foreground="{StaticResource TerminalForegroundBrush}" />
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="Type" Width="100">
+                                    <GridViewColumn Width="100">
+                                        <GridViewColumn.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="Type" Foreground="{StaticResource TerminalForegroundBrush}" FontWeight="Bold" HorizontalAlignment="Left" Padding="10,5" />
+                                            </DataTemplate>
+                                        </GridViewColumn.HeaderTemplate>
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Type}" Foreground="{StaticResource TerminalForegroundBrush}" />
