@@ -80,6 +80,7 @@ public class XdvdfsService : IXdvdfsService
             };
 
             process.Start();
+            process.PriorityClass = ProcessPriorityClass.BelowNormal;
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
@@ -110,6 +111,23 @@ public class XdvdfsService : IXdvdfsService
 
             _logger.LogMessage($"[ERROR] xdvdfs.exe exited with code {process.ExitCode} for '{fileName}'.");
             return false;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogMessage($"Conversion of '{fileName}' was canceled. Cleaning up partially saved file...");
+            try
+            {
+                if (File.Exists(outputPath))
+                {
+                    File.Delete(outputPath);
+                }
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+
+            throw;
         }
         finally
         {

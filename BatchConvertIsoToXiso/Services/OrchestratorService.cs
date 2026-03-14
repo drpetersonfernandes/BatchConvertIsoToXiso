@@ -364,16 +364,14 @@ public class OrchestratorService : IOrchestratorService
 
             if (useXdvdfs)
             {
-                // Use xdvdfs.exe for conversion
                 progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Converting using xdvdfs.exe...", CurrentDrive = PathHelper.GetDriveLetter(outputFolder) });
-                var success = await _xdvdfsService.ConvertIsoToXisoAsync(sourcePath, outputFolder, token);
+                var success = await Task.Run(() => _xdvdfsService.ConvertIsoToXisoAsync(sourcePath, outputFolder, token), token);
                 status = success ? FileProcessingStatus.Converted : FileProcessingStatus.Failed;
             }
             else if (useExtractXiso)
             {
-                // Use extract-xiso.exe for conversion
                 progress.Report(new BatchOperationProgress { LogMessage = $"File '{originalFileName}': Converting using extract-xiso.exe...", CurrentDrive = PathHelper.GetDriveLetter(outputFolder) });
-                var success = await _extractXisoService.ConvertIsoToXisoAsync(sourcePath, outputFolder, skipSystemUpdate, token);
+                var success = await Task.Run(() => _extractXisoService.ConvertIsoToXisoAsync(sourcePath, outputFolder, skipSystemUpdate, token), token);
                 status = success ? FileProcessingStatus.Converted : FileProcessingStatus.Failed;
             }
             else

@@ -101,6 +101,7 @@ public class ExtractXisoService : IExtractXisoService
                 };
 
                 process.Start();
+                process.PriorityClass = ProcessPriorityClass.BelowNormal;
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 

@@ -162,6 +162,7 @@ public class XisoWriter
                     _logger.LogMessage("Detected Redump ISO. Extracting...");
                 }
 
+                try
                 {
                     await using FileStream xisoFs = new(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
@@ -284,6 +285,20 @@ public class XisoWriter
                     }
 
                     _logger.LogMessage($"Successfully created trimmed XISO. Final size: {xisoFs.Length / (1024 * 1024)} MB");
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogMessage($"Conversion to '{Path.GetFileName(destPath)}' was canceled. Cleaning up partially saved file...");
+                    try
+                    {
+                        if (File.Exists(destPath)) File.Delete(destPath);
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+
+                    throw;
                 }
 
                 // Move integrity check INSIDE the try block
