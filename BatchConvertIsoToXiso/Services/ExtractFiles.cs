@@ -112,6 +112,10 @@ public class FileExtractorService : IFileExtractor
             {
                 _logger.LogMessage($"ERROR: {archiveFileName} appears to be corrupt or incomplete. The file may have been damaged during download or transfer. Please re-download the archive and try again.");
             }
+            else if (ex.Message.Contains("Bad state", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogMessage($"ERROR: {archiveFileName} appears to be corrupt (invalid compression data). The file may have been damaged during download or transfer. Please re-download the archive and try again.");
+            }
             else
             {
                 _logger.LogMessage($"Error extracting {archiveFileName}: {ex.Message}");
@@ -128,7 +132,8 @@ public class FileExtractorService : IFileExtractor
                 !ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase))
+                !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("Bad state", StringComparison.OrdinalIgnoreCase))
             {
                 _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. Exception: {ex}");
             }
@@ -180,7 +185,8 @@ public class FileExtractorService : IFileExtractor
             if (!ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase))
+                !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("Bad state", StringComparison.OrdinalIgnoreCase))
             {
                 _ = _bugReportService.SendBugReportAsync($"Error getting uncompressed archive size: {archivePath}. Exception: {ex}");
             }
