@@ -2,14 +2,53 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
+
+        <!-- ==================== COLOR BRUSHES ==================== -->
+
+        <!-- Background Colors -->
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F5F5F5"/>
+        <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#1976D2"/>
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="White"/>
+        <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#E0E0E0"/>
+
+        <!-- Terminal/Console Colors -->
+        <SolidColorBrush x:Key="TerminalBackgroundBrush" Color="#0a0a0a"/>
+        <SolidColorBrush x:Key="TerminalBorderBrush" Color="#1a1a1a"/>
+        <SolidColorBrush x:Key="TerminalForegroundBrush" Color="#39FF14"/>
+        <SolidColorBrush x:Key="TerminalSelectedBrush" Color="#2a2a2a"/>
+
+        <!-- Border Colors -->
+        <SolidColorBrush x:Key="BorderBrush" Color="#BDBDBD"/>
+
+        <!-- Text Colors -->
+        <SolidColorBrush x:Key="HeaderTextBrush" Color="White"/>
+        <SolidColorBrush x:Key="SuccessTextBrush" Color="Green"/>
+        <SolidColorBrush x:Key="FailedTextBrush" Color="Red"/>
+        <SolidColorBrush x:Key="SkippedTextBrush" Color="Orange"/>
+        <SolidColorBrush x:Key="LinkTextBrush" Color="Blue"/>
+
+        <!-- Button Colors -->
+        <SolidColorBrush x:Key="PrimaryButtonBrush" Color="#2979FF"/>
+        <SolidColorBrush x:Key="PrimaryButtonHoverBrush" Color="#1E88E5"/>
+        <SolidColorBrush x:Key="StartButtonBrush" Color="#4CAF50"/>
+        <SolidColorBrush x:Key="CancelButtonBrush" Color="#F44336"/>
+        <SolidColorBrush x:Key="AboutButtonBrush" Color="#9C27B0"/>
+        <SolidColorBrush x:Key="ExitButtonBrush" Color="#607D8B"/>
+        <SolidColorBrush x:Key="DisabledButtonBrush" Color="#BDBDBD"/>
+
+        <!-- Navigation Colors -->
+        <SolidColorBrush x:Key="NavigationUnderlineBrush" Color="#4CAF50"/>
+
+        <!-- ==================== STYLES ==================== -->
+
         <!-- Primary Action Button Style -->
         <Style x:Key="ActionButtonStyle" TargetType="Button">
             <Setter Property="Padding" Value="15,8" />
             <Setter Property="Margin" Value="5" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="Background" Value="#2979FF" />
+            <Setter Property="Foreground" Value="{StaticResource HeaderTextBrush}" />
+            <Setter Property="Background" Value="{StaticResource PrimaryButtonBrush}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -18,11 +57,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Background" Value="#BDBDBD" />
+                                <Setter Property="Background" Value="{StaticResource DisabledButtonBrush}" />
                                 <Setter Property="Opacity" Value="0.7" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#1E88E5" />
+                                <Setter Property="Background" Value="{StaticResource PrimaryButtonHoverBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -46,7 +85,7 @@
                                 <Setter Property="Opacity" Value="0.7" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#1E88E5" />
+                                <Setter TargetName="Border" Property="Background" Value="{StaticResource PrimaryButtonHoverBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -59,7 +98,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Border" BorderThickness="0,0,0,3" BorderBrush="#FFEB3B" Background="{TemplateBinding Background}" CornerRadius="4">
+                        <Border x:Name="Border" BorderThickness="0,0,0,3" BorderBrush="{StaticResource NavigationUnderlineBrush}" Background="{TemplateBinding Background}" CornerRadius="4">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -67,7 +106,7 @@
                                 <Setter Property="Opacity" Value="0.7" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#1E88E5" />
+                                <Setter TargetName="Border" Property="Background" Value="{StaticResource PrimaryButtonHoverBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -76,19 +115,46 @@
         </Style>
 
         <Style x:Key="StartButtonStyle" BasedOn="{StaticResource ActionButtonStyle}" TargetType="Button">
-            <Setter Property="Background" Value="#4CAF50" />
+            <Setter Property="Background" Value="{StaticResource StartButtonBrush}" />
         </Style>
 
         <Style x:Key="CancelButtonStyle" BasedOn="{StaticResource ActionButtonStyle}" TargetType="Button">
-            <Setter Property="Background" Value="#F44336" />
+            <Setter Property="Background" Value="{StaticResource CancelButtonBrush}" />
         </Style>
 
         <Style x:Key="CustomTextBoxStyle" TargetType="TextBox">
             <Setter Property="Padding" Value="10,8" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="#BDBDBD" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!-- ListView Item Style for XIso Explorer -->
+        <Style x:Key="ExplorerListViewItemStyle" TargetType="ListViewItem">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="BorderBrush" Value="{StaticResource TerminalBorderBrush}" />
+            <Setter Property="Background" Value="{StaticResource TerminalBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TerminalForegroundBrush}" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource TerminalBorderBrush}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource TerminalSelectedBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- GridView Column Header Style for XIso Explorer -->
+        <Style x:Key="ExplorerGridViewColumnHeaderStyle" TargetType="GridViewColumnHeader">
+            <Setter Property="Background" Value="{StaticResource TerminalBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TerminalForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource TerminalBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="FontWeight" Value="Bold" />
         </Style>
     </Application.Resources>
 </Application>
