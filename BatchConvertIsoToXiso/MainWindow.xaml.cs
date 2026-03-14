@@ -22,6 +22,7 @@ public partial class MainWindow
     // Summary Stats
     private DateTime _operationStartTime;
     private readonly DispatcherTimer _processingTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _memoryTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private int _uiTotalFiles;
     private int _uiSuccessCount;
     private int _uiFailedCount;
@@ -55,6 +56,8 @@ public partial class MainWindow
         _nativeIsoTester = nativeIsoTester;
         _logger.Initialize(LogViewer);
         _processingTimer.Tick += ProcessingTimer_Tick;
+        _memoryTimer.Tick += MemoryTimer_Tick;
+        _memoryTimer.Start();
 
         ResetSummaryStats();
         DisplayInstructions.Initialize(_logger);
@@ -144,7 +147,14 @@ public partial class MainWindow
     {
         _explorerIsoSt?.Dispose();
         _processingTimer.Stop();
+        _memoryTimer.Stop();
         StopPerformanceCounter();
+    }
+
+    private void MemoryTimer_Tick(object? sender, EventArgs e)
+    {
+        var memoryMb = GC.GetTotalMemory(false) / 1024.0 / 1024.0;
+        MemoryTextBlock.Text = $"Memory: {memoryMb:F1} MB";
     }
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e)

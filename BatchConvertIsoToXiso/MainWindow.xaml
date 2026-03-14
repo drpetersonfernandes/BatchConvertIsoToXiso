@@ -59,7 +59,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Label Content="Source Folder:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Label Content="Source Folder:" />
                             <TextBox x:Name="ConversionInputFolderTextBox" Grid.Column="1" Style="{StaticResource CustomTextBoxStyle}" IsReadOnly="True" Margin="5,0" ToolTip="Select the folder containing ISO or archive files" />
                             <Button Grid.Column="2" Content="Browse..." Click="BrowseConversionInputButton_Click" Style="{StaticResource ActionButtonStyle}" ToolTip="Browse for source folder" />
                         </Grid>
@@ -67,7 +67,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Label Content="Output Folder:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Label Content="Output Folder:" />
                             <TextBox x:Name="ConversionOutputFolderTextBox" Grid.Column="1" Style="{StaticResource CustomTextBoxStyle}" IsReadOnly="True" Margin="5,0" ToolTip="Select the output folder for converted XISO files" />
                             <Button Grid.Column="2" Content="Browse..." Click="BrowseConversionOutputButton_Click" Style="{StaticResource ActionButtonStyle}" ToolTip="Browse for output folder" />
                         </Grid>
@@ -76,15 +76,15 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <GroupBox Grid.Column="0" Header="Options" Margin="0,5,15,5" Padding="10,5">
+                            <GroupBox Grid.Column="0" Header="Options" Margin="0,5,15,5" Padding="10,5" Style="{StaticResource CustomGroupBoxStyle}">
                                 <StackPanel Orientation="Vertical">
-                                    <CheckBox x:Name="DeleteOriginalsCheckBox" Content="Delete original files after successful conversion" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Deletes the original ISO/archive if conversion is successful. Use with caution!" />
-                                    <CheckBox x:Name="SearchSubfoldersConversionCheckBox" Content="Search for files in subfolders" Margin="0,8,0,8" HorizontalAlignment="Left" ToolTip="Include files found in subdirectories of the source folder" />
-                                    <CheckBox x:Name="SkipSystemUpdateCheckBox" Content="Skip $SystemUpdate folder during conversion" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Omits the $SystemUpdate folder from the output XISO, reducing file size" />
-                                    <CheckBox x:Name="CheckOutputIntegrityCheckBox" Content="Check integrity of the output file" Margin="0,8,0,8" HorizontalAlignment="Left" IsChecked="True" ToolTip="Performs a structural integrity check on the newly created XISO file" />
+                                    <CheckBox x:Name="DeleteOriginalsCheckBox" Content="Delete original files after successful conversion" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Deletes the original ISO/archive if conversion is successful. Use with caution!" Style="{StaticResource CustomCheckBoxStyle}" />
+                                    <CheckBox x:Name="SearchSubfoldersConversionCheckBox" Content="Search for files in subfolders" Margin="0,8,0,8" HorizontalAlignment="Left" ToolTip="Include files found in subdirectories of the source folder" Style="{StaticResource CustomCheckBoxStyle}" />
+                                    <CheckBox x:Name="SkipSystemUpdateCheckBox" Content="Skip $SystemUpdate folder during conversion" Margin="0,2,0,2" HorizontalAlignment="Left" ToolTip="Omits the $SystemUpdate folder from the output XISO, reducing file size" Style="{StaticResource CustomCheckBoxStyle}" />
+                                    <CheckBox x:Name="CheckOutputIntegrityCheckBox" Content="Check integrity of the output file" Margin="0,8,0,8" HorizontalAlignment="Left" IsChecked="True" ToolTip="Performs a structural integrity check on the newly created XISO file" Style="{StaticResource CustomCheckBoxStyle}" />
                                 </StackPanel>
                             </GroupBox>
-                            <GroupBox Grid.Column="1" Header="Conversion Method" Margin="0,5,0,5" Padding="10,5" VerticalAlignment="Top">
+                            <GroupBox Grid.Column="1" Header="Conversion Method" Margin="0,5,0,5" Padding="10,5" VerticalAlignment="Top" Style="{StaticResource CustomGroupBoxStyle}">
                                 <StackPanel Orientation="Vertical">
                                     <StackPanel Orientation="Horizontal" Margin="0,2">
                                         <RadioButton x:Name="UseExtractXisoRadioButton" GroupName="ConversionMethod" Content="Use extract-xiso.exe tool" ToolTip="Uses the external extract-xiso.exe tool for conversion (default)" VerticalAlignment="Center" />
@@ -110,15 +110,15 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Label Content="ISO Folder:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Label Content="ISO Folder:" />
                             <TextBox x:Name="TestInputFolderTextBox" Grid.Column="1" Style="{StaticResource CustomTextBoxStyle}" IsReadOnly="True" Margin="5,0" ToolTip="Select the folder containing ISO files to test" />
                             <Button Grid.Column="2" Content="Browse..." Click="BrowseTestInputButton_Click" Style="{StaticResource ActionButtonStyle}" ToolTip="Browse for ISO folder" />
                         </Grid>
-                        <GroupBox Header="Options" Margin="0,5,0,5" Padding="10,5">
+                        <GroupBox Header="Options" Margin="0,5,0,5" Padding="10,5" Style="{StaticResource CustomGroupBoxStyle}">
                             <StackPanel Orientation="Vertical">
-                                <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to a '_success' subfolder" Margin="0,5,0,0" HorizontalAlignment="Left" IsChecked="False" ToolTip="Moves valid ISOs to a '_success' folder within the source folder" />
-                                <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to a '_failed' subfolder" Margin="0,5,0,0" HorizontalAlignment="Left" IsChecked="False" ToolTip="Moves invalid ISOs to a '_failed' folder within the source folder" />
-                                <CheckBox x:Name="PerformDeepScanCheckBox" Content="Perform deep surface scan (slower)" Margin="0,5,0,5" HorizontalAlignment="Left" IsChecked="False" ToolTip="Reads entire ISO sequentially to detect bad sectors. Unchecked performs logical file test only (faster)." />
+                                <CheckBox x:Name="MoveSuccessFilesCheckBox" Content="Move successfully tested ISOs to a '_success' subfolder" Margin="0,5,0,0" HorizontalAlignment="Left" IsChecked="False" ToolTip="Moves valid ISOs to a '_success' folder within the source folder" Style="{StaticResource CustomCheckBoxStyle}" />
+                                <CheckBox x:Name="MoveFailedFilesCheckBox" Content="Move failed tested ISOs to a '_failed' subfolder" Margin="0,5,0,0" HorizontalAlignment="Left" IsChecked="False" ToolTip="Moves invalid ISOs to a '_failed' folder within the source folder" Style="{StaticResource CustomCheckBoxStyle}" />
+                                <CheckBox x:Name="PerformDeepScanCheckBox" Content="Perform deep surface scan (slower)" Margin="0,5,0,5" HorizontalAlignment="Left" IsChecked="False" ToolTip="Reads entire ISO sequentially to detect bad sectors. Unchecked performs logical file test only (faster)." Style="{StaticResource CustomCheckBoxStyle}" />
                             </StackPanel>
                         </GroupBox>
                         <Button x:Name="StartTestButton" Content="Start Integrity Test" Style="{StaticResource StartButtonStyle}" HorizontalAlignment="Center" Margin="0,5,0,0" Click="StartTestButton_Click" ToolTip="Begin the batch integrity test process" />
@@ -130,7 +130,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Label Content="Select XISO File:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Label Content="Select XISO File:" />
                             <TextBox x:Name="ExplorerFilePathTextBox" Grid.Column="1" Style="{StaticResource CustomTextBoxStyle}" IsReadOnly="True" Margin="5,0" ToolTip="Select an Xbox ISO file to explore its contents" />
                             <Button Content="Browse..." Grid.Column="2" Click="BrowseExplorerFile_Click" Style="{StaticResource ActionButtonStyle}" ToolTip="Browse for an XISO file" />
                         </Grid>
@@ -208,7 +208,7 @@
                 </Border>
             </Grid>
 
-            <!-- 2. Stats Panel (RomValidator Style) -->
+            <!-- 2. Stats Panel -->
             <Grid x:Name="StatsPanel" Grid.Row="2" Margin="0,10,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -219,46 +219,51 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="{StaticResource CardBackgroundBrush}">
+                <Border Grid.Column="0" Style="{StaticResource StatsCardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Total Files:" FontWeight="SemiBold" HorizontalAlignment="Center" /><TextBlock x:Name="TotalFilesValue" Text="0" HorizontalAlignment="Center" />
+                        <TextBlock Text="Total Files:" Style="{StaticResource StatsLabelStyle}"/>
+                        <TextBlock x:Name="TotalFilesValue" Text="0" Style="{StaticResource StatsValueStyle}"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="1" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="{StaticResource CardBackgroundBrush}">
+                <Border Grid.Column="1" Style="{StaticResource StatsCardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Success:" FontWeight="SemiBold" Foreground="{StaticResource SuccessTextBrush}" HorizontalAlignment="Center" /><TextBlock x:Name="SuccessValue" Text="0" HorizontalAlignment="Center" />
+                        <TextBlock Text="Success:" Style="{StaticResource StatsLabelStyle}" Foreground="{StaticResource SuccessTextBrush}"/>
+                        <TextBlock x:Name="SuccessValue" Text="0" Style="{StaticResource StatsValueStyle}"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="{StaticResource CardBackgroundBrush}">
+                <Border Grid.Column="2" Style="{StaticResource StatsCardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Failed:" FontWeight="SemiBold" Foreground="{StaticResource FailedTextBrush}" HorizontalAlignment="Center" /><TextBlock x:Name="FailedValue" Text="0" HorizontalAlignment="Center" />
+                        <TextBlock Text="Failed:" Style="{StaticResource StatsLabelStyle}" Foreground="{StaticResource FailedTextBrush}"/>
+                        <TextBlock x:Name="FailedValue" Text="0" Style="{StaticResource StatsValueStyle}"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="3" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="{StaticResource CardBackgroundBrush}">
+                <Border Grid.Column="3" Style="{StaticResource StatsCardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Skipped:" FontWeight="SemiBold" Foreground="{StaticResource SkippedTextBrush}" HorizontalAlignment="Center" /><TextBlock x:Name="SkippedValue" Text="0" HorizontalAlignment="Center" />
+                        <TextBlock Text="Skipped:" Style="{StaticResource StatsLabelStyle}" Foreground="{StaticResource SkippedTextBrush}"/>
+                        <TextBlock x:Name="SkippedValue" Text="0" Style="{StaticResource StatsValueStyle}"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="4" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="{StaticResource CardBackgroundBrush}">
+                <Border Grid.Column="4" Style="{StaticResource StatsCardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Time:" FontWeight="SemiBold" HorizontalAlignment="Center" /><TextBlock x:Name="ProcessingTimeValue" Text="00:00:00" HorizontalAlignment="Center" />
+                        <TextBlock Text="Time:" Style="{StaticResource StatsLabelStyle}"/>
+                        <TextBlock x:Name="ProcessingTimeValue" Text="00:00:00" Style="{StaticResource StatsValueStyle}"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="5" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="{StaticResource CardBackgroundBrush}">
+                <Border Grid.Column="5" Style="{StaticResource StatsCardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Read Speed:" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Text="Read Speed:" Style="{StaticResource StatsLabelStyle}"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock x:Name="ReadSpeedValue" Text="N/A" />
-                            <TextBlock x:Name="ReadSpeedDriveIndicator" Text="" Margin="5,0,0,0" />
+                            <TextBlock x:Name="ReadSpeedValue" Text="N/A" Style="{StaticResource StatsValueStyle}"/>
+                            <TextBlock x:Name="ReadSpeedDriveIndicator" Text="" Margin="5,0,0,0" Style="{StaticResource StatsValueStyle}"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="6" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="2" Padding="8" CornerRadius="4" Background="{StaticResource CardBackgroundBrush}">
+                <Border Grid.Column="6" Style="{StaticResource StatsCardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Write Speed:" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Text="Write Speed:" Style="{StaticResource StatsLabelStyle}"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock x:Name="WriteSpeedValue" Text="N/A" />
-                            <TextBlock x:Name="WriteSpeedDriveIndicator" Text="" Margin="5,0,0,0" />
+                            <TextBlock x:Name="WriteSpeedValue" Text="N/A" Style="{StaticResource StatsValueStyle}"/>
+                            <TextBlock x:Name="WriteSpeedDriveIndicator" Text="" Margin="5,0,0,0" Style="{StaticResource StatsValueStyle}"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -271,7 +276,7 @@
                 </Grid.ColumnDefinitions>
                 <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="1" Background="{StaticResource CardBackgroundBrush}">
                     <Grid>
-                        <ProgressBar x:Name="ProgressBar" Height="24" Foreground="{StaticResource StartButtonBrush}" Background="Transparent" BorderThickness="0" />
+                        <ProgressBar x:Name="ProgressBar" Height="24" Foreground="{StaticResource ProgressForegroundBrush}" Background="{StaticResource ProgressBackgroundBrush}" BorderThickness="0" />
                         <TextBlock x:Name="ProgressTextBlock" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" />
                     </Grid>
                 </Border>
@@ -281,8 +286,23 @@
 
         <!-- Status Bar -->
         <StatusBar Grid.Row="2" Background="{StaticResource StatusBarBackgroundBrush}" Padding="5">
-            <StatusBarItem>
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+
+            <StatusBarItem Grid.Column="0">
                 <TextBlock x:Name="StatusTextBlock" Text="Ready." />
+            </StatusBarItem>
+
+            <StatusBarItem Grid.Column="1">
+                <TextBlock x:Name="MemoryTextBlock" Text="Memory: 0 MB" FontSize="11" />
             </StatusBarItem>
         </StatusBar>
     </Grid>

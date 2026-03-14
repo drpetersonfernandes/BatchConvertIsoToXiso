@@ -260,9 +260,8 @@ Utilizes `Microsoft.Extensions.DependencyInjection` for comprehensive service ma
 - **[extract-xiso](https://github.com/XboxDev/extract-xiso)** - External XISO conversion tool by XboxDev team
 - **[xdvdfs](https://github.com/antangelo/xdvdfs)** - Modern XDVDFS tool by antangelo
 - **[XboxKit by Deterous](https://github.com/Deterous/XboxKit)** - Original XDVDFS trimming logic which this project's **native engine is based on and significantly enhanced**
-- **bchunk** - CUE/BIN to ISO conversion
+- **[bchunk](https://github.com/extramaster/bchunk)** - CUE/BIN to ISO conversion
 - **[SharpCompress](https://github.com/adamhathcock/sharpcompress)** - High-performance archive extraction
-- **Pure Logic Code** - Development and maintenance
 
 ---
 

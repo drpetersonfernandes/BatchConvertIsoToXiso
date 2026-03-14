@@ -2,50 +2,196 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="About Batch Convert ISO to XISO"
-        Width="480"
-        Height="440"
+        Width="800"
+        Height="700"
         ResizeMode="NoResize"
-        WindowStartupLocation="CenterScreen">
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource WindowBackgroundBrush}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="15">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-        <StackPanel
-            Grid.Row="0"
-            Margin="10"
-            HorizontalAlignment="Center"
-            Orientation="Horizontal">
-            <Image
-                Width="128"
-                Height="128"
-                Source="pack://application:,,,/images/logo.png" />
-        </StackPanel>
+            <!-- Logo Section -->
+            <Border Grid.Row="0"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Margin="0,0,0,15"
+                    Padding="15">
+                <StackPanel HorizontalAlignment="Center">
+                    <Image Width="96"
+                           Height="96"
+                           Source="pack://application:,,,/images/logo.png" />
+                </StackPanel>
+            </Border>
 
-        <StackPanel Grid.Row="1" Margin="20">
-            <TextBlock FontWeight="Bold" FontSize="18" Text="Batch Convert ISO to XISO" />
-            <TextBlock Text="A utility for batch converting Xbox ISO images to XISO format" Margin="0,5,0,0" />
-            <TextBlock Name="AppVersionTextBlock" Margin="0,10,0,0" Text="" />
-            <TextBlock Margin="0,10,0,0">
-                <Hyperlink NavigateUri="https://www.purelogiccode.com" RequestNavigate="Hyperlink_RequestNavigate">https://www.purelogiccode.com</Hyperlink>
-            </TextBlock>
-            <TextBlock Margin="0,10,0,0">
-                <Hyperlink NavigateUri="https://github.com/drpetersonfernandes/BatchConvertIsoToXiso" RequestNavigate="Hyperlink_RequestNavigate">https://github.com/drpetersonfernandes/BatchConvertIsoToXiso</Hyperlink>
-            </TextBlock>
-        </StackPanel>
+            <!-- Title & Version Section -->
+            <Border Grid.Row="1"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Margin="0,0,0,15"
+                    Padding="20">
+                <StackPanel>
+                    <TextBlock FontWeight="Bold"
+                               FontSize="22"
+                               Foreground="{StaticResource HeaderTextBrush}"
+                               Text="Batch Convert ISO to XISO"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Name="AppVersionTextBlock"
+                               Margin="0,8,0,0"
+                               Text=""
+                               HorizontalAlignment="Center"
+                               Foreground="{StaticResource PrimaryAccentBrush}"
+                               FontWeight="SemiBold"
+                               FontSize="14" />
+                </StackPanel>
+            </Border>
 
-        <StackPanel
-            Grid.Row="2"
-            Margin="10"
-            HorizontalAlignment="Center"
-            Orientation="Horizontal">
-            <Button
-                Width="100"
-                Margin="10,0,0,0"
-                Click="CloseButton_Click"
-                Content="Close" />
-        </StackPanel>
-    </Grid>
+            <!-- Description Section -->
+            <Border Grid.Row="2"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Margin="0,0,0,15"
+                    Padding="20">
+                <StackPanel>
+                    <TextBlock FontWeight="Bold"
+                               FontSize="14"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               Text="Description"
+                               Margin="0,0,0,10" />
+                    <TextBlock Text="A high-performance Windows WPF utility for the Xbox preservation and emulation community. This application streamlines the process of converting standard Xbox and Xbox 360 ISOs into the optimized, trimmed XISO format."
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               LineHeight="20"
+                               Margin="0,0,0,12" />
+                    <TextBlock
+                        Text="Features include batch conversion with multi-engine support (extract-xiso, xdvdfs, and a native C# XDVDFS engine), integrity testing with deep surface scanning and XISO file exploration with drag-and-drop extraction."
+                        Foreground="{StaticResource TextSecondaryBrush}"
+                        TextWrapping="Wrap"
+                        LineHeight="20" />
+                </StackPanel>
+            </Border>
+
+            <!-- Acknowledgements Section -->
+            <Border Grid.Row="3"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Margin="0,0,0,15"
+                    Padding="20">
+                <StackPanel>
+                    <TextBlock FontWeight="Bold"
+                               FontSize="14"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               Text="Acknowledgements"
+                               Margin="0,0,0,10" />
+                    <TextBlock Text="This application uses the following open-source projects and tools:"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,12" />
+
+                    <StackPanel Margin="10,0,0,0">
+                        <TextBlock Margin="0,0,0,8">
+                            <Hyperlink NavigateUri="https://github.com/XboxDev/extract-xiso"
+                                       RequestNavigate="Hyperlink_RequestNavigate"
+                                       Foreground="{StaticResource LinkTextBrush}"
+                                       TextDecorations="Underline">
+                                extract-xiso
+                            </Hyperlink>
+                            <Run Text=" - External XISO conversion tool by XboxDev team" Foreground="{StaticResource TextMutedBrush}" />
+                        </TextBlock>
+
+                        <TextBlock Margin="0,0,0,8">
+                            <Hyperlink NavigateUri="https://github.com/antangelo/xdvdfs"
+                                       RequestNavigate="Hyperlink_RequestNavigate"
+                                       Foreground="{StaticResource LinkTextBrush}"
+                                       TextDecorations="Underline">
+                                xdvdfs
+                            </Hyperlink>
+                            <Run Text=" - Modern XDVDFS tool by antangelo" Foreground="{StaticResource TextMutedBrush}" />
+                        </TextBlock>
+
+                        <TextBlock Margin="0,0,0,8">
+                            <Hyperlink NavigateUri="https://github.com/Deterous/XboxKit"
+                                       RequestNavigate="Hyperlink_RequestNavigate"
+                                       Foreground="{StaticResource LinkTextBrush}"
+                                       TextDecorations="Underline">
+                                XboxKit by Deterous
+                            </Hyperlink>
+                            <Run Text=" - Original XDVDFS trimming logic (enhanced in this project)" Foreground="{StaticResource TextMutedBrush}" />
+                        </TextBlock>
+
+                        <TextBlock Margin="0,0,0,8">
+                            <Hyperlink NavigateUri="https://github.com/extramaster/bchunk"
+                                       RequestNavigate="Hyperlink_RequestNavigate"
+                                       Foreground="{StaticResource LinkTextBrush}"
+                                       TextDecorations="Underline">
+                                bchunk
+                            </Hyperlink>
+                            <Run Text=" - CUE/BIN to ISO conversion" Foreground="{StaticResource TextMutedBrush}" />
+                        </TextBlock>
+
+                        <TextBlock Margin="0,0,0,8">
+                            <Hyperlink NavigateUri="https://github.com/adamhathcock/sharpcompress"
+                                       RequestNavigate="Hyperlink_RequestNavigate"
+                                       Foreground="{StaticResource LinkTextBrush}"
+                                       TextDecorations="Underline">
+                                SharpCompress
+                            </Hyperlink>
+                            <Run Text=" - High-performance archive extraction" Foreground="{StaticResource TextMutedBrush}" />
+                        </TextBlock>
+
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Links & Close Section -->
+            <Grid Grid.Row="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Links -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock>
+                        <Hyperlink NavigateUri="https://www.purelogiccode.com"
+                                   RequestNavigate="Hyperlink_RequestNavigate"
+                                   Foreground="{StaticResource LinkTextBrush}"
+                                   TextDecorations="Underline">
+                            www.purelogiccode.com
+                        </Hyperlink>
+                    </TextBlock>
+                    <TextBlock Margin="0,4,0,0">
+                        <Hyperlink NavigateUri="https://github.com/drpetersonfernandes/BatchConvertIsoToXiso"
+                                   RequestNavigate="Hyperlink_RequestNavigate"
+                                   Foreground="{StaticResource LinkTextBrush}"
+                                   TextDecorations="Underline">
+                            GitHub Repository
+                        </Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- Close Button -->
+                <Button Grid.Column="1"
+                        Width="100"
+                        Height="36"
+                        Click="CloseButton_Click"
+                        Content="Close"
+                        Style="{StaticResource ActionButtonStyle}" />
+            </Grid>
+        </Grid>
+    </ScrollViewer>
 </Window>
