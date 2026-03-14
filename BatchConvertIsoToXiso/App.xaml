@@ -524,7 +524,7 @@
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="Center"
                                               RecognizesAccessKey="True"
-                                              TextBlock.Foreground="{TemplateBinding Foreground}"
+                                              TextBlock.Foreground="{StaticResource TerminalForegroundBrush}"
                                               TextBlock.FontWeight="{TemplateBinding FontWeight}"/>
                         </Border>
                     </ControlTemplate>
