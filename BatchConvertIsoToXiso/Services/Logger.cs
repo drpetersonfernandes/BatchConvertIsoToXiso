@@ -21,7 +21,7 @@ public class LoggerService : ILogger
         }
 
         var timestampedMessage = $"[{DateTime.Now:HH:mm:ss}] {message}";
-        Application.Current.Dispatcher.Invoke(() =>
+        _ = Application.Current.Dispatcher.InvokeAsync(() =>
         {
             _logViewer.AppendText($"{timestampedMessage}{Environment.NewLine}");
             _logViewer.ScrollToEnd();
