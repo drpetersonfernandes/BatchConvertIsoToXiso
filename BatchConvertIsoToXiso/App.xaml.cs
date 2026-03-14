@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
@@ -53,10 +54,32 @@ public partial class App
 
             _ = _statsService?.SendStatsAsync();
 
-            // Create and show the main window
-            using var scope = ServiceProvider.CreateScope();
-            var mainWindow = scope.ServiceProvider.GetRequiredService<MainWindow>();
-            mainWindow.Show();
+            // Create and show the main window with enhanced error handling
+            try
+            {
+                using var scope = ServiceProvider.CreateScope();
+                var mainWindow = scope.ServiceProvider.GetRequiredService<MainWindow>();
+                mainWindow.Show();
+            }
+            catch (SEHException sehEx)
+            {
+                // Handle font/WPF rendering issues gracefully
+                _logger?.LogMessage($"SEH Exception during window creation: {sehEx.Message}");
+                _messageBoxService?.ShowError(
+                    "The application encountered a system rendering error. This may be caused by:\n\n" +
+                    "- Corrupted system fonts\n" +
+                    "- Graphics driver issues\n" +
+                    "- Windows UI component problems\n\n" +
+                    "Please try:\n" +
+                    "1. Restarting your computer\n" +
+                    "2. Updating your graphics drivers\n" +
+                    "3. Running Windows font repair (sfc /scannow)\n\n" +
+                    $"Error: {sehEx.Message}");
+
+                // Report this critical error
+                _ = ReportException(sehEx, "Bug OnStartup - SEHException");
+                Shutdown(1);
+            }
         }
         catch (Exception ex)
         {
