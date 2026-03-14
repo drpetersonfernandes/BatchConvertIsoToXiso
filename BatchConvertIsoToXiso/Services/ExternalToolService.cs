@@ -19,16 +19,40 @@ public partial class ExternalToolService : IExternalToolService
 
     public async Task<string?> ConvertCueBinToIsoAsync(string cuePath, string tempOutputDir, CancellationToken token)
     {
+        var cueFileName = Path.GetFileName(cuePath);
+        _logger.LogMessage($"Converting CUE/BIN to ISO: '{cueFileName}'...");
+
         var binPath = await ParseCueForBinFileAsync(cuePath, token);
-        if (string.IsNullOrEmpty(binPath)) return null;
+        if (string.IsNullOrEmpty(binPath))
+        {
+            _logger.LogMessage($"[ERROR] Could not find BIN file for CUE: '{cueFileName}'");
+            return null;
+        }
+
+        var binFileName = Path.GetFileName(binPath);
+        _logger.LogMessage($"  Found BIN file: '{binFileName}'");
 
         var outputBaseName = Path.GetFileNameWithoutExtension(cuePath);
         var outputLines = new List<string>();
         var result = await RunProcessAsync(_bchunkPath, $"\"{binPath}\" \"{cuePath}\" \"{outputBaseName}\"", tempOutputDir, outputLines, outputBaseName, token);
 
-        if (result != 0) return null;
+        if (result != 0)
+        {
+            _logger.LogMessage($"[ERROR] Failed to convert CUE/BIN to ISO for '{cueFileName}'. bchunk.exe exited with code {result}.");
+            return null;
+        }
 
-        return Directory.GetFiles(tempOutputDir, "*.iso").FirstOrDefault();
+        var isoFile = Directory.GetFiles(tempOutputDir, "*.iso").FirstOrDefault();
+        if (isoFile != null)
+        {
+            _logger.LogMessage($"  Successfully converted CUE/BIN to ISO: '{Path.GetFileName(isoFile)}'");
+        }
+        else
+        {
+            _logger.LogMessage($"[WARNING] CUE/BIN conversion completed but no ISO file was found for '{cueFileName}'.");
+        }
+
+        return isoFile;
     }
 
     private async Task<int?> RunProcessAsync(string fileName, string arguments, string? workingDir, List<string> outputStore, string contextName, CancellationToken token)
