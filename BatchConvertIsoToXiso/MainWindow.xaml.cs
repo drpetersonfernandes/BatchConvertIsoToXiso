@@ -65,11 +65,21 @@ public partial class MainWindow
     {
         try
         {
-            await CheckForUpdatesAsync();
+            // Set initial navigation button style
+            UpdateNavigationButtonStyles(BtnNavConvert);
+
+            try
+            {
+                await CheckForUpdatesAsync();
+            }
+            catch (Exception ex)
+            {
+                _ = _bugReportService.SendBugReportAsync($"Error checking for updates: {ex.Message}");
+            }
         }
         catch (Exception ex)
         {
-            _ = _bugReportService.SendBugReportAsync($"Error checking for updates: {ex.Message}");
+            _ = _bugReportService.SendBugReportAsync($"Error setting initial navigation button style: {ex.Message}");
         }
     }
 

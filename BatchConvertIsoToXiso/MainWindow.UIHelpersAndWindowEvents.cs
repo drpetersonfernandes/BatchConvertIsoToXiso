@@ -1,6 +1,7 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
 using Microsoft.Win32;
@@ -220,6 +221,8 @@ public partial class MainWindow
         LogBorder.Visibility = Visibility.Visible;
         ExplorerBorder.Visibility = Visibility.Collapsed;
         StatsPanel.Visibility = Visibility.Visible;
+
+        UpdateNavigationButtonStyles(BtnNavConvert);
     }
 
     private void NavTest_Click(object sender, RoutedEventArgs e)
@@ -231,6 +234,8 @@ public partial class MainWindow
         LogBorder.Visibility = Visibility.Visible;
         ExplorerBorder.Visibility = Visibility.Collapsed;
         StatsPanel.Visibility = Visibility.Visible;
+
+        UpdateNavigationButtonStyles(BtnNavTest);
     }
 
     private void NavExplorer_Click(object sender, RoutedEventArgs e)
@@ -242,6 +247,19 @@ public partial class MainWindow
         LogBorder.Visibility = Visibility.Collapsed;
         ExplorerBorder.Visibility = Visibility.Visible;
         StatsPanel.Visibility = Visibility.Collapsed;
+
+        UpdateNavigationButtonStyles(BtnNavExplorer);
+    }
+
+    private void UpdateNavigationButtonStyles(Button selectedButton)
+    {
+        // Reset all navigation buttons to default style
+        BtnNavConvert.Style = (Style)FindResource("MenuButtonStyle");
+        BtnNavTest.Style = (Style)FindResource("MenuButtonStyle");
+        BtnNavExplorer.Style = (Style)FindResource("MenuButtonStyle");
+
+        // Apply selected style to the active button
+        selectedButton.Style = (Style)FindResource("SelectedMenuButtonStyle");
     }
 
     private void StopPerformanceCounter()

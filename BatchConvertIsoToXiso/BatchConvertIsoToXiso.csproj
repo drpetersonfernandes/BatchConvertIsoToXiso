@@ -44,6 +44,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Page Remove="References\**" />
+    </ItemGroup>
+
+    <ItemGroup>
       <None Remove="images\about.png" />
       <Resource Include="images\about.png" />
       <None Remove="images\exit.png" />
