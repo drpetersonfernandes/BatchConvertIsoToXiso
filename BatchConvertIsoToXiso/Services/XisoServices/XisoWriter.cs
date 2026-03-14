@@ -182,7 +182,8 @@ public class XisoWriter
                     if (validRanges.Count == 1 && validRanges[0].Start == headerOffsetSector)
                     {
                         _logger.LogMessage("[INFO] File has contiguous layout - using fast copy...");
-                        var bytesToCopy = (lastValidSector + 1) * Utils.SectorSize;
+                        // Subtract the inputOffset from the calculation so it only copies the length of the game partition
+                        var bytesToCopy = (lastValidSector + 1) * Utils.SectorSize - inputOffset;
                         var remaining = bytesToCopy;
                         while (remaining > 0)
                         {
@@ -275,7 +276,8 @@ public class XisoWriter
                     xisoFs.SetLength(xisoFs.Position);
 
                     // Improvement #5: Validate output size matches expectations
-                    var expectedOutputSize = (lastValidSector + 1) * Utils.SectorSize;
+                    // Account for the inputOffset in the expected size
+                    var expectedOutputSize = (lastValidSector + 1) * Utils.SectorSize - inputOffset;
                     if (xisoFs.Length != expectedOutputSize)
                     {
                         _logger.LogMessage($"[WARNING] Output size mismatch. Expected: {expectedOutputSize / (1024 * 1024)} MB, Got: {xisoFs.Length / (1024 * 1024)} MB");

@@ -156,7 +156,7 @@ internal static class Xdvdfs
                 // Check if signature exists in this buffer
                 for (var i = 0; i <= bytesRead - signatureBytes.Length; i++)
                 {
-                    if (buffer.Skip(i).Take(signatureBytes.Length).SequenceEqual(signatureBytes))
+                    if (buffer.AsSpan(i, signatureBytes.Length).SequenceEqual(signatureBytes))
                     {
                         var candidateOffset = position + i - XisoHeaderOffset;
                         if (candidateOffset >= 0 && TryValidateVolumeAtOffset(isoFs, candidateOffset))

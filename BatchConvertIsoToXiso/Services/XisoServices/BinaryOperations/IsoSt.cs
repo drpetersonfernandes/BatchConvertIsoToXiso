@@ -26,8 +26,11 @@ public class IsoSt : IDisposable
 
         if (fileOffset >= _fileStream.Length) return 0;
 
-        _fileStream.Seek(fileOffset, SeekOrigin.Begin);
-        return _fileStream.Read(buffer);
+        lock (_fileStream)
+        {
+            _fileStream.Seek(fileOffset, SeekOrigin.Begin);
+            return _fileStream.Read(buffer);
+        }
     }
 
     public FileEntry? ReadFileEntry(long sector, long offset)
@@ -35,22 +38,28 @@ public class IsoSt : IDisposable
         var position = VolumeOffset + sector * SectorSize + offset;
         if (position >= _fileStream.Length) return null;
 
-        _fileStream.Seek(position, SeekOrigin.Begin);
-        var entry = new FileEntry();
-        try
+        lock (_fileStream)
         {
-            entry.ReadInternal(Reader, sector, offset);
-            return entry;
-        }
-        catch
-        {
-            return null;
+            _fileStream.Seek(position, SeekOrigin.Begin);
+            var entry = new FileEntry();
+            try
+            {
+                entry.ReadInternal(Reader, sector, offset);
+                return entry;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 
     public void ExecuteLocked(Action<BinaryReader> action)
     {
-        action(Reader);
+        lock (_fileStream)
+        {
+            action(Reader);
+        }
     }
 
     public void Dispose()

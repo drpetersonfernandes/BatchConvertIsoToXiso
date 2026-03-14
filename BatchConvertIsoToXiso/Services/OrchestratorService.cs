@@ -611,14 +611,10 @@ public class OrchestratorService : IOrchestratorService
                     if (firstQuote >= 0 && secondQuote > firstQuote)
                     {
                         var fileName = trimmedLine.Substring(firstQuote + 1, secondQuote - firstQuote - 1);
-                        // Only include BIN files
-                        if (Path.GetExtension(fileName).Equals(".bin", StringComparison.OrdinalIgnoreCase))
+                        var binPath = Path.Combine(cueFolder, fileName);
+                        if (!binFiles.Contains(binPath))
                         {
-                            var binPath = Path.Combine(cueFolder, fileName);
-                            if (!binFiles.Contains(binPath))
-                            {
-                                binFiles.Add(binPath);
-                            }
+                            binFiles.Add(binPath);
                         }
                     }
                 }

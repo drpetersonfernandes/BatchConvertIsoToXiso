@@ -197,64 +197,75 @@ public partial class MainWindow
         _dragStartPoint = e.GetPosition(null);
     }
 
-    private void ExplorerListView_MouseMove(object sender, MouseEventArgs e)
+    private async void ExplorerListView_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _isDragging) return;
-        if (_explorerIsoSt == null) return;
-
-        var currentPosition = e.GetPosition(null);
-        var diff = _dragStartPoint - currentPosition;
-
-        // Check if mouse has moved enough to start a drag operation
-        if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance) return;
-
-        // Get selected file items (not directories)
-        var selectedItems = ExplorerListView.SelectedItems
-            .Cast<XisoExplorerItem>()
-            .Where(static i => !i.IsDirectory)
-            .ToList();
-
-        if (selectedItems.Count == 0) return;
-
-        _isDragging = true;
-
         try
         {
-            // Extract files to temp folder for drag operation
-            var tempFolder = Path.Combine(Path.GetTempPath(), "XisoExplorer", "DragDrop", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(tempFolder);
+            if (e.LeftButton != MouseButtonState.Pressed || _isDragging) return;
+            if (_explorerIsoSt == null) return;
 
-            var tempFiles = new List<string>();
+            var currentPosition = e.GetPosition(null);
+            var diff = _dragStartPoint - currentPosition;
 
-            foreach (var item in selectedItems)
-            {
-                var tempPath = Path.Combine(tempFolder, item.Name);
-                ExtractFileToDisk(item.Entry, tempPath);
-                tempFiles.Add(tempPath);
-            }
+            // Check if mouse has moved enough to start a drag operation
+            if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance) return;
 
-            // Start drag operation
-            var data = new DataObject(DataFormats.FileDrop, tempFiles.ToArray());
-            DragDrop.DoDragDrop(ExplorerListView, data, DragDropEffects.Copy);
+            // Get selected file items (not directories)
+            var selectedItems = ExplorerListView.SelectedItems
+                .Cast<XisoExplorerItem>()
+                .Where(static i => !i.IsDirectory)
+                .ToList();
 
-            // Cleanup temp files after drag operation completes
+            if (selectedItems.Count == 0) return;
+
+            _isDragging = true;
+
             try
             {
-                Directory.Delete(tempFolder, true);
+                // Extract files to temp folder for drag operation
+                var tempFolder = Path.Combine(Path.GetTempPath(), "XisoExplorer", "DragDrop", Guid.NewGuid().ToString());
+                Directory.CreateDirectory(tempFolder);
+
+                var tempFiles = new List<string>();
+
+                // Perform extraction asynchronously to avoid UI freeze
+                await Task.Run(() =>
+                {
+                    foreach (var item in selectedItems)
+                    {
+                        var tempPath = Path.Combine(tempFolder, item.Name);
+                        ExtractFileToDisk(item.Entry, tempPath);
+                        tempFiles.Add(tempPath);
+                    }
+                });
+
+                // Start drag operation back on the UI thread
+                var data = new DataObject(DataFormats.FileDrop, tempFiles.ToArray());
+                DragDrop.DoDragDrop(ExplorerListView, data, DragDropEffects.Copy);
+
+                // Cleanup temp files after drag operation completes
+                try
+                {
+                    Directory.Delete(tempFolder, true);
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore cleanup errors
+                _messageBoxService.ShowError($"Failed to prepare files for drag operation: {ex.Message}");
+            }
+            finally
+            {
+                _isDragging = false;
             }
         }
         catch (Exception ex)
         {
-            _messageBoxService.ShowError($"Failed to prepare files for drag operation: {ex.Message}");
-        }
-        finally
-        {
-            _isDragging = false;
+            _messageBoxService.ShowError($"Drag operation failed: {ex.Message}");
         }
     }
 
