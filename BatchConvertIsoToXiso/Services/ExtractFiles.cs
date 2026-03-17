@@ -1,5 +1,4 @@
 using System.IO;
-using System.Linq;
 using BatchConvertIsoToXiso.interfaces;
 using SharpCompress.Archives;
 using SharpCompress.Common;
@@ -235,7 +234,7 @@ public class FileExtractorService : IFileExtractor
             _logger.LogMessage($"  {errorMessage}");
             throw;
         }
-        catch (Exception ex) when (ex is ArchiveException || ex is ArchiveOperationException)
+        catch (Exception ex) when (ex is ArchiveException or ArchiveOperationException)
         {
             var errorMessage = $"Error extracting {archiveFileName}: The archive appears to be invalid, corrupted, or in an unsupported format.\n" +
                                "Please ensure the file is a valid archive (Zip, Rar, 7Zip, etc.).\n" +
