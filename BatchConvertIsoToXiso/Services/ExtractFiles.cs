@@ -1,6 +1,8 @@
 using System.IO;
+using System.Linq;
 using BatchConvertIsoToXiso.interfaces;
 using SharpCompress.Archives;
+using SharpCompress.Common;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -91,6 +93,38 @@ public class FileExtractorService : IFileExtractor
         return false;
     }
 
+    /// <summary>
+    /// Checks if there is enough disk space on the target drive for the extraction.
+    /// </summary>
+    private void CheckDiskSpace(string extractionPath, long totalSize, string archiveFileName)
+    {
+        try
+        {
+            var fullPath = Path.GetFullPath(extractionPath);
+            var root = Path.GetPathRoot(fullPath);
+            if (string.IsNullOrEmpty(root)) return;
+
+            var drive = new DriveInfo(root);
+            if (drive.AvailableFreeSpace < totalSize)
+            {
+                var requiredSpace = Formatter.FormatBytes(totalSize);
+                var availableSpace = Formatter.FormatBytes(drive.AvailableFreeSpace);
+                var errorMessage = $"Not enough disk space to extract {archiveFileName}. Required: {requiredSpace}, Available: {availableSpace}.";
+                _logger.LogMessage($"  ERROR: {errorMessage}");
+                throw new IOException(errorMessage);
+            }
+        }
+        catch (IOException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Ignore other errors during disk space check to avoid blocking extraction if check fails for some reason
+            _logger.LogMessage($"  Warning: Could not check disk space: {ex.Message}");
+        }
+    }
+
     public async Task<bool> ExtractArchiveAsync(string archivePath, string extractionPath, CancellationToken token)
     {
         var archiveFileName = Path.GetFileName(archivePath);
@@ -121,20 +155,23 @@ public class FileExtractorService : IFileExtractor
             await Task.Run(() =>
             {
                 using var archive = ArchiveFactory.OpenArchive(archivePath);
-                var fileCount = archive.Entries.Count(static e => !e.IsDirectory);
+                var entries = archive.Entries.Where(static e => !e.IsDirectory).ToList();
+                var fileCount = entries.Count;
+                var totalSize = entries.Sum(static e => e.Size);
                 var archiveFormat = archive.Type;
 
-                _logger.LogMessage($"  Archive format: {archiveFormat}, Files to extract: {fileCount}");
+                _logger.LogMessage($"  Archive format: {archiveFormat}, Files to extract: {fileCount}, Total size: {Formatter.FormatBytes(totalSize)}");
+
+                CheckDiskSpace(extractionPath, totalSize, archiveFileName);
+
                 _logger.LogMessage($"  Extracting files from {archiveFileName}...");
 
                 var isoExtracted = false;
 
                 // Manually extract files to prevent "Zip Slip" (absolute paths or path traversal in archives)
-                foreach (var entry in archive.Entries)
+                foreach (var entry in entries)
                 {
                     token.ThrowIfCancellationRequested();
-
-                    if (entry.IsDirectory) continue;
 
                     var entryPath = entry.Key;
 
@@ -198,6 +235,21 @@ public class FileExtractorService : IFileExtractor
             _logger.LogMessage($"  {errorMessage}");
             throw;
         }
+        catch (Exception ex) when (ex is ArchiveException || ex is ArchiveOperationException)
+        {
+            var errorMessage = $"Error extracting {archiveFileName}: The archive appears to be invalid, corrupted, or in an unsupported format.\n" +
+                               "Please ensure the file is a valid archive (Zip, Rar, 7Zip, etc.).\n" +
+                               $"Exception: {ex.Message}";
+            _logger.LogMessage($"  {errorMessage}");
+            throw new IOException(errorMessage, ex);
+        }
+        catch (IOException ex) when (ex.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase))
+        {
+            var userMessage = $"ERROR: Not enough disk space to extract {archiveFileName}.\n\n" +
+                              "Please free up some space on your drive and try again.";
+            _logger.LogMessage($"  {userMessage}");
+            throw new IOException(userMessage, ex);
+        }
         catch (IOException ex) when (IsCloudFileProviderError(ex))
         {
             // Provide user-friendly message for cloud file provider errors
@@ -225,6 +277,10 @@ public class FileExtractorService : IFileExtractor
             {
                 _logger.LogMessage($"ERROR: {archiveFileName} appears to be corrupt (invalid compression data). The file may have been damaged during download or transfer. Please re-download the archive and try again.");
             }
+            else if (ex.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogMessage($"ERROR: Not enough disk space to extract {archiveFileName}. Please free up some space on your drive and try again.");
+            }
             else
             {
                 _logger.LogMessage($"Error extracting {archiveFileName}: {ex.Message}");
@@ -234,11 +290,14 @@ public class FileExtractorService : IFileExtractor
             var isEnvironmentalError = ex is IOException ioEx &&
                                        (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
                                         ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
-                                        ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase));
+                                        ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase));
 
             // Filter out common archive errors (corruption, wrong password, etc.) from bug reports
             // Note: Cloud file errors are now reported as they indicate potential app compatibility issues
             if (!isEnvironmentalError &&
+                ex is not ArchiveException &&
+                ex is not ArchiveOperationException &&
                 !ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) &&
@@ -313,7 +372,9 @@ public class FileExtractorService : IFileExtractor
 
             // Filter out common archive errors from bug reports
             // Note: Cloud file errors are now reported as they indicate potential app compatibility issues
-            if (!ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
+            if (ex is not ArchiveException &&
+                ex is not ArchiveOperationException &&
+                !ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase) &&
