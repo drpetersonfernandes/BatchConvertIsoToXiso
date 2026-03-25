@@ -119,6 +119,17 @@ public class OrchestratorService : IOrchestratorService
                 {
                     throw;
                 }
+                catch (Exception ex) when (IsDiskSpaceError(ex))
+                {
+                    // Stop the batch — no point continuing without disk space
+                    progress.Report(new BatchOperationProgress
+                    {
+                        LogMessage = "ERROR: Not enough disk space on the output drive. Batch operation stopped. Please free up disk space and try again.",
+                        FailedCount = 1,
+                        FailedPathToAdd = entryPath
+                    });
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     // Provide user-friendly message for corrupt archives
@@ -213,6 +224,11 @@ public class OrchestratorService : IOrchestratorService
         catch (OperationCanceledException)
         {
             // Re-throw cancellation exceptions to stop the batch
+            throw;
+        }
+        catch (Exception ex) when (IsDiskSpaceError(ex))
+        {
+            // Stop the batch — no point continuing without disk space
             throw;
         }
         catch (Exception)
@@ -519,6 +535,14 @@ public class OrchestratorService : IOrchestratorService
     #endregion
 
     #region Helpers
+
+    private static bool IsDiskSpaceError(Exception ex)
+    {
+        return ex is IOException ioEx &&
+               (ioEx.Message.Contains("Not enough space", StringComparison.OrdinalIgnoreCase) ||
+                ioEx.Message.Contains("not enough disk space", StringComparison.OrdinalIgnoreCase) ||
+                ioEx.Message.Contains("insufficient disk space", StringComparison.OrdinalIgnoreCase));
+    }
 
     private static void ReportStatus(FileProcessingStatus status, string path, IProgress<BatchOperationProgress> progress)
     {

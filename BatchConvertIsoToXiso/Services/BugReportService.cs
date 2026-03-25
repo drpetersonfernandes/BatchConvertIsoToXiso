@@ -57,9 +57,7 @@ public class BugReportService : IBugReportService, IDisposable
             return message;
         }
 
-        var sb = new StringBuilder(message);
-        sb.AppendLine();
-        sb.AppendLine();
+        var sb = new StringBuilder();
         sb.AppendLine("=== Environment Details ===");
         sb.AppendLine(CultureInfo.InvariantCulture, $"OS Version: {Environment.OSVersion}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Windows Version: {Environment.OSVersion.Version}");
@@ -70,6 +68,8 @@ public class BugReportService : IBugReportService, IDisposable
         sb.AppendLine(CultureInfo.InvariantCulture, $"Base Directory: {AppDomain.CurrentDomain.BaseDirectory}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Temp Path: {Path.GetTempPath()}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"User: {Environment.UserName}");
+        sb.AppendLine();
+        sb.AppendLine(message);
 
         return sb.ToString();
     }
