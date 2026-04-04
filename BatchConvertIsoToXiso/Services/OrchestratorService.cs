@@ -130,6 +130,17 @@ public class OrchestratorService : IOrchestratorService
                     });
                     throw;
                 }
+                catch (Exception ex) when (IsFatalEnvironmentalError(ex))
+                {
+                    // Stop the batch — no point continuing if the output drive or network is disconnected
+                    progress.Report(new BatchOperationProgress
+                    {
+                        LogMessage = $"FATAL ERROR: The output device or path is not available: {ex.Message}. Batch operation stopped.",
+                        FailedCount = 1,
+                        FailedPathToAdd = entryPath
+                    });
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     // Provide user-friendly message for corrupt archives
@@ -146,9 +157,7 @@ public class OrchestratorService : IOrchestratorService
                     progress.Report(new BatchOperationProgress { LogMessage = logMessage, FailedCount = 1, FailedPathToAdd = entryPath });
 
                     // Filter environmental errors (disconnected drives, network issues, etc.)
-                    var isEnvironmentalError = ex is IOException ioEx &&
-                                               (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
-                                                PathHelper.IsNetworkError(ioEx));
+                    var isEnvironmentalError = IsFatalEnvironmentalError(ex) || PathHelper.IsNetworkError(ex);
 
                     // Filter common archive errors (corruption, incomplete downloads, etc.)
                     var isArchiveError = ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) ||
@@ -229,6 +238,11 @@ public class OrchestratorService : IOrchestratorService
         catch (Exception ex) when (IsDiskSpaceError(ex))
         {
             // Stop the batch — no point continuing without disk space
+            throw;
+        }
+        catch (Exception ex) when (IsFatalEnvironmentalError(ex))
+        {
+            // Stop the batch — no point continuing if the output drive or network is disconnected
             throw;
         }
         catch (Exception)
@@ -538,10 +552,35 @@ public class OrchestratorService : IOrchestratorService
 
     private static bool IsDiskSpaceError(Exception ex)
     {
-        return ex is IOException ioEx &&
-               (ioEx.Message.Contains("Not enough space", StringComparison.OrdinalIgnoreCase) ||
-                ioEx.Message.Contains("not enough disk space", StringComparison.OrdinalIgnoreCase) ||
-                ioEx.Message.Contains("insufficient disk space", StringComparison.OrdinalIgnoreCase));
+        if (ex is IOException ioEx)
+        {
+            var hResult = ioEx.HResult & 0xFFFF;
+            if (hResult is 0x70 or 0x27) return true; // ERROR_DISK_FULL, ERROR_HANDLE_DISK_FULL
+        }
+
+        return ex is IOException ioEx2 &&
+               (ioEx2.Message.Contains("Not enough space", StringComparison.OrdinalIgnoreCase) ||
+                ioEx2.Message.Contains("not enough disk space", StringComparison.OrdinalIgnoreCase) ||
+                ioEx2.Message.Contains("insufficient disk space", StringComparison.OrdinalIgnoreCase) ||
+                ioEx2.Message.Contains("Disk full", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsFatalEnvironmentalError(Exception ex)
+    {
+        if (ex is IOException ioEx)
+        {
+            var hResult = ioEx.HResult & 0xFFFF;
+            // 0x15: ERROR_NOT_READY, 0x03: ERROR_PATH_NOT_FOUND, 0x0F: ERROR_INVALID_DRIVE,
+            // 0x37: ERROR_DEV_NOT_EXIST, 0x40: ERROR_NETNAME_DELETED
+            if (hResult is 0x15 or 0x03 or 0x0F or 0x37 or 0x40) return true;
+        }
+
+        if (ex is DirectoryNotFoundException) return true;
+
+        return ex is IOException ioEx2 &&
+               (ioEx2.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+                ioEx2.Message.Contains("network name is no longer available", StringComparison.OrdinalIgnoreCase) ||
+                ioEx2.Message.Contains("Zařízení není připraveno", StringComparison.OrdinalIgnoreCase)); // Czech translation from bug reports
     }
 
     private static void ReportStatus(FileProcessingStatus status, string path, IProgress<BatchOperationProgress> progress)
