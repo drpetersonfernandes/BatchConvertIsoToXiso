@@ -8,10 +8,10 @@
         <UseWPF>true</UseWPF>
         <ApplicationIcon>icon\icon.ico</ApplicationIcon>
         <Authors>PureLogicCode</Authors>
-        <Company>PureLogicCode</Company>
+        <Company>PureLogicCode.com</Company>
         <IsPackable>false</IsPackable>
-        <AssemblyVersion>2.2.0</AssemblyVersion>
-        <FileVersion>2.2.0</FileVersion>
+        <AssemblyVersion>2.3.0</AssemblyVersion>
+        <FileVersion>2.3.0</FileVersion>
         <NeutralLanguage>en</NeutralLanguage>
         <DebugType>embedded</DebugType>
         <DebugSymbols>true</DebugSymbols>
@@ -32,7 +32,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
-        <PackageReference Include="SharpCompress" Version="0.47.3" />
+        <PackageReference Include="SharpCompress" Version="0.47.4" />
     </ItemGroup>
 
     <ItemGroup>

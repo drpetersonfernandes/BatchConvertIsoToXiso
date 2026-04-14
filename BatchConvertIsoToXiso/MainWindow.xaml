@@ -11,6 +11,8 @@
     <Window.Resources>
         <!-- Converter for the XIso Explorer icons -->
         <services:FolderIconConverter x:Key="FolderIconConverter" />
+        <!-- Font family with fallback for terminal/log display -->
+        <FontFamily x:Key="TerminalFontFamily">Consolas, Courier New, Lucida Console, monospace</FontFamily>
     </Window.Resources>
 
     <Grid Background="{StaticResource WindowBackgroundBrush}">
@@ -144,7 +146,7 @@
                      <TextBox x:Name="LogViewer"
                              AcceptsReturn="True"
                              IsReadOnly="True"
-                             FontFamily="Consolas"
+                             FontFamily="{StaticResource TerminalFontFamily}"
                              FontSize="13"
                              Background="{StaticResource TerminalBackgroundBrush}"
                              Foreground="{StaticResource TerminalForegroundBrush}"

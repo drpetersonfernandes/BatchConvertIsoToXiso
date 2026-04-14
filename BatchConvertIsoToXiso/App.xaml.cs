@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -64,27 +65,50 @@ public partial class App
             catch (SEHException sehEx)
             {
                 // Handle font/WPF rendering issues gracefully
-                _logger?.LogMessage($"SEH Exception during window creation: {sehEx.Message}");
-                _messageBoxService?.ShowError(
-                    "The application encountered a system rendering error. This may be caused by:\n\n" +
-                    "- Corrupted system fonts\n" +
-                    "- Graphics driver issues\n" +
-                    "- Windows UI component problems\n\n" +
-                    "Please try:\n" +
-                    "1. Restarting your computer\n" +
-                    "2. Updating your graphics drivers\n" +
-                    "3. Running Windows font repair (sfc /scannow)\n\n" +
-                    $"Error: {sehEx.Message}");
-
-                // Report this critical error
-                _ = ReportException(sehEx, "Bug OnStartup - SEHException");
-                Shutdown(1);
+                await HandleFontRenderingError(sehEx);
             }
+            catch (InvalidOperationException opEx) when (opEx.Message.Contains("font", StringComparison.OrdinalIgnoreCase) ||
+                                                         opEx.Message.Contains("FontFamily", StringComparison.OrdinalIgnoreCase))
+            {
+                // Handle font-related InvalidOperationException
+                await HandleFontRenderingError(opEx);
+            }
+        }
+        catch (SEHException sehEx)
+        {
+            // Handle SEH exceptions during service setup
+            await HandleFontRenderingError(sehEx);
         }
         catch (Exception ex)
         {
             _ = ReportException(ex, "Bug OnStartup");
         }
+    }
+
+    private async Task HandleFontRenderingError(Exception ex)
+    {
+        _logger?.LogMessage($"Font/Rendering error during startup: {ex.Message}");
+
+        var errorMessage =
+            "The application encountered a font or rendering error during startup.\n\n" +
+            "This issue commonly occurs when:\n" +
+            "- Running on Windows 7 or older systems\n" +
+            "- Running through Wine/Proton compatibility layers (e.g., on Steam Deck/Linux)\n" +
+            "- System fonts are missing or corrupted\n\n" +
+            "Recommended solutions:\n" +
+            "1. Ensure 'Segoe UI' and 'Arial' fonts are installed\n" +
+            "2. On Linux/Steam Deck: Install corefonts package via winetricks\n" +
+            "   (winetricks corefonts)\n" +
+            "3. Update your Wine/Proton version\n" +
+            "4. On Windows: Run 'sfc /scannow' to repair system files\n\n" +
+            $"Technical details: {ex.GetType().Name}\n" +
+            $"Error: {ex.Message}";
+
+        _messageBoxService?.ShowError(errorMessage);
+
+        // Report this critical error
+        await ReportException(ex, "Bug OnStartup - FontRenderingError");
+        Shutdown(1);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -158,8 +182,25 @@ public partial class App
     private static string BuildExceptionReport(Exception exception, string source)
     {
         var sb = new StringBuilder();
+
+        sb.AppendLine("=== Environment Details ===");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Application Name: {ApplicationName}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Application Version: {GetApplicationVersion.GetProgramVersion()}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"OS Version: {Environment.OSVersion}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Architecture: {RuntimeInformation.ProcessArchitecture}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Bitness: {(Environment.Is64BitProcess ? "64-bit" : "32-bit")}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Windows Version: {GetWindowsVersion()}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Processor Count: {Environment.ProcessorCount}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Base Directory: {AppContext.BaseDirectory}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Temp Path: {Path.GetTempPath()}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"User: {Environment.UserName}");
+        sb.AppendLine();
+
+        sb.AppendLine("=== Error Details ===");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Error Source: {source}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Date and Time: {DateTime.Now}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Exception Type: {exception.GetType().FullName}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Error Message: {exception.Message}");
         sb.AppendLine();
 
         // Add exception details
@@ -167,5 +208,24 @@ public partial class App
         ExceptionFormatter.AppendExceptionDetails(sb, exception);
 
         return sb.ToString();
+    }
+
+    private static string GetWindowsVersion()
+    {
+        try
+        {
+            // Try to get Windows version from registry or environment
+            var osVersion = Environment.OSVersion;
+            if (osVersion.Platform == PlatformID.Win32NT)
+            {
+                return $"{osVersion.Version.Major}.{osVersion.Version.Minor}.{osVersion.Version.Build}";
+            }
+
+            return "N/A (Non-Windows)";
+        }
+        catch
+        {
+            return "Unknown";
+        }
     }
 }
