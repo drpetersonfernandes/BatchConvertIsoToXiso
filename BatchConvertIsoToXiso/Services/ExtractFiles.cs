@@ -122,11 +122,11 @@ public class FileExtractorService : IFileExtractor
     /// <summary>
     /// Executes an asynchronous action with a brief retry on IOException.
     /// </summary>
-    private async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> action, CancellationToken token, string operationDescription)
+    private async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> action, string operationDescription, CancellationToken token)
     {
         const int maxRetries = 2;
         const int delayMs = 1000;
-        int attempt = 0;
+        var attempt = 0;
 
         while (true)
         {
@@ -146,11 +146,11 @@ public class FileExtractorService : IFileExtractor
     /// <summary>
     /// Executes an asynchronous action with a brief retry on IOException.
     /// </summary>
-    private async Task ExecuteWithRetryAsync(Func<Task> action, CancellationToken token, string operationDescription)
+    private async Task ExecuteWithRetryAsync(Func<Task> action, string operationDescription, CancellationToken token)
     {
         const int maxRetries = 2;
         const int delayMs = 1000;
-        int attempt = 0;
+        var attempt = 0;
 
         while (true)
         {
@@ -229,75 +229,75 @@ public class FileExtractorService : IFileExtractor
 
             VerifyDriveReady(archivePath);
 
-            await ExecuteWithRetryAsync(async () =>
-            {
-                await Task.Run(() =>
+            await ExecuteWithRetryAsync(() =>
                 {
-                    using var archive = ArchiveFactory.OpenArchive(archivePath);
-                    var entries = archive.Entries.Where(static e => !e.IsDirectory).ToList();
-                    var fileCount = entries.Count;
-                    var totalSize = entries.Sum(static e => e.Size);
-                    var archiveFormat = archive.Type;
-
-                    _logger.LogMessage($"  Archive format: {archiveFormat}, Files to extract: {fileCount}, Total size: {Formatter.FormatBytes(totalSize)}");
-
-                    CheckDiskSpace(extractionPath, totalSize, archiveFileName);
-
-                    _logger.LogMessage($"  Extracting files from {archiveFileName}...");
-
-                    var isoExtracted = false;
-
-                    // Manually extract files to prevent "Zip Slip" (absolute paths or path traversal in archives)
-                    foreach (var entry in entries)
+                    return Task.Run(() =>
                     {
-                        token.ThrowIfCancellationRequested();
+                        using var archive = ArchiveFactory.OpenArchive(archivePath);
+                        var entries = archive.Entries.Where(static e => !e.IsDirectory).ToList();
+                        var fileCount = entries.Count;
+                        var totalSize = entries.Sum(static e => e.Size);
+                        var archiveFormat = archive.Type;
 
-                        var entryPath = entry.Key;
+                        _logger.LogMessage($"  Archive format: {archiveFormat}, Files to extract: {fileCount}, Total size: {Formatter.FormatBytes(totalSize)}");
 
-                        // Strict Zip Slip check: Skip suspicious paths entirely
-                        if (entryPath != null && (Path.IsPathRooted(entryPath) || entryPath.Contains("..")))
+                        CheckDiskSpace(extractionPath, totalSize, archiveFileName);
+
+                        _logger.LogMessage($"  Extracting files from {archiveFileName}...");
+
+                        var isoExtracted = false;
+
+                        // Manually extract files to prevent "Zip Slip" (absolute paths or path traversal in archives)
+                        foreach (var entry in entries)
                         {
-                            _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
-                            continue;
-                        }
+                            token.ThrowIfCancellationRequested();
 
-                        // Check for multiple ISOs
-                        if (entryPath != null && Path.GetExtension(entryPath).Equals(".iso", StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (isoExtracted)
-                            {
-                                _logger.LogMessage($"  Skipping additional ISO: {entryPath} (Only the first ISO is processed per archive).");
-                                continue;
-                            }
+                            var entryPath = entry.Key;
 
-                            isoExtracted = true;
-                        }
-
-                        if (entryPath != null)
-                        {
-                            var fullDestPath = Path.GetFullPath(Path.Combine(extractionPath, entryPath));
-
-                            // Ensure the resulting path is still inside our extraction directory
-                            // Fix: base path must end with directory separator to prevent bypass via similar-named directories
-                            var basePath = Path.GetFullPath(extractionPath);
-                            if (!basePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-                            {
-                                basePath += Path.DirectorySeparatorChar;
-                            }
-
-                            if (!fullDestPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+                            // Strict Zip Slip check: Skip suspicious paths entirely
+                            if (entryPath != null && (Path.IsPathRooted(entryPath) || entryPath.Contains("..")))
                             {
                                 _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
                                 continue;
                             }
 
-                            Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath) ?? throw new InvalidOperationException("fullDestPath cannot be null"));
-                            using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);
-                            entry.WriteTo(fs);
+                            // Check for multiple ISOs
+                            if (entryPath != null && Path.GetExtension(entryPath).Equals(".iso", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (isoExtracted)
+                                {
+                                    _logger.LogMessage($"  Skipping additional ISO: {entryPath} (Only the first ISO is processed per archive).");
+                                    continue;
+                                }
+
+                                isoExtracted = true;
+                            }
+
+                            if (entryPath != null)
+                            {
+                                var fullDestPath = Path.GetFullPath(Path.Combine(extractionPath, entryPath));
+
+                                // Ensure the resulting path is still inside our extraction directory
+                                // Fix: base path must end with directory separator to prevent bypass via similar-named directories
+                                var basePath = Path.GetFullPath(extractionPath);
+                                if (!basePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                                {
+                                    basePath += Path.DirectorySeparatorChar;
+                                }
+
+                                if (!fullDestPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
+                                    continue;
+                                }
+
+                                Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath) ?? throw new InvalidOperationException("fullDestPath cannot be null"));
+                                using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);
+                                entry.WriteTo(fs);
+                            }
                         }
-                    }
-                }, token);
-            }, token, $"Extraction of {archiveFileName}");
+                    }, token);
+                }, $"Extraction of {archiveFileName}", token);
 
             _logger.LogMessage($"  Successfully extracted: {archiveFileName}");
             return true;
@@ -411,16 +411,16 @@ public class FileExtractorService : IFileExtractor
 
             VerifyDriveReady(archivePath);
 
-            return await ExecuteWithRetryAsync(async () =>
-            {
-                return await Task.Run(() =>
+            return await ExecuteWithRetryAsync(() =>
                 {
-                    _logger.LogMessage($"  Calculating uncompressed size for: {Path.GetFileName(archivePath)}");
+                    return Task.Run(() =>
+                    {
+                        _logger.LogMessage($"  Calculating uncompressed size for: {Path.GetFileName(archivePath)}");
 
-                    using var archive = ArchiveFactory.OpenArchive(archivePath);
-                    return archive.Entries.Where(static e => !e.IsDirectory).Sum(static x => x.Size);
-                }, token);
-            }, token, $"Size calculation for {Path.GetFileName(archivePath)}");
+                        using var archive = ArchiveFactory.OpenArchive(archivePath);
+                        return archive.Entries.Where(static e => !e.IsDirectory).Sum(static x => x.Size);
+                    }, token);
+                }, $"Size calculation for {Path.GetFileName(archivePath)}", token);
         }
         catch (OperationCanceledException)
         {
