@@ -124,8 +124,7 @@ public class FileExtractorService : IFileExtractor
     /// </summary>
     private async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> action, string operationDescription, CancellationToken token)
     {
-        const int maxRetries = 2;
-        const int delayMs = 1000;
+        const int maxRetries = 3;
         var attempt = 0;
 
         while (true)
@@ -137,7 +136,8 @@ public class FileExtractorService : IFileExtractor
             catch (IOException ex) when (attempt < maxRetries)
             {
                 attempt++;
-                _logger.LogMessage($"  {operationDescription} failed on attempt {attempt}/{maxRetries}: {ex.Message}. Retrying in {delayMs}ms...");
+                var delayMs = 1000 * (1 << (attempt - 1));
+                _logger.LogMessage($"  {operationDescription} failed on attempt {attempt}/{maxRetries}: {ex.Message}. Retrying in {delayMs / 1000}s...");
                 await Task.Delay(delayMs, token);
             }
         }
@@ -148,8 +148,7 @@ public class FileExtractorService : IFileExtractor
     /// </summary>
     private async Task ExecuteWithRetryAsync(Func<Task> action, string operationDescription, CancellationToken token)
     {
-        const int maxRetries = 2;
-        const int delayMs = 1000;
+        const int maxRetries = 3;
         var attempt = 0;
 
         while (true)
@@ -162,7 +161,8 @@ public class FileExtractorService : IFileExtractor
             catch (IOException ex) when (attempt < maxRetries)
             {
                 attempt++;
-                _logger.LogMessage($"  {operationDescription} failed on attempt {attempt}/{maxRetries}: {ex.Message}. Retrying in {delayMs}ms...");
+                var delayMs = 1000 * (1 << (attempt - 1));
+                _logger.LogMessage($"  {operationDescription} failed on attempt {attempt}/{maxRetries}: {ex.Message}. Retrying in {delayMs / 1000}s...");
                 await Task.Delay(delayMs, token);
             }
         }
@@ -200,6 +200,19 @@ public class FileExtractorService : IFileExtractor
         }
     }
 
+    private static bool IsFileLocked(string filePath)
+    {
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return false;
+        }
+        catch (IOException ex) when (ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+    }
+
     public async Task<bool> ExtractArchiveAsync(string archivePath, string extractionPath, CancellationToken token)
     {
         var archiveFileName = Path.GetFileName(archivePath);
@@ -228,6 +241,13 @@ public class FileExtractorService : IFileExtractor
             _logger.LogMessage($"  Analyzing archive: {archiveFileName}...");
 
             VerifyDriveReady(archivePath);
+
+            if (IsFileLocked(archivePath))
+            {
+                throw new IOException(
+                    $"The file '{archiveFileName}' is currently in use by another process. " +
+                    "Please close any programs that may have the file open (file explorer, zip tools, antivirus, download manager, etc.) and try again.");
+            }
 
             await ExecuteWithRetryAsync(() =>
                 {
@@ -349,7 +369,11 @@ public class FileExtractorService : IFileExtractor
         catch (Exception ex)
         {
             // Provide user-friendly message for corrupt archives
-            if (ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase))
+            if (ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogMessage($"ERROR: The file '{archiveFileName}' is currently in use by another process. Close any programs that may have the file open (file explorer preview, zip tools, antivirus, download manager, etc.) and try again.");
+            }
+            else if (ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogMessage($"ERROR: {archiveFileName} appears to be corrupt or incomplete. The file may have been damaged during download or transfer. Please re-download the archive and try again.");
             }
@@ -366,12 +390,13 @@ public class FileExtractorService : IFileExtractor
                 _logger.LogMessage($"Error extracting {archiveFileName}: {ex.Message}");
             }
 
-            // Filter out environmental/hardware errors (disconnected drives, etc.)
+            // Filter out environmental/hardware errors (disconnected drives, file locks, etc.)
             var isEnvironmentalError = ex is IOException ioEx &&
-                                       (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
-                                        ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
-                                        ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase) ||
-                                        ioEx.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase));
+                                        (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+                                         ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                                         ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase) ||
+                                         ioEx.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
+                                         ioEx.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase));
 
             // Filter out common archive errors (corruption, wrong password, etc.) from bug reports
             // Note: Cloud file errors are now reported as they indicate potential app compatibility issues
@@ -382,7 +407,8 @@ public class FileExtractorService : IFileExtractor
                 !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("Bad state", StringComparison.OrdinalIgnoreCase))
+                !ex.Message.Contains("Bad state", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
             {
                 _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. Exception: {ex}");
             }
@@ -410,6 +436,13 @@ public class FileExtractorService : IFileExtractor
             }
 
             VerifyDriveReady(archivePath);
+
+            if (IsFileLocked(archivePath))
+            {
+                throw new IOException(
+                    $"The file '{Path.GetFileName(archivePath)}' is currently in use by another process. " +
+                    "Please close any programs that may have the file open and try again.");
+            }
 
             return await ExecuteWithRetryAsync(() =>
                 {
@@ -444,7 +477,8 @@ public class FileExtractorService : IFileExtractor
                 !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("Bad state", StringComparison.OrdinalIgnoreCase))
+                !ex.Message.Contains("Bad state", StringComparison.OrdinalIgnoreCase) &&
+                !ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
             {
                 _ = _bugReportService.SendBugReportAsync($"Error getting uncompressed archive size: {archivePath}. Exception: {ex}");
             }
