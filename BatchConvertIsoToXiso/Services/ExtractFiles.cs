@@ -366,6 +366,14 @@ public class FileExtractorService : IFileExtractor
             // Cloud file errors are environmental, do not report as bugs
             throw new IOException(userMessage, ex);
         }
+        catch (CryptographicException)
+        {
+            _logger.LogMessage($"ERROR: {archiveFileName} is encrypted/password-protected. This application cannot extract password-protected archives. Please extract the archive manually using a tool that supports passwords (e.g., WinRAR, 7-Zip) and re-package it without encryption.");
+
+            _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}: Encrypted archive detected (password-protected).");
+
+            return false;
+        }
         catch (Exception ex)
         {
             // Provide user-friendly message for corrupt archives
@@ -392,11 +400,11 @@ public class FileExtractorService : IFileExtractor
 
             // Filter out environmental/hardware errors (disconnected drives, file locks, etc.)
             var isEnvironmentalError = ex is IOException ioEx &&
-                                        (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
-                                         ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
-                                         ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase) ||
-                                         ioEx.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
-                                         ioEx.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase));
+                                       (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase));
 
             // Filter out common archive errors (corruption, wrong password, etc.) from bug reports
             // Note: Cloud file errors are now reported as they indicate potential app compatibility issues
@@ -463,6 +471,12 @@ public class FileExtractorService : IFileExtractor
         {
             // Cloud file errors are environmental, do not report as bugs
             _logger.LogMessage($"  Cloud file provider error for {Path.GetFileName(archivePath)}: {ex.Message}");
+            throw;
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogMessage($"Cannot calculate uncompressed size of archive {Path.GetFileName(archivePath)}: archive is encrypted/password-protected.");
+            _ = _bugReportService.SendBugReportAsync($"Error getting uncompressed archive size: {archivePath}. Encrypted archive detected (password-protected). Exception: {ex}");
             throw;
         }
         catch (Exception ex)
