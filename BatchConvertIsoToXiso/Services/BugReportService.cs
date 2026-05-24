@@ -30,27 +30,26 @@ public class BugReportService : IBugReportService, IDisposable
         try
         {
             var fullMessage = BuildFullMessage(message);
+            var version = GetApplicationVersion.GetProgramVersion();
 
-            // Create the request payload
             var content = JsonContent.Create(new
             {
                 message = fullMessage,
-                applicationName = _applicationName
+                applicationName = _applicationName,
+                version
             });
 
-            // Send the request
             var response = await _httpClient.PostAsync(_apiUrl, content);
 
             return response.IsSuccessStatusCode;
         }
         catch
         {
-            // Silently fail if there's an exception
             return false;
         }
     }
 
-    private static string BuildFullMessage(string message)
+    internal static string BuildFullMessage(string message)
     {
         if (message.Contains("=== Environment Details ===", StringComparison.OrdinalIgnoreCase))
         {
@@ -59,15 +58,16 @@ public class BugReportService : IBugReportService, IDisposable
 
         var sb = new StringBuilder();
         sb.AppendLine("=== Environment Details ===");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"OS Version: {Environment.OSVersion}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Windows Version: {Environment.OSVersion.Version}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $".NET Version: {RuntimeInformation.FrameworkDescription.Replace(".NET ", "", StringComparison.OrdinalIgnoreCase)}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Process Architecture: {RuntimeInformation.ProcessArchitecture}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Processor Count: {Environment.ProcessorCount}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Application Name: {App.ApplicationName}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Application Version: {GetApplicationVersion.GetProgramVersion()}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Base Directory: {AppDomain.CurrentDomain.BaseDirectory}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"OS Version: {Environment.OSVersion}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Architecture: {RuntimeInformation.ProcessArchitecture}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Bitness: {(Environment.Is64BitProcess ? "64-bit" : "32-bit")}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Windows Version: {Environment.OSVersion.Version.Major}.{Environment.OSVersion.Version.Minor}.{Environment.OSVersion.Version.Build}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Processor Count: {Environment.ProcessorCount}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Base Directory: {AppContext.BaseDirectory}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Temp Path: {Path.GetTempPath()}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"User: {Environment.UserName}");
         sb.AppendLine();
         sb.AppendLine(message);
 

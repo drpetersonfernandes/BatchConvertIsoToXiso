@@ -23,7 +23,7 @@ public partial class MainWindow
         ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
     }
 
-    private async Task<CloudRetryResult> HandleCloudRetryRequest(string fileName)
+    private async Task<CloudRetryResult> HandleCloudRetryRequestAsync(string fileName)
     {
         return await Application.Current.Dispatcher.InvokeAsync(() =>
         {
@@ -136,6 +136,8 @@ public partial class MainWindow
 
         Application.Current.Dispatcher.InvokeAsync(() =>
         {
+            if (_isForceClosing) return;
+
             if (_totalProcessedFiles > 5 && (double)_invalidIsoErrorCount / _totalProcessedFiles > 0.5)
             {
                 _messageBoxService.ShowWarning($"Many files ({_invalidIsoErrorCount} out of {_totalProcessedFiles}) were not valid Xbox ISOs. " +

@@ -197,7 +197,7 @@ public partial class MainWindow
         _dragStartPoint = e.GetPosition(null);
     }
 
-    private async void ExplorerListView_MouseMove(object sender, MouseEventArgs e)
+    private async void ExplorerListView_MouseMoveAsync(object sender, MouseEventArgs e)
     {
         try
         {

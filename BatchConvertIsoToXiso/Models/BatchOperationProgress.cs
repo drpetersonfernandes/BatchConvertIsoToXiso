@@ -11,5 +11,4 @@ public class BatchOperationProgress
     public int? SkippedCount { get; set; }
     public string? CurrentDrive { get; set; }
     public string? FailedPathToAdd { get; set; }
-    public bool IsIndeterminate { get; set; }
 }

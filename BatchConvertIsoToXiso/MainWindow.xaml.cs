@@ -64,7 +64,7 @@ public partial class MainWindow
         DisplayInstructions.DisplayInitialInstructions();
     }
 
-    private async void Window_Loaded(object sender, RoutedEventArgs e)
+    private async void Window_LoadedAsync(object sender, RoutedEventArgs e)
     {
         try
         {
@@ -125,9 +125,11 @@ public partial class MainWindow
             await Task.Delay(100);
         }
 
+        var timedOut = false;
         if (_isOperationRunning)
         {
             _logger.LogMessage("Warning: Operation did not complete within timeout. Closing anyway.");
+            timedOut = true;
         }
         else
         {
@@ -141,6 +143,18 @@ public partial class MainWindow
             CleanupResources();
             Close();
         });
+
+        // If the operation timed out, the dispatcher may still be blocked by a
+        // queued message box or another modal dialog.  Force a process-level exit
+        // after a short delay as a safety net.
+        if (timedOut || !_isForceClosing)
+        {
+            ThreadPool.QueueUserWorkItem(static _ =>
+            {
+                Thread.Sleep(3000);
+                Environment.Exit(0);
+            });
+        }
     }
 
     private void CleanupResources()
@@ -149,6 +163,16 @@ public partial class MainWindow
         _processingTimer.Stop();
         _memoryTimer.Stop();
         StopPerformanceCounter();
+
+        try
+        {
+            _cts.Cancel();
+            _cts.Dispose();
+        }
+        catch
+        {
+            // Ignore disposal errors during shutdown
+        }
     }
 
     private void MemoryTimer_Tick(object? sender, EventArgs e)

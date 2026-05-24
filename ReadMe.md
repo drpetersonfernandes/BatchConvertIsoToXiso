@@ -43,6 +43,7 @@ Whether you're managing a large collection of Xbox game backups or verifying the
   - **Modified Deterous Logic** (built-in): Fast trimming while preserving original structure
 - **Smart Processing**: Removes video partitions and padding, converting Redump ISOs to playable XISO format
 - **Archive Support**: Process `.zip`, `.7z`, and `.rar` files directly with high-performance extraction via SharpCompress
+- **Encrypted Archive Detection**: Automatically detects password-protected archives and provides clear guidance for manual extraction, preventing cryptic extraction failures
 - **CUE/BIN Support**: Integrated `bchunk` support for converting classic disc images to ISO format
 - **System Update Removal**: Option to skip the `$SystemUpdate` folder for additional space savings (supported by native engine and extract-xiso)
 
@@ -217,6 +218,9 @@ The application follows modern software engineering principles with a clean, mai
 ### Dependency Injection
 Utilizes `Microsoft.Extensions.DependencyInjection` for comprehensive service management. All core logic is decoupled from the UI, enabling easier testing and modular updates.
 
+### Technical Documentation
+For a deep dive into the XDVDFS format, binary file structures, and the internal conversion algorithm, see the [XDVDFS Technical Documentation](wiki.md).
+
 ---
 
 ## System Requirements
@@ -238,6 +242,7 @@ Utilizes `Microsoft.Extensions.DependencyInjection` for comprehensive service ma
 - **Robust Error Handling**: Comprehensive exception handling with automatic bug reporting
 - **Network Resilience**: Full support for UNC paths and mapped network drives with automatic retry logic for transient network failures
 - **Cloud-Aware Retry**: Automatic retries with exponential backoff for cloud-synced files (OneDrive, etc.)
+- **Encrypted Archive Handling**: Gracefully detects password-protected and encrypted archives, providing clear user guidance instead of cryptic errors
 - **Process Isolation**: External tools run in isolated processes with cancellation support
 
 ---

@@ -48,7 +48,7 @@ public partial class MainWindow
         TestInputFolderTextBox.Text = inputFolder;
     }
 
-    private async void StartConversionButton_Click(object sender, RoutedEventArgs e)
+    private async void StartConversionButton_ClickAsync(object sender, RoutedEventArgs e)
     {
         try
         {
@@ -128,12 +128,7 @@ public partial class MainWindow
                     if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
                     if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
 
-                    // Allow the orchestrator to toggle indeterminate mode (e.g., during a long extraction)
-                    if (p.IsIndeterminate)
-                    {
-                        ProgressBar.IsIndeterminate = true;
-                    }
-                    else if (p.TotalFiles.HasValue || p.ProcessedCount.HasValue)
+                    if (p.TotalFiles.HasValue || p.ProcessedCount.HasValue)
                     {
                         ProgressBar.IsIndeterminate = false;
                     }
@@ -156,7 +151,7 @@ public partial class MainWindow
                 SearchSubfoldersConversionCheckBox.IsChecked ?? false,
                 UseExtractXisoRadioButton.IsChecked ?? true,
                 UseXdvdfsRadioButton.IsChecked ?? false,
-                progress, HandleCloudRetryRequest, _cts.Token);
+                progress, HandleCloudRetryRequestAsync, _cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -173,7 +168,7 @@ public partial class MainWindow
         }
     }
 
-    private async void StartTestButton_Click(object sender, RoutedEventArgs e)
+    private async void StartTestButton_ClickAsync(object sender, RoutedEventArgs e)
     {
         try
         {
@@ -238,11 +233,7 @@ public partial class MainWindow
                     if (p.CurrentDrive != null) SetCurrentOperationDrive(p.CurrentDrive);
                     if (p.FailedPathToAdd != null) _failedFilePaths.Add(p.FailedPathToAdd);
 
-                    if (p.IsIndeterminate)
-                    {
-                        ProgressBar.IsIndeterminate = true;
-                    }
-                    else if (p.TotalFiles.HasValue || p.ProcessedCount.HasValue)
+                    if (p.TotalFiles.HasValue || p.ProcessedCount.HasValue)
                     {
                         ProgressBar.IsIndeterminate = false;
                     }
@@ -263,7 +254,7 @@ public partial class MainWindow
                 MoveFailedFilesCheckBox.IsChecked == true,
                 true,
                 PerformDeepScanCheckBox.IsChecked ?? false,
-                progress, HandleCloudRetryRequest, _cts.Token);
+                progress, HandleCloudRetryRequestAsync, _cts.Token);
         }
         catch (OperationCanceledException)
         {

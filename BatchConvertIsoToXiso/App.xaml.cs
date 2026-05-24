@@ -65,27 +65,27 @@ public partial class App
             catch (SEHException sehEx)
             {
                 // Handle font/WPF rendering issues gracefully
-                await HandleFontRenderingError(sehEx);
+                await HandleFontRenderingErrorAsync(sehEx);
             }
             catch (InvalidOperationException opEx) when (opEx.Message.Contains("font", StringComparison.OrdinalIgnoreCase) ||
                                                          opEx.Message.Contains("FontFamily", StringComparison.OrdinalIgnoreCase))
             {
                 // Handle font-related InvalidOperationException
-                await HandleFontRenderingError(opEx);
+                await HandleFontRenderingErrorAsync(opEx);
             }
         }
         catch (SEHException sehEx)
         {
             // Handle SEH exceptions during service setup
-            await HandleFontRenderingError(sehEx);
+            await HandleFontRenderingErrorAsync(sehEx);
         }
         catch (Exception ex)
         {
-            _ = ReportException(ex, "Bug OnStartup");
+            _ = ReportExceptionAsync(ex, "Bug OnStartup");
         }
     }
 
-    private async Task HandleFontRenderingError(Exception ex)
+    private async Task HandleFontRenderingErrorAsync(Exception ex)
     {
         _logger?.LogMessage($"Font/Rendering error during startup: {ex.Message}");
 
@@ -107,7 +107,7 @@ public partial class App
         _messageBoxService?.ShowError(errorMessage);
 
         // Report this critical error
-        await ReportException(ex, "Bug OnStartup - FontRenderingError");
+        await ReportExceptionAsync(ex, "Bug OnStartup - FontRenderingError");
         Shutdown(1);
     }
 
@@ -119,6 +119,15 @@ public partial class App
         }
 
         base.OnExit(e);
+
+        // Safety net: if something blocks the dispatcher (e.g., a lingering message box
+        // or a stuck async operation), force-kill the process after a few seconds so the
+        // application does not remain open in the background.
+        ThreadPool.QueueUserWorkItem(static _ =>
+        {
+            Thread.Sleep(5000);
+            Environment.Exit(0);
+        });
     }
 
     private static void ConfigureServices(IServiceCollection services)
@@ -146,23 +155,23 @@ public partial class App
     {
         if (e.ExceptionObject is Exception exception)
         {
-            _ = ReportException(exception, "AppDomain.UnhandledException");
+            _ = ReportExceptionAsync(exception, "AppDomain.UnhandledException");
         }
     }
 
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        _ = ReportException(e.Exception, "Application.DispatcherUnhandledException");
+        _ = ReportExceptionAsync(e.Exception, "Application.DispatcherUnhandledException");
         e.Handled = true;
     }
 
     private void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
-        _ = ReportException(e.Exception, "TaskScheduler.UnobservedTaskException");
+        _ = ReportExceptionAsync(e.Exception, "TaskScheduler.UnobservedTaskException");
         e.SetObserved();
     }
 
-    private async Task ReportException(Exception exception, string source)
+    private async Task ReportExceptionAsync(Exception exception, string source)
     {
         try
         {
@@ -203,8 +212,7 @@ public partial class App
         sb.AppendLine(CultureInfo.InvariantCulture, $"Error Message: {exception.Message}");
         sb.AppendLine();
 
-        // Add exception details
-        sb.AppendLine("Exception Details:");
+        sb.AppendLine("=== Exception Details ===");
         ExceptionFormatter.AppendExceptionDetails(sb, exception);
 
         return sb.ToString();

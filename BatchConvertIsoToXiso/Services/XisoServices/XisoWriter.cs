@@ -20,6 +20,18 @@ public class XisoWriter
     private static readonly long[] XisoLength = [0x1A2DB0000, 0x1B3880000, 0xBF8A0000, 0x204510000];
     private static readonly long[] RedumpIsoLength = [0x1D26A8000, 0x1D3301800, 0x1D2FEF800, 0x1D3082000, 0x1D3390000, 0x1D31A0000, 0x208E05800, 0x208E03800];
 
+    internal static int GetXgdType(int redumpIsoType)
+    {
+        return redumpIsoType switch
+        {
+            0 => 0,
+            1 or 2 or 3 or 4 => 1,
+            5 => 2,
+            6 or 7 => 3,
+            _ => 0
+        };
+    }
+
     // P/Invoke for sparse file support (Improvement #1)
     private const uint FsctlSetSparse = 0x000900C4;
 
@@ -64,14 +76,7 @@ public class XisoWriter
 
                 if (redumpIsoType >= 0)
                 {
-                    var xgdType = redumpIsoType switch
-                    {
-                        0 => 0, // XGD1
-                        1 or 2 or 3 or 4 => 1, // XGD2
-                        5 => 2, // XGD2 Hybrid
-                        6 or 7 => 3, // XGD3
-                        _ => 0
-                    };
+                    var xgdType = GetXgdType(redumpIsoType);
                     inputOffset = XisoOffset[xgdType];
                     targetXisoLength = XisoLength[xgdType];
                     _logger.LogMessage($"Detected Redump ISO (XGD{xgdType}). Extracting game partition...");

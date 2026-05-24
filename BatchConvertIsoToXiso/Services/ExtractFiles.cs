@@ -122,30 +122,6 @@ public class FileExtractorService : IFileExtractor
     /// <summary>
     /// Executes an asynchronous action with a brief retry on IOException.
     /// </summary>
-    private async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> action, string operationDescription, CancellationToken token)
-    {
-        const int maxRetries = 3;
-        var attempt = 0;
-
-        while (true)
-        {
-            try
-            {
-                return await action();
-            }
-            catch (IOException ex) when (attempt < maxRetries)
-            {
-                attempt++;
-                var delayMs = 1000 * (1 << (attempt - 1));
-                _logger.LogMessage($"  {operationDescription} failed on attempt {attempt}/{maxRetries}: {ex.Message}. Retrying in {delayMs / 1000}s...");
-                await Task.Delay(delayMs, token);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Executes an asynchronous action with a brief retry on IOException.
-    /// </summary>
     private async Task ExecuteWithRetryAsync(Func<Task> action, string operationDescription, CancellationToken token)
     {
         const int maxRetries = 3;
@@ -419,82 +395,6 @@ public class FileExtractorService : IFileExtractor
                 !ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
             {
                 _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. Exception: {ex}");
-            }
-
-            throw;
-        }
-    }
-
-    public async Task<long> GetUncompressedArchiveSizeAsync(string archivePath, CancellationToken token)
-    {
-        try
-        {
-            // Check for cloud files and attempt to hydrate before processing
-            if (IsCloudFile(archivePath))
-            {
-                _logger.LogMessage($"  Detected cloud file: {Path.GetFileName(archivePath)}. Attempting to ensure local availability...");
-
-                var hydrated = await EnsureCloudFileHydratedAsync(archivePath, token);
-                if (!hydrated)
-                {
-                    throw new IOException(
-                        $"The cloud file provider is not running. The file '{archivePath}' is stored in a cloud storage service " +
-                        "(OneDrive, Dropbox, etc.) but the sync client is not available.");
-                }
-            }
-
-            VerifyDriveReady(archivePath);
-
-            if (IsFileLocked(archivePath))
-            {
-                throw new IOException(
-                    $"The file '{Path.GetFileName(archivePath)}' is currently in use by another process. " +
-                    "Please close any programs that may have the file open and try again.");
-            }
-
-            return await ExecuteWithRetryAsync(() =>
-                {
-                    return Task.Run(() =>
-                    {
-                        _logger.LogMessage($"  Calculating uncompressed size for: {Path.GetFileName(archivePath)}");
-
-                        using var archive = ArchiveFactory.OpenArchive(archivePath);
-                        return archive.Entries.Where(static e => !e.IsDirectory).Sum(static x => x.Size);
-                    }, token);
-                }, $"Size calculation for {Path.GetFileName(archivePath)}", token);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (IOException ex) when (IsCloudFileProviderError(ex))
-        {
-            // Cloud file errors are environmental, do not report as bugs
-            _logger.LogMessage($"  Cloud file provider error for {Path.GetFileName(archivePath)}: {ex.Message}");
-            throw;
-        }
-        catch (CryptographicException ex)
-        {
-            _logger.LogMessage($"Cannot calculate uncompressed size of archive {Path.GetFileName(archivePath)}: archive is encrypted/password-protected.");
-            _ = _bugReportService.SendBugReportAsync($"Error getting uncompressed archive size: {archivePath}. Encrypted archive detected (password-protected). Exception: {ex}");
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogMessage($"Error getting uncompressed size of archive {Path.GetFileName(archivePath)}: {ex.Message}");
-
-            // Filter out common archive errors from bug reports
-            // Note: Cloud file errors are now reported as they indicate potential app compatibility issues
-            if (ex is not ArchiveException &&
-                ex is not ArchiveOperationException &&
-                !ex.Message.Contains("Data error", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("Invalid archive", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("Unsupported archive", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("End of stream reached", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("Bad state", StringComparison.OrdinalIgnoreCase) &&
-                !ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
-            {
-                _ = _bugReportService.SendBugReportAsync($"Error getting uncompressed archive size: {archivePath}. Exception: {ex}");
             }
 
             throw;

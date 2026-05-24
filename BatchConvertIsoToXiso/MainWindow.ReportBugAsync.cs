@@ -31,12 +31,8 @@ public partial class MainWindow
             }
 
             var fullReport = new StringBuilder();
-            fullReport.AppendLine("=== Bug Report ===");
-            fullReport.AppendLine($"Application: {App.ApplicationName}");
-            fullReport.AppendLine(CultureInfo.InvariantCulture, $"Date/Time: {DateTime.Now}");
-            fullReport.AppendLine();
-            fullReport.AppendLine("=== Error Message ===");
-            fullReport.AppendLine(message);
+            fullReport.AppendLine("=== Error Details ===");
+            fullReport.AppendLine(CultureInfo.InvariantCulture, $"Error Message: {message}");
             fullReport.AppendLine();
             if (exception != null)
             {

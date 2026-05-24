@@ -1,6 +1,5 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using BatchConvertIsoToXiso.interfaces;
@@ -12,13 +11,19 @@ public partial class UpdateChecker : IUpdateChecker, IDisposable
 {
     private const string GitHubApiUrl = "https://api.github.com/repos/drpetersonfernandes/BatchConvertIsoToXiso/releases/latest";
     private readonly HttpClient _httpClient;
+    private readonly string _currentVersion;
 
     public UpdateChecker()
+        : this(new HttpClient(), GetApplicationVersion.GetProgramVersion())
     {
-        _httpClient = new HttpClient();
+    }
+
+    internal UpdateChecker(HttpClient httpClient, string currentVersion)
+    {
+        _httpClient = httpClient;
+        _currentVersion = currentVersion;
         _httpClient.Timeout = TimeSpan.FromSeconds(15);
-        // GitHub API requires a User-Agent header.
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BatchConvertIsoToXiso", GetApplicationVersion.GetProgramVersion()));
+        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BatchConvertIsoToXiso", currentVersion));
     }
 
     public async Task<(bool IsNewVersionAvailable, string? LatestVersion, string? DownloadUrl)> CheckForUpdateAsync()
@@ -36,24 +41,20 @@ public partial class UpdateChecker : IUpdateChecker, IDisposable
             var versionMatch = MyRegex().Match(releaseInfo.TagName);
             if (!versionMatch.Success)
             {
-                // If no version number can be extracted, treat as no update available.
                 return (false, null, null);
             }
 
             var latestVersionStr = versionMatch.Value;
 
-            if (Version.TryParse(latestVersionStr, out var latestVersion))
+            if (Version.TryParse(latestVersionStr, out var latestVersion) &&
+                Version.TryParse(_currentVersion, out var currentVersion) &&
+                latestVersion > currentVersion)
             {
-                var currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
-                if (currentVersion != null && latestVersion > currentVersion)
-                {
-                    return (true, latestVersion.ToString(), releaseInfo.HtmlUrl);
-                }
+                return (true, latestVersion.ToString(), releaseInfo.HtmlUrl);
             }
         }
         catch (Exception)
         {
-            // Silently fail on any error (e.g., no internet connection, API change)
             return (false, null, null);
         }
 

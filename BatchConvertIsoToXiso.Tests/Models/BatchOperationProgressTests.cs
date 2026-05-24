@@ -19,7 +19,6 @@ public class BatchOperationProgressTests
         Assert.Null(progress.SkippedCount);
         Assert.Null(progress.CurrentDrive);
         Assert.Null(progress.FailedPathToAdd);
-        Assert.False(progress.IsIndeterminate);
     }
 
     [Fact]
@@ -35,8 +34,7 @@ public class BatchOperationProgressTests
             FailedCount = 1,
             SkippedCount = 0,
             CurrentDrive = "C:",
-            FailedPathToAdd = "C:\\failed.iso",
-            IsIndeterminate = true
+            FailedPathToAdd = "C:\\failed.iso"
         };
 
         Assert.Equal("Test log", progress.LogMessage);
@@ -48,6 +46,5 @@ public class BatchOperationProgressTests
         Assert.Equal(0, progress.SkippedCount);
         Assert.Equal("C:", progress.CurrentDrive);
         Assert.Equal("C:\\failed.iso", progress.FailedPathToAdd);
-        Assert.True(progress.IsIndeterminate);
     }
 }

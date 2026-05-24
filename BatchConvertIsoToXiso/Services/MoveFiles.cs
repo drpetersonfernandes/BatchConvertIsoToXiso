@@ -125,43 +125,4 @@ public class FileMoverService : IFileMover
             throw new IOException($"Failed to move file after {MaxRetryAttempts} attempts due to network errors. Last error: {lastException.Message}", lastException);
         }
     }
-
-    /// <summary>
-    /// Moves a file with retry logic to handle transient locks and network errors.
-    /// </summary>
-    public async Task RobustMoveFileAsync(string source, string dest, CancellationToken token)
-    {
-        var isNetworkOperation = PathHelper.IsNetworkPath(source) || PathHelper.IsNetworkPath(dest);
-        var maxAttempts = isNetworkOperation ? MaxRetryAttempts : 3;
-        Exception? lastException = null;
-
-        for (var i = 0; i < maxAttempts; i++)
-        {
-            try
-            {
-                await Task.Run(() => File.Move(source, dest, true), token);
-                return;
-            }
-            catch (IOException ex) when (isNetworkOperation && PathHelper.IsNetworkError(ex) && i < maxAttempts - 1)
-            {
-                lastException = ex;
-                // Exponential backoff for network errors
-                var delayMs = InitialRetryDelayMs * (int)Math.Pow(2, i);
-                await Task.Delay(delayMs, token);
-            }
-            catch when (i < maxAttempts - 1)
-            {
-                // For non-network errors, use fixed 500ms delay
-                await Task.Delay(500, token);
-            }
-        }
-
-        // Final attempt without catch
-        if (lastException != null)
-        {
-            throw new IOException($"Failed to move file after {maxAttempts} attempts. Last error: {lastException.Message}", lastException);
-        }
-
-        await Task.Run(() => File.Move(source, dest, true), token);
-    }
 }

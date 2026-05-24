@@ -28,7 +28,8 @@
                 <StackPanel HorizontalAlignment="Center">
                     <Image Width="120"
                            Height="120"
-                           Source="pack://application:,,,/images/logo.png" />
+                           Source="pack://application:,,,/images/logo.png"
+                           ToolTip="Batch Convert ISO to XISO application logo" />
                 </StackPanel>
             </Border>
 
@@ -45,14 +46,16 @@
                                FontSize="22"
                                Foreground="{StaticResource HeaderTextBrush}"
                                Text="Batch Convert ISO to XISO"
-                               HorizontalAlignment="Center" />
+                               HorizontalAlignment="Center"
+                               ToolTip="A high-performance Windows WPF utility for Xbox preservation and emulation" />
                     <TextBlock Name="AppVersionTextBlock"
                                Margin="0,8,0,0"
                                Text=""
                                HorizontalAlignment="Center"
                                Foreground="{StaticResource PrimaryAccentBrush}"
                                FontWeight="SemiBold"
-                               FontSize="14" />
+                               FontSize="14"
+                               ToolTip="Current application version" />
                 </StackPanel>
             </Border>
 
@@ -69,17 +72,20 @@
                                FontSize="14"
                                Foreground="{StaticResource TextPrimaryBrush}"
                                Text="Description"
-                               Margin="0,0,0,10" />
+                               Margin="0,0,0,10"
+                               ToolTip="About Batch Convert ISO to XISO" />
                     <TextBlock Text="A high-performance Windows WPF utility for the Xbox preservation and emulation community. This application streamlines the process of converting standard Xbox and Xbox 360 ISOs into the optimized, trimmed XISO format."
                                Foreground="{StaticResource TextSecondaryBrush}"
                                TextWrapping="Wrap"
                                LineHeight="20"
-                               Margin="0,0,0,12" />
+                               Margin="0,0,0,12"
+                               ToolTip="Batch Convert ISO to XISO converts Xbox/Xbox 360 ISOs into trimmed XISO format, saving space while preserving content" />
                     <TextBlock
                         Text="Features include batch conversion with multi-engine support (extract-xiso, xdvdfs, and a native C# XDVDFS engine), integrity testing with deep surface scanning and XISO file exploration with drag-and-drop extraction."
                         Foreground="{StaticResource TextSecondaryBrush}"
                         TextWrapping="Wrap"
-                        LineHeight="20" />
+                        LineHeight="20"
+                        ToolTip="Key features: multi-engine batch conversion, ISO integrity testing with deep scan, and XISO file explorer with drag-and-drop extraction" />
                 </StackPanel>
             </Border>
 
@@ -96,14 +102,16 @@
                                FontSize="14"
                                Foreground="{StaticResource TextPrimaryBrush}"
                                Text="Acknowledgements"
-                               Margin="0,0,0,10" />
+                               Margin="0,0,0,10"
+                               ToolTip="Open-source projects and tools used by this application" />
                     <TextBlock Text="This application uses the following open-source projects and tools:"
                                Foreground="{StaticResource TextSecondaryBrush}"
                                TextWrapping="Wrap"
-                               Margin="0,0,0,12" />
+                               Margin="0,0,0,12"
+                               ToolTip="Click any link to visit the project's GitHub repository" />
 
                     <StackPanel Margin="10,0,0,0">
-                        <TextBlock Margin="0,0,0,8">
+                        <TextBlock Margin="0,0,0,8" ToolTip="Visit extract-xiso on GitHub — external XISO conversion tool by XboxDev team">
                             <Hyperlink NavigateUri="https://github.com/XboxDev/extract-xiso"
                                        RequestNavigate="Hyperlink_RequestNavigate"
                                        Foreground="{StaticResource LinkTextBrush}"
@@ -113,7 +121,7 @@
                             <Run Text=" - External XISO conversion tool by XboxDev team" Foreground="{StaticResource TextMutedBrush}" />
                         </TextBlock>
 
-                        <TextBlock Margin="0,0,0,8">
+                        <TextBlock Margin="0,0,0,8" ToolTip="Visit xdvdfs on GitHub — modern XDVDFS tool by antangelo">
                             <Hyperlink NavigateUri="https://github.com/antangelo/xdvdfs"
                                        RequestNavigate="Hyperlink_RequestNavigate"
                                        Foreground="{StaticResource LinkTextBrush}"
@@ -123,7 +131,7 @@
                             <Run Text=" - Modern XDVDFS tool by antangelo" Foreground="{StaticResource TextMutedBrush}" />
                         </TextBlock>
 
-                        <TextBlock Margin="0,0,0,8">
+                        <TextBlock Margin="0,0,0,8" ToolTip="Visit XboxKit on GitHub — original XDVDFS trimming logic by Deterous">
                             <Hyperlink NavigateUri="https://github.com/Deterous/XboxKit"
                                        RequestNavigate="Hyperlink_RequestNavigate"
                                        Foreground="{StaticResource LinkTextBrush}"
@@ -133,7 +141,7 @@
                             <Run Text=" - Original XDVDFS trimming logic (enhanced in this project)" Foreground="{StaticResource TextMutedBrush}" />
                         </TextBlock>
 
-                        <TextBlock Margin="0,0,0,8">
+                        <TextBlock Margin="0,0,0,8" ToolTip="Visit bchunk on GitHub — CUE/BIN to ISO conversion tool">
                             <Hyperlink NavigateUri="https://github.com/extramaster/bchunk"
                                        RequestNavigate="Hyperlink_RequestNavigate"
                                        Foreground="{StaticResource LinkTextBrush}"
@@ -143,7 +151,7 @@
                             <Run Text=" - CUE/BIN to ISO conversion" Foreground="{StaticResource TextMutedBrush}" />
                         </TextBlock>
 
-                        <TextBlock Margin="0,0,0,8">
+                        <TextBlock Margin="0,0,0,8" ToolTip="Visit SharpCompress on GitHub — high-performance archive extraction library">
                             <Hyperlink NavigateUri="https://github.com/adamhathcock/sharpcompress"
                                        RequestNavigate="Hyperlink_RequestNavigate"
                                        Foreground="{StaticResource LinkTextBrush}"
@@ -166,7 +174,7 @@
 
                 <!-- Links -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock>
+                    <TextBlock ToolTip="Visit the official website: www.purelogiccode.com">
                         <Hyperlink NavigateUri="https://www.purelogiccode.com"
                                    RequestNavigate="Hyperlink_RequestNavigate"
                                    Foreground="{StaticResource LinkTextBrush}"
@@ -174,7 +182,7 @@
                             www.purelogiccode.com
                         </Hyperlink>
                     </TextBlock>
-                    <TextBlock Margin="0,4,0,0">
+                    <TextBlock Margin="0,4,0,0" ToolTip="Visit the project's GitHub repository">
                         <Hyperlink NavigateUri="https://github.com/drpetersonfernandes/BatchConvertIsoToXiso"
                                    RequestNavigate="Hyperlink_RequestNavigate"
                                    Foreground="{StaticResource LinkTextBrush}"
@@ -190,7 +198,8 @@
                         Height="36"
                         Click="CloseButton_Click"
                         Content="Close"
-                        Style="{StaticResource ActionButtonStyle}" />
+                        Style="{StaticResource ActionButtonStyle}"
+                        ToolTip="Close the about window" />
             </Grid>
         </Grid>
     </ScrollViewer>
