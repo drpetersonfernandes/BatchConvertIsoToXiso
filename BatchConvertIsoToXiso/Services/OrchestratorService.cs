@@ -15,6 +15,7 @@ public class OrchestratorService : IOrchestratorService
     private readonly XisoWriter _xisoWriter;
     private readonly IExtractXisoService _extractXisoService;
     private readonly IXdvdfsService _xdvdfsService;
+    private readonly IDiskMonitorService _diskMonitorService;
 
     private class ProcessingContext
     {
@@ -29,7 +30,8 @@ public class OrchestratorService : IOrchestratorService
         INativeIsoIntegrityService nativeIsoTester,
         XisoWriter xisoWriter,
         IExtractXisoService extractXisoService,
-        IXdvdfsService xdvdfsService)
+        IXdvdfsService xdvdfsService,
+        IDiskMonitorService diskMonitorService)
     {
         _externalToolService = externalToolService;
         _fileExtractor = fileExtractor;
@@ -39,6 +41,7 @@ public class OrchestratorService : IOrchestratorService
         _xisoWriter = xisoWriter;
         _extractXisoService = extractXisoService;
         _xdvdfsService = xdvdfsService;
+        _diskMonitorService = diskMonitorService;
     }
 
     #region Conversion Logic
@@ -181,9 +184,60 @@ public class OrchestratorService : IOrchestratorService
         }
     }
 
+    private string ResolveTempDirectory(long requiredSize, string tempSubfolder)
+    {
+        var defaultTempPath = Path.GetTempPath();
+        var defaultTempDriveRoot = Path.GetPathRoot(defaultTempPath);
+        var requiredWithBuffer = requiredSize + Math.Max(requiredSize / 10, 200L * 1024 * 1024);
+
+        if (defaultTempDriveRoot != null)
+        {
+            try
+            {
+                var defaultDrive = new DriveInfo(defaultTempDriveRoot);
+                if (defaultDrive.IsReady && defaultDrive.AvailableFreeSpace >= requiredWithBuffer)
+                    return Path.Combine(defaultTempPath, tempSubfolder, Guid.NewGuid().ToString());
+            }
+            catch
+            {
+                // Ignore and fall through to alternative search
+            }
+        }
+
+        var altDrive = _diskMonitorService.FindDriveWithFreeSpace(requiredSize, defaultTempDriveRoot);
+        if (altDrive != null)
+        {
+            var altPath = Path.Combine(altDrive, tempSubfolder, Guid.NewGuid().ToString());
+            return altPath;
+        }
+
+        var requiredFormatted = Formatter.FormatBytes(requiredWithBuffer);
+        var defaultAvailable = Formatter.FormatBytes(_diskMonitorService.GetAvailableFreeSpace(defaultTempPath));
+        throw new IOException($"Not enough disk space to create temporary files. Required: {requiredFormatted}, Available: {defaultAvailable}. No other local drives have sufficient free space. Please free up disk space and try again.");
+    }
+
     private async Task ProcessArchiveAsync(string archivePath, string outputFolder, bool deleteOriginal, bool skipUpdate, bool checkIntegrity, bool useExtractXiso, bool useXdvdfs, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Extract", Guid.NewGuid().ToString());
+        string tempDir;
+        try
+        {
+            progress.Report(new BatchOperationProgress { LogMessage = "Analyzing archive for required space..." });
+            var (totalSize, fileCount) = await _fileExtractor.GetArchiveInfoAsync(archivePath, token);
+            tempDir = ResolveTempDirectory(totalSize, "BatchConvertIsoToXiso_Extract");
+            progress.Report(new BatchOperationProgress { LogMessage = $"Archive contains {fileCount} files ({Formatter.FormatBytes(totalSize)} uncompressed). Extracting to: {Path.GetDirectoryName(tempDir)}" });
+        }
+        catch (IOException ex) when (ex.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
+                                     ex.Message.Contains("Not enough disk space", StringComparison.OrdinalIgnoreCase))
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // If we can't analyze the archive, fall back to default temp and let ExtractArchiveAsync handle it
+            progress.Report(new BatchOperationProgress { LogMessage = $"Could not analyze archive: {ex.Message}. Using default temp path." });
+            tempDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Extract", Guid.NewGuid().ToString());
+        }
+
         tempFolders.Add(tempDir);
 
         bool extracted;
@@ -283,7 +337,39 @@ public class OrchestratorService : IOrchestratorService
 
     private async Task<FileProcessingStatus> ProcessCueInternalAsync(string cuePath, string outputFolder, bool deleteOriginal, bool skipUpdate, bool checkIntegrity, bool useExtractXiso, bool useXdvdfs, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
     {
-        var tempCueDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_CueBin", Guid.NewGuid().ToString());
+        long estimatedCueSize = 0;
+        try
+        {
+            estimatedCueSize = new FileInfo(cuePath).Length;
+            var binFiles = GetReferencedBinFilesFromCue(cuePath);
+            foreach (var binFile in binFiles)
+            {
+                if (File.Exists(binFile))
+                {
+                    estimatedCueSize += new FileInfo(binFile).Length;
+                }
+            }
+        }
+        catch
+        {
+            // If we can't estimate, fall back to default temp path
+        }
+
+        string tempCueDir;
+        try
+        {
+            tempCueDir = ResolveTempDirectory(estimatedCueSize, "BatchConvertIsoToXiso_CueBin");
+        }
+        catch (IOException ex) when (ex.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
+                                     ex.Message.Contains("Not enough disk space", StringComparison.OrdinalIgnoreCase))
+        {
+            throw;
+        }
+        catch
+        {
+            tempCueDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_CueBin", Guid.NewGuid().ToString());
+        }
+
         tempFolders.Add(tempCueDir);
         try
         {
@@ -352,8 +438,21 @@ public class OrchestratorService : IOrchestratorService
             }
             catch (IOException)
             {
-                // Likely cloud file issue, use existing copy logic
-                localTempWorkingDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Convert", Guid.NewGuid().ToString());
+                try
+                {
+                    var fileSize = new FileInfo(inputFile).Length;
+                    localTempWorkingDir = ResolveTempDirectory(fileSize, "BatchConvertIsoToXiso_Convert");
+                }
+                catch (IOException ex) when (ex.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
+                                             ex.Message.Contains("Not enough disk space", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw;
+                }
+                catch
+                {
+                    localTempWorkingDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Convert", Guid.NewGuid().ToString());
+                }
+
                 Directory.CreateDirectory(localTempWorkingDir);
                 var simpleFilename = GenerateFilename.GenerateSimpleFilename(fileIndex);
                 var localTempIsoPath = Path.Combine(localTempWorkingDir, simpleFilename);

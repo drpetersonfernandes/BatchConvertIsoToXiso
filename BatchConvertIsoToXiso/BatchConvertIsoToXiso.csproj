@@ -10,8 +10,8 @@
         <Authors>PureLogicCode</Authors>
         <Company>PureLogicCode.com</Company>
         <IsPackable>false</IsPackable>
-        <AssemblyVersion>2.4.0</AssemblyVersion>
-        <FileVersion>2.4.0</FileVersion>
+        <AssemblyVersion>2.4.1</AssemblyVersion>
+        <FileVersion>2.4.1</FileVersion>
         <NeutralLanguage>en</NeutralLanguage>
         <DebugType>embedded</DebugType>
         <DebugSymbols>true</DebugSymbols>
@@ -28,11 +28,17 @@
         <None Include="xdvdfs.exe">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
+        <None Update="7za.exe">
+          <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="7za_arm64.exe">
+          <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />
-        <PackageReference Include="SharpCompress" Version="0.48.1" />
+        <PackageReference Include="SharpCompress" Version="0.49.0" />
     </ItemGroup>
 
     <ItemGroup>

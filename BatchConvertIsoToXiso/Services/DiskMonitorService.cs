@@ -192,6 +192,38 @@ public class DiskMonitorService : IDiskMonitorService, IDisposable
         return 0;
     }
 
+    public string? FindDriveWithFreeSpace(long requiredBytes, string? excludeDrive = null)
+    {
+        try
+        {
+            var excludedRoot = excludeDrive?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            var drives = DriveInfo.GetDrives();
+            foreach (var drive in drives)
+            {
+                if (!drive.IsReady)
+                    continue;
+
+                if (drive.DriveType != DriveType.Fixed)
+                    continue;
+
+                var root = drive.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (excludedRoot != null && root.Equals(excludedRoot, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var requiredWithBuffer = requiredBytes + Math.Max(requiredBytes / 10, 200L * 1024 * 1024);
+                if (drive.AvailableFreeSpace >= requiredWithBuffer)
+                    return drive.Name;
+            }
+        }
+        catch
+        {
+            // Ignore errors during drive enumeration
+        }
+
+        return null;
+    }
+
     public void Dispose()
     {
         StopMonitoring();

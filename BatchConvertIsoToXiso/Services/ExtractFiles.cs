@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using BatchConvertIsoToXiso.interfaces;
 using SharpCompress.Archives;
 using SharpCompress.Common;
@@ -9,6 +11,41 @@ public class FileExtractorService : IFileExtractor
 {
     private readonly ILogger _logger;
     private readonly IBugReportService _bugReportService;
+    private readonly string _sevenZipExePath;
+
+    private static string? FindSevenZipExe()
+    {
+        var appDir = AppDomain.CurrentDomain.BaseDirectory;
+
+        var archExeName = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X64 => "7za.exe",
+            Architecture.Arm64 => "7za_arm64.exe",
+            _ => null
+        };
+
+        if (archExeName != null)
+        {
+            var archExe = Path.Combine(appDir, archExeName);
+            if (File.Exists(archExe))
+                return archExe;
+        }
+
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var searchPaths = new[]
+        {
+            Path.Combine(programFiles, "7-Zip", "7z.exe"),
+            Path.Combine(Environment.GetEnvironmentVariable("ProgramW6432") ?? programFiles, "7-Zip", "7z.exe")
+        };
+
+        foreach (var path in searchPaths)
+        {
+            if (File.Exists(path))
+                return path;
+        }
+
+        return null;
+    }
 
     // Cloud file attribute constants
     private const int FileAttributeRecallOnOpen = 0x00040000;
@@ -19,6 +56,7 @@ public class FileExtractorService : IFileExtractor
     {
         _logger = logger;
         _bugReportService = bugReportService;
+        _sevenZipExePath = FindSevenZipExe() ?? string.Empty;
     }
 
     /// <summary>
@@ -156,11 +194,12 @@ public class FileExtractorService : IFileExtractor
             if (string.IsNullOrEmpty(root)) return;
 
             var drive = new DriveInfo(root);
-            if (drive.AvailableFreeSpace < totalSize)
+            var requiredWithBuffer = totalSize + Math.Max(totalSize / 10, 200L * 1024 * 1024);
+            if (drive.AvailableFreeSpace < requiredWithBuffer)
             {
                 var requiredSpace = Formatter.FormatBytes(totalSize);
                 var availableSpace = Formatter.FormatBytes(drive.AvailableFreeSpace);
-                var errorMessage = $"Not enough disk space to extract {archiveFileName}. Required: {requiredSpace}, Available: {availableSpace}.";
+                var errorMessage = $"Not enough disk space to extract {archiveFileName}. Required: {requiredSpace} ({totalSize:N0} bytes), Available: {availableSpace} ({drive.AvailableFreeSpace:N0} bytes), with safety buffer requires: {Formatter.FormatBytes(requiredWithBuffer)}.";
                 _logger.LogMessage($"  ERROR: {errorMessage}");
                 throw new IOException(errorMessage);
             }
@@ -171,9 +210,22 @@ public class FileExtractorService : IFileExtractor
         }
         catch (Exception ex)
         {
-            // Ignore other errors during disk space check to avoid blocking extraction if check fails for some reason
             _logger.LogMessage($"  Warning: Could not check disk space: {ex.Message}");
         }
+    }
+
+    public async Task<(long TotalUncompressedSize, int FileCount)> GetArchiveInfoAsync(string archivePath, CancellationToken token)
+    {
+        var (totalSize, fileCount) = await Task.Run(() =>
+        {
+            using var archive = ArchiveFactory.OpenArchive(archivePath);
+            var entries = archive.Entries.Where(static e => !e.IsDirectory).ToList();
+            var count = entries.Count;
+            var size = entries.Sum(static e => e.Size);
+            return (size, count);
+        }, token);
+
+        return (totalSize, fileCount);
     }
 
     private static bool IsFileLocked(string filePath)
@@ -186,6 +238,73 @@ public class FileExtractorService : IFileExtractor
         catch (IOException ex) when (ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
         {
             return true;
+        }
+    }
+
+    private async Task<bool> TryExtractWithSevenZipCliAsync(string archivePath, string extractionPath, CancellationToken token)
+    {
+        var archiveFileName = Path.GetFileName(archivePath);
+        _logger.LogMessage($"  Extracting with 7-Zip CLI: {archiveFileName}");
+
+        try
+        {
+            var args = $"x \"{archivePath}\" -o\"{extractionPath}\" -y";
+            var exeDir = Path.GetDirectoryName(_sevenZipExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = _sevenZipExePath,
+                Arguments = args,
+                WorkingDirectory = exeDir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            process.Start();
+
+            _ = process.StandardOutput.ReadToEndAsync(token);
+            var errorTask = process.StandardError.ReadToEndAsync(token);
+
+            await using (token.Register(static state =>
+                         {
+                             var p = (Process?)state;
+                             if (p is { HasExited: false })
+                             {
+                                 try
+                                 {
+                                     p.Kill();
+                                 }
+                                 catch
+                                 {
+                                     // ignored
+                                 }
+                             }
+                         }, process))
+            {
+                await process.WaitForExitAsync(token);
+            }
+
+            var errors = await errorTask;
+
+            if (process.ExitCode == 0)
+            {
+                _logger.LogMessage($"  Successfully extracted using 7-Zip CLI: {archiveFileName}");
+                return true;
+            }
+
+            _logger.LogMessage($"  7-Zip CLI returned exit code {process.ExitCode}: {errors}");
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogMessage($"  7-Zip CLI fallback failed: {ex.Message}");
+            return false;
         }
     }
 
@@ -223,6 +342,29 @@ public class FileExtractorService : IFileExtractor
                 throw new IOException(
                     $"The file '{archiveFileName}' is currently in use by another process. " +
                     "Please close any programs that may have the file open (file explorer, zip tools, antivirus, download manager, etc.) and try again.");
+            }
+
+            if (Path.GetExtension(archivePath).Equals(".7z", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(_sevenZipExePath))
+                {
+                    const string userMessage = "7z archives require the 7-Zip command-line tool.\n\n" +
+                                               "To extract .7z files automatically, you can:\n" +
+                                               "1. Install 7-Zip from https://7-zip.org/ — the app auto-detects it in Program Files.\n" +
+                                               "2. Alternatively, place '7za.exe' (for x64) or '7za_arm64.exe' (for ARM64) in the application directory.";
+                    _logger.LogMessage($"  ERROR: {userMessage}");
+                    throw new IOException(userMessage);
+                }
+
+                var cliResult = await TryExtractWithSevenZipCliAsync(archivePath, extractionPath, token);
+                if (cliResult)
+                {
+                    _logger.LogMessage($"  Successfully extracted: {archiveFileName}");
+                    return true;
+                }
+
+                _logger.LogMessage($"  Extraction failed for {archiveFileName}.");
+                return false;
             }
 
             await ExecuteWithRetryAsync(() =>
@@ -349,6 +491,14 @@ public class FileExtractorService : IFileExtractor
             _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}: Encrypted archive detected (password-protected).");
 
             return false;
+        }
+        catch (InvalidFormatException ex)
+        {
+            var userMessage = $"Error extracting {archiveFileName}: The archive uses a compression format not supported by SharpCompress.\n" +
+                              "Please ensure the file is a valid archive or use an alternative extraction tool.\n" +
+                              $"Exception: {ex.Message}";
+            _logger.LogMessage($"  {userMessage}");
+            throw new IOException(userMessage, ex);
         }
         catch (Exception ex)
         {

@@ -9,4 +9,5 @@ public interface IDiskMonitorService
     string GetCurrentReadSpeedFormatted();
     string GetCurrentWriteSpeedFormatted();
     long GetAvailableFreeSpace(string? path);
+    string? FindDriveWithFreeSpace(long requiredBytes, string? excludeDrive = null);
 }
