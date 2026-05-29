@@ -264,8 +264,8 @@ public class FileExtractorService : IFileExtractor
 
             process.Start();
 
-            _ = process.StandardOutput.ReadToEndAsync(token);
-            var errorTask = process.StandardError.ReadToEndAsync(token);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(token);
+            var stderrTask = process.StandardError.ReadToEndAsync(token);
 
             await using (token.Register(static state =>
                          {
@@ -286,7 +286,16 @@ public class FileExtractorService : IFileExtractor
                 await process.WaitForExitAsync(token);
             }
 
-            var errors = await errorTask;
+            var errors = await stderrTask;
+
+            try
+            {
+                await stdoutTask;
+            }
+            catch
+            {
+                /* stdout read failure is non-critical */
+            }
 
             if (process.ExitCode == 0)
             {
@@ -342,29 +351,6 @@ public class FileExtractorService : IFileExtractor
                 throw new IOException(
                     $"The file '{archiveFileName}' is currently in use by another process. " +
                     "Please close any programs that may have the file open (file explorer, zip tools, antivirus, download manager, etc.) and try again.");
-            }
-
-            if (Path.GetExtension(archivePath).Equals(".7z", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!File.Exists(_sevenZipExePath))
-                {
-                    const string userMessage = "7z archives require the 7-Zip command-line tool.\n\n" +
-                                               "To extract .7z files automatically, you can:\n" +
-                                               "1. Install 7-Zip from https://7-zip.org/ — the app auto-detects it in Program Files.\n" +
-                                               "2. Alternatively, place '7za.exe' (for x64) or '7za_arm64.exe' (for ARM64) in the application directory.";
-                    _logger.LogMessage($"  ERROR: {userMessage}");
-                    throw new IOException(userMessage);
-                }
-
-                var cliResult = await TryExtractWithSevenZipCliAsync(archivePath, extractionPath, token);
-                if (cliResult)
-                {
-                    _logger.LogMessage($"  Successfully extracted: {archiveFileName}");
-                    return true;
-                }
-
-                _logger.LogMessage($"  Extraction failed for {archiveFileName}.");
-                return false;
             }
 
             await ExecuteWithRetryAsync(() =>
@@ -445,6 +431,40 @@ public class FileExtractorService : IFileExtractor
             _logger.LogMessage($"Extraction of {archiveFileName} was canceled.");
             throw;
         }
+        catch (Exception ex) when (Path.GetExtension(archivePath).Equals(".7z", StringComparison.OrdinalIgnoreCase) &&
+                                   (ex is ArchiveException or ArchiveOperationException ||
+                                    (ex is InvalidOperationException ioe && ioe.Message.Contains("Archive", StringComparison.OrdinalIgnoreCase))))
+        {
+            _logger.LogMessage($"  SharpCompress unable to extract 7z ({ex.GetType().Name}), falling back to 7-Zip CLI...");
+
+            if (!File.Exists(_sevenZipExePath))
+            {
+                const string userMessage = "7z archives require the 7-Zip command-line tool.\n\n" +
+                                           "To extract .7z files automatically, you can:\n" +
+                                           "1. Install 7-Zip from https://7-zip.org/ — the app auto-detects it in Program Files.\n" +
+                                           "2. Alternatively, place '7za.exe' (for x64) or '7za_arm64.exe' (for ARM64) in the application directory.";
+                _logger.LogMessage($"  ERROR: {userMessage}");
+                throw new IOException(userMessage);
+            }
+
+            var cliResult = await TryExtractWithSevenZipCliAsync(archivePath, extractionPath, token);
+            if (cliResult)
+            {
+                _logger.LogMessage($"  Successfully extracted: {archiveFileName}");
+                return true;
+            }
+
+            _logger.LogMessage($"  Extraction failed for {archiveFileName}.");
+            return false;
+        }
+        catch (InvalidFormatException ex)
+        {
+            var userMessage = $"Error extracting {archiveFileName}: The archive uses a compression format not supported by SharpCompress.\n" +
+                              "Please ensure the file is a valid archive or use an alternative extraction tool.\n" +
+                              $"Exception: {ex.Message}";
+            _logger.LogMessage($"  {userMessage}");
+            throw new IOException(userMessage, ex);
+        }
         catch (InvalidOperationException ex) when (ex.Message.Contains("Archive"))
         {
             var errorMessage = $"Error extracting {archiveFileName}: Could not open the archive.\n" +
@@ -491,14 +511,6 @@ public class FileExtractorService : IFileExtractor
             _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}: Encrypted archive detected (password-protected).");
 
             return false;
-        }
-        catch (InvalidFormatException ex)
-        {
-            var userMessage = $"Error extracting {archiveFileName}: The archive uses a compression format not supported by SharpCompress.\n" +
-                              "Please ensure the file is a valid archive or use an alternative extraction tool.\n" +
-                              $"Exception: {ex.Message}";
-            _logger.LogMessage($"  {userMessage}");
-            throw new IOException(userMessage, ex);
         }
         catch (Exception ex)
         {

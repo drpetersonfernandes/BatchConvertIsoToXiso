@@ -226,6 +226,10 @@ public class OrchestratorService : IOrchestratorService
             tempDir = ResolveTempDirectory(totalSize, "BatchConvertIsoToXiso_Extract");
             progress.Report(new BatchOperationProgress { LogMessage = $"Archive contains {fileCount} files ({Formatter.FormatBytes(totalSize)} uncompressed). Extracting to: {Path.GetDirectoryName(tempDir)}" });
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (IOException ex) when (ex.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
                                      ex.Message.Contains("Not enough disk space", StringComparison.OrdinalIgnoreCase))
         {
@@ -365,8 +369,9 @@ public class OrchestratorService : IOrchestratorService
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            progress.Report(new BatchOperationProgress { LogMessage = $"Could not resolve temp directory for CUE: {ex.Message}. Using default temp path." });
             tempCueDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_CueBin", Guid.NewGuid().ToString());
         }
 
@@ -448,8 +453,9 @@ public class OrchestratorService : IOrchestratorService
                 {
                     throw;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    progress.Report(new BatchOperationProgress { LogMessage = $"Could not resolve temp directory for copy: {ex.Message}. Using default temp path." });
                     localTempWorkingDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Convert", Guid.NewGuid().ToString());
                 }
 
