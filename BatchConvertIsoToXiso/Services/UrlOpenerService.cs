@@ -28,7 +28,7 @@ public class UrlOpenerService : IUrlOpener
         catch (Exception ex)
         {
             _logger.LogMessage($"Error opening URL: {url}. Exception: {ex.Message}");
-            _ = _bugReportService.SendBugReportAsync($"Error opening URL: {url}. Exception: {ex}");
+            _ = _bugReportService.SendBugReportAsync($"Error opening URL: {url}", ex);
             throw; // Re-throw the exception for the caller to handle UI
         }
     }

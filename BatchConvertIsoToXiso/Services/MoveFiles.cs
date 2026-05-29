@@ -87,7 +87,7 @@ public class FileMoverService : IFileMover
         catch (Exception ex)
         {
             _logger.LogMessage($"  Error moving {fileName} to {destinationFolder}: {ex.Message}");
-            _ = _bugReportService.SendBugReportAsync($"Error moving tested file {fileName}. Exception: {ex}");
+            _ = _bugReportService.SendBugReportAsync($"Error moving tested file {fileName}", ex);
         }
     }
 

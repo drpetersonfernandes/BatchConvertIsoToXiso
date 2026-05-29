@@ -20,8 +20,6 @@ public partial class MainWindow
                     case FileNotFoundException:
                     case OperationCanceledException:
                     // Filter out specific IOExceptions related to disconnected drives/network
-                    // "The specified network resource or device is no longer available"
-                    // "The device is not ready"
                     case IOException ioEx when ioEx.Message.Contains("network resource", StringComparison.OrdinalIgnoreCase) ||
                                                ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
                                                ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase):

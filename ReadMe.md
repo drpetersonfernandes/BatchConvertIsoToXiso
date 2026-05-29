@@ -42,7 +42,7 @@ Whether you're managing a large collection of Xbox game backups or verifying the
   - **xdvdfs** (external): Maximum compression with modern Rust implementation
   - **Modified Deterous Logic** (built-in): Fast trimming while preserving original structure
 - **Smart Processing**: Removes video partitions and padding, converting Redump ISOs to playable XISO format
-- **Archive Support**: Process `.zip`, `.7z`, and `.rar` files directly with high-performance extraction via SharpCompress
+- **Archive Support**: Process `.zip`, `.7z`, and `.rar` files directly with high-performance extraction via SharpCompress, with automatic 7-Zip CLI fallback for complex `.7z` archives
 - **Encrypted Archive Detection**: Automatically detects password-protected archives and provides clear guidance for manual extraction, preventing cryptic extraction failures
 - **CUE/BIN Support**: Integrated `bchunk` support for converting classic disc images to ISO format
 - **System Update Removal**: Option to skip the `$SystemUpdate` folder for additional space savings (supported by native engine and extract-xiso)
@@ -218,6 +218,9 @@ The application follows modern software engineering principles with a clean, mai
 ### Dependency Injection
 Utilizes `Microsoft.Extensions.DependencyInjection` for comprehensive service management. All core logic is decoupled from the UI, enabling easier testing and modular updates.
 
+### Testing
+A comprehensive [xUnit](https://xunit.net/) test suite (`BatchConvertIsoToXiso.Tests`) covers models, services, and XISO services with over 25 test files, using [Moq](https://github.com/devlooped/moq) for mocking.
+
 ### Technical Documentation
 For a deep dive into the XDVDFS format, binary file structures, and the internal conversion algorithm, see the [XDVDFS Technical Documentation](wiki.md).
 
@@ -239,6 +242,7 @@ For a deep dive into the XDVDFS format, binary file structures, and the internal
 
 - **Atomic Operations**: Converted files are verified before originals are deleted
 - **Automatic Cleanup**: [`TempFolderCleanupHelper`](BatchConvertIsoToXiso/Services/TempFolderCleanupHelper.cs) removes orphaned temporary files on startup or after crashes
+- **Fallback Temp Drives**: Automatically searches alternative local drives when the system temp drive lacks sufficient space for archive extraction
 - **Robust Error Handling**: Comprehensive exception handling with automatic bug reporting
 - **Network Resilience**: Full support for UNC paths and mapped network drives with automatic retry logic for transient network failures
 - **Cloud-Aware Retry**: Automatic retries with exponential backoff for cloud-synced files (OneDrive, etc.)

@@ -160,6 +160,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             _logger.LogMessage($"Critical Error: {ex.Message}");
+            _ = _bugReportService.SendBugReportAsync("Critical error during batch conversion", ex);
         }
         finally
         {
@@ -263,6 +264,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             _logger.LogMessage($"Critical Error: {ex.Message}");
+            _ = _bugReportService.SendBugReportAsync("Critical error during batch test", ex);
         }
         finally
         {

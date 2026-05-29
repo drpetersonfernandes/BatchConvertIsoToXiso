@@ -25,19 +25,32 @@ public class BugReportService : IBugReportService, IDisposable
         _httpClient.DefaultRequestHeaders.Add("X-API-KEY", _apiKey);
     }
 
-    public async Task<bool> SendBugReportAsync(string message)
+    public Task<bool> SendBugReportAsync(string message)
+    {
+        var fullMessage = BuildFullMessage(message);
+        var version = GetApplicationVersion.GetProgramVersion();
+        return SendToApiAsync(fullMessage, version);
+    }
+
+    public Task<bool> SendBugReportAsync(string errorMessage, Exception exception)
+    {
+        var fullMessage = BuildFullMessage(errorMessage);
+        var version = GetApplicationVersion.GetProgramVersion();
+        return SendToApiAsync(fullMessage, version);
+    }
+
+    private async Task<bool> SendToApiAsync(string fullMessage, string version)
     {
         try
         {
-            var fullMessage = BuildFullMessage(message);
-            var version = GetApplicationVersion.GetProgramVersion();
-
-            var content = JsonContent.Create(new
+            var payload = new Dictionary<string, object?>
             {
-                message = fullMessage,
-                applicationName = _applicationName,
-                version
-            });
+                { "message", fullMessage },
+                { "applicationName", _applicationName },
+                { "version", version }
+            };
+
+            var content = JsonContent.Create(payload);
 
             var response = await _httpClient.PostAsync(_apiUrl, content);
 
@@ -57,6 +70,15 @@ public class BugReportService : IBugReportService, IDisposable
         }
 
         var sb = new StringBuilder();
+        AppendEnvironmentDetails(sb);
+        sb.AppendLine();
+        sb.AppendLine(message);
+
+        return sb.ToString();
+    }
+
+    internal static void AppendEnvironmentDetails(StringBuilder sb)
+    {
         sb.AppendLine("=== Environment Details ===");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Application Name: {App.ApplicationName}");
@@ -68,10 +90,6 @@ public class BugReportService : IBugReportService, IDisposable
         sb.AppendLine(CultureInfo.InvariantCulture, $"Processor Count: {Environment.ProcessorCount}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Base Directory: {AppContext.BaseDirectory}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Temp Path: {Path.GetTempPath()}");
-        sb.AppendLine();
-        sb.AppendLine(message);
-
-        return sb.ToString();
     }
 
     public void Dispose()

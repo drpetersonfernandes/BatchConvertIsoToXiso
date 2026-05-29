@@ -1,7 +1,4 @@
-using System.Globalization;
-using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using BatchConvertIsoToXiso.interfaces;
@@ -142,12 +139,12 @@ public partial class App
         services.AddTransient<IFileExtractor, FileExtractorService>(static provider => new FileExtractorService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>(), provider.GetRequiredService<IDiskMonitorService>()));
         services.AddTransient<AboutWindow>();
-        services.AddSingleton<IExternalToolService, ExternalToolService>();
-        services.AddSingleton<IExtractXisoService, ExtractXisoService>();
+        services.AddSingleton<IExternalToolService>(static provider => new ExternalToolService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
+        services.AddSingleton<IExtractXisoService>(static provider => new ExtractXisoService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
         services.AddSingleton<IXdvdfsService, XdvdfsService>();
         services.AddSingleton<IOrchestratorService, OrchestratorService>();
-        services.AddSingleton<INativeIsoIntegrityService, NativeIsoIntegrityService>();
-        services.AddSingleton<XisoWriter>();
+        services.AddSingleton<INativeIsoIntegrityService>(static provider => new NativeIsoIntegrityService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
+        services.AddSingleton(static provider => new XisoWriter(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<INativeIsoIntegrityService>(), provider.GetRequiredService<IBugReportService>()));
         services.AddTransient<MainWindow>();
     }
 
@@ -175,65 +172,14 @@ public partial class App
     {
         try
         {
-            var message = BuildExceptionReport(exception, source);
+            if (_bugReportService != null)
+                await _bugReportService.SendBugReportAsync(source, exception);
 
-            if (_bugReportService != null) await _bugReportService.SendBugReportAsync(message);
-
-            // Inform the user that a critical error occurred
             await Current.Dispatcher.InvokeAsync(() => _messageBoxService?.ShowError("A critical error occurred and has been reported. The application may need to close."));
         }
         catch
         {
             // Ignore
-        }
-    }
-
-    private static string BuildExceptionReport(Exception exception, string source)
-    {
-        var sb = new StringBuilder();
-
-        sb.AppendLine("=== Environment Details ===");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Application Name: {ApplicationName}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Application Version: {GetApplicationVersion.GetProgramVersion()}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"OS Version: {Environment.OSVersion}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Architecture: {RuntimeInformation.ProcessArchitecture}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Bitness: {(Environment.Is64BitProcess ? "64-bit" : "32-bit")}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Windows Version: {GetWindowsVersion()}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Processor Count: {Environment.ProcessorCount}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Base Directory: {AppContext.BaseDirectory}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Temp Path: {Path.GetTempPath()}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"User: {Environment.UserName}");
-        sb.AppendLine();
-
-        sb.AppendLine("=== Error Details ===");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Error Source: {source}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Exception Type: {exception.GetType().FullName}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Error Message: {exception.Message}");
-        sb.AppendLine();
-
-        sb.AppendLine("=== Exception Details ===");
-        ExceptionFormatter.AppendExceptionDetails(sb, exception);
-
-        return sb.ToString();
-    }
-
-    private static string GetWindowsVersion()
-    {
-        try
-        {
-            // Try to get Windows version from registry or environment
-            var osVersion = Environment.OSVersion;
-            if (osVersion.Platform == PlatformID.Win32NT)
-            {
-                return $"{osVersion.Version.Major}.{osVersion.Version.Minor}.{osVersion.Version.Build}";
-            }
-
-            return "N/A (Non-Windows)";
-        }
-        catch
-        {
-            return "Unknown";
         }
     }
 }

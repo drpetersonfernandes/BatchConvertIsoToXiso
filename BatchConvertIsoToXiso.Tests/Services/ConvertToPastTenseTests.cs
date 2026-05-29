@@ -19,4 +19,25 @@ public class ConvertToPastTenseTests
         var result = ConvertToPastTense.GetPastTense(verb);
         Assert.Equal(expected, result);
     }
+
+    [Fact]
+    public void GetPastTense_EmptyString_ReturnsEd()
+    {
+        var result = ConvertToPastTense.GetPastTense("");
+        Assert.Equal("ed", result);
+    }
+
+    [Fact]
+    public void GetPastTense_UnknownVerb_AppendsEdLowercased()
+    {
+        var result = ConvertToPastTense.GetPastTense("UPLOAD");
+        Assert.Equal("uploaded", result);
+    }
+
+    [Fact]
+    public void GetPastTense_SingleCharacter_AppendsEd()
+    {
+        var result = ConvertToPastTense.GetPastTense("x");
+        Assert.Equal("xed", result);
+    }
 }

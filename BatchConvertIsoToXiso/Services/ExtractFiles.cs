@@ -504,11 +504,11 @@ public class FileExtractorService : IFileExtractor
             // Cloud file errors are environmental, do not report as bugs
             throw new IOException(userMessage, ex);
         }
-        catch (CryptographicException)
+        catch (CryptographicException cryptoEx)
         {
             _logger.LogMessage($"ERROR: {archiveFileName} is encrypted/password-protected. This application cannot extract password-protected archives. Please extract the archive manually using a tool that supports passwords (e.g., WinRAR, 7-Zip) and re-package it without encryption.");
 
-            _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}: Encrypted archive detected (password-protected).");
+            _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}: Encrypted archive detected (password-protected).", cryptoEx);
 
             return false;
         }
@@ -556,7 +556,7 @@ public class FileExtractorService : IFileExtractor
                 !ex.Message.Contains("Bad state", StringComparison.OrdinalIgnoreCase) &&
                 !ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
             {
-                _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}. Exception: {ex}");
+                _ = _bugReportService.SendBugReportAsync($"Error extracting {archiveFileName}", ex);
             }
 
             throw;

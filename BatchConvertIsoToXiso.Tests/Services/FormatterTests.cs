@@ -44,4 +44,41 @@ public class FormatterTests
         var expected = $"{expectedValue.ToString("F1", CultureInfo.CurrentCulture)} {unit}";
         Assert.Equal(expected, result);
     }
+
+    [Theory]
+    [InlineData(1024, 1f, "KB")]
+    [InlineData(1048576, 1f, "MB")]
+    [InlineData(1073741824, 1f, "GB")]
+    [InlineData(1099511627776, 1f, "TB")]
+    public void FormatBytes_ExactBoundaryValues(long bytes, float expectedValue, string unit)
+    {
+        var result = Formatter.FormatBytes(bytes);
+        var expected = $"{expectedValue.ToString("F1", CultureInfo.CurrentCulture)} {unit}";
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void FormatBytes_NegativeValue_ReturnsFormattedBytes()
+    {
+        var result = Formatter.FormatBytes(-1);
+        Assert.Equal("-1 B", result);
+    }
+
+    [Theory]
+    [InlineData(1024f, 1f, "KB/s")]
+    [InlineData(1048576f, 1f, "MB/s")]
+    public void FormatBytesPerSecond_ExactBoundaryValues(float bytesPerSecond, float expectedValue, string unit)
+    {
+        var result = Formatter.FormatBytesPerSecond(bytesPerSecond);
+        var expected = $"{expectedValue.ToString("F1", CultureInfo.CurrentCulture)} {unit}";
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void FormatBytesPerSecond_NegativeValue_ReturnsFormattedBytes()
+    {
+        var result = Formatter.FormatBytesPerSecond(-1f);
+        var expected = $"{(-1f).ToString("F1", CultureInfo.CurrentCulture)} B/s";
+        Assert.Equal(expected, result);
+    }
 }

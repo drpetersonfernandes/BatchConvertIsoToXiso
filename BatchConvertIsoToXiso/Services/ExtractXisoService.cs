@@ -10,11 +10,13 @@ namespace BatchConvertIsoToXiso.Services;
 public class ExtractXisoService : IExtractXisoService
 {
     private readonly ILogger _logger;
+    private readonly IBugReportService _bugReportService;
     private readonly string _extractXisoPath;
 
-    public ExtractXisoService(ILogger logger)
+    public ExtractXisoService(ILogger logger, IBugReportService bugReportService)
     {
         _logger = logger;
+        _bugReportService = bugReportService;
         var appDir = AppDomain.CurrentDomain.BaseDirectory;
         _extractXisoPath = Path.Combine(appDir, "extract-xiso.exe");
     }
@@ -180,6 +182,7 @@ public class ExtractXisoService : IExtractXisoService
         catch (Exception ex)
         {
             _logger.LogMessage($"[ERROR] Failed to convert '{fileName}': {ex.Message}");
+            _ = _bugReportService.SendBugReportAsync($"Failed to convert '{fileName}'", ex);
             return false;
         }
         finally

@@ -11,10 +11,12 @@ namespace BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 public class NativeIsoIntegrityService : INativeIsoIntegrityService
 {
     private readonly ILogger _logger;
+    private readonly IBugReportService _bugReportService;
 
-    public NativeIsoIntegrityService(ILogger logger)
+    public NativeIsoIntegrityService(ILogger logger, IBugReportService bugReportService)
     {
         _logger = logger;
+        _bugReportService = bugReportService;
     }
 
     public Task<bool> TestIsoIntegrityAsync(string isoPath, bool performDeepScan, IProgress<BatchOperationProgress> progress, CancellationToken token)
@@ -53,6 +55,7 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
             catch (Exception ex)
             {
                 _logger.LogMessage($"Integrity check failed for {Path.GetFileName(isoPath)}: {ex.Message}");
+                _ = _bugReportService.SendBugReportAsync($"Integrity check failed for {Path.GetFileName(isoPath)}", ex);
                 return false;
             }
         }, token);

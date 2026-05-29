@@ -8,11 +8,13 @@ namespace BatchConvertIsoToXiso.Services;
 public partial class ExternalToolService : IExternalToolService
 {
     private readonly ILogger _logger;
+    private readonly IBugReportService _bugReportService;
     private readonly string _bchunkPath;
 
-    public ExternalToolService(ILogger logger)
+    public ExternalToolService(ILogger logger, IBugReportService bugReportService)
     {
         _logger = logger;
+        _bugReportService = bugReportService;
         var appDir = AppDomain.CurrentDomain.BaseDirectory;
         _bchunkPath = Path.Combine(appDir, "bchunk.exe");
     }
@@ -33,8 +35,7 @@ public partial class ExternalToolService : IExternalToolService
         _logger.LogMessage($"  Found BIN file: '{binFileName}'");
 
         var outputBaseName = Path.GetFileNameWithoutExtension(cuePath);
-        var outputLines = new List<string>();
-        var result = await RunProcessAsync(_bchunkPath, $"\"{binPath}\" \"{cuePath}\" \"{outputBaseName}\"", tempOutputDir, outputLines, outputBaseName, token);
+        var result = await RunProcessAsync(_bchunkPath, $"\"{binPath}\" \"{cuePath}\" \"{outputBaseName}\"", tempOutputDir, outputBaseName, token);
 
         if (result != 0)
         {
@@ -55,43 +56,21 @@ public partial class ExternalToolService : IExternalToolService
         return isoFile;
     }
 
-    private async Task<int?> RunProcessAsync(string fileName, string arguments, string? workingDir, List<string> outputStore, string contextName, CancellationToken token)
+    private async Task<int?> RunProcessAsync(string fileName, string arguments, string? workingDir, string contextName, CancellationToken token)
     {
         try
         {
-            // Use a standard using block to make the process scope explicit
             using var process = new Process();
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = fileName,
                 Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WorkingDirectory = workingDir ?? AppDomain.CurrentDomain.BaseDirectory
             };
 
-            process.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data != null)
-                    lock (outputStore)
-                    {
-                        outputStore.Add(e.Data);
-                    }
-            };
-            process.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data != null)
-                    lock (outputStore)
-                    {
-                        outputStore.Add($"STDERR: {e.Data}");
-                    }
-            };
-
             process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
 
             await using (token.Register(state =>
                          {
@@ -115,6 +94,7 @@ public partial class ExternalToolService : IExternalToolService
         catch (Exception ex)
         {
             _logger.LogMessage($"Process execution failed ({contextName}): {ex.Message}");
+            _ = _bugReportService.SendBugReportAsync($"Process execution failed ({contextName})", ex);
             return null;
         }
     }

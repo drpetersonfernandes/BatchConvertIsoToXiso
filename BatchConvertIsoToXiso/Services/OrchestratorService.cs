@@ -170,7 +170,7 @@ public class OrchestratorService : IOrchestratorService
 
                     if (!isEnvironmentalError && !isArchiveError)
                     {
-                        _ = _bugReportService.SendBugReportAsync($"Orchestrator error on {fileName}: {ex}");
+                        _ = _bugReportService.SendBugReportAsync($"Orchestrator error on {fileName}", ex);
                     }
                 }
 

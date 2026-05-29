@@ -77,12 +77,12 @@ public partial class MainWindow
             }
             catch (Exception ex)
             {
-                _ = _bugReportService.SendBugReportAsync($"Error checking for updates: {ex.Message}");
+                _ = _bugReportService.SendBugReportAsync("Error checking for updates", ex);
             }
         }
         catch (Exception ex)
         {
-            _ = _bugReportService.SendBugReportAsync($"Error setting initial navigation button style: {ex.Message}");
+            _ = _bugReportService.SendBugReportAsync("Error setting initial navigation button style", ex);
         }
     }
 

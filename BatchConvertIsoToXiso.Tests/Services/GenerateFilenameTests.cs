@@ -16,4 +16,32 @@ public class GenerateFilenameTests
         var result = GenerateFilename.GenerateSimpleFilename(index);
         Assert.Equal(expected, result);
     }
+
+    [Fact]
+    public void GenerateSimpleFilename_NegativeIndex_FormatsWithSign()
+    {
+        var result = GenerateFilename.GenerateSimpleFilename(-1);
+        Assert.Equal("iso_-000001.iso", result);
+    }
+
+    [Fact]
+    public void GenerateSimpleFilename_OverflowIndex_FormatsBeyondSixDigits()
+    {
+        var result = GenerateFilename.GenerateSimpleFilename(1000000);
+        Assert.Equal("iso_1000000.iso", result);
+    }
+
+    [Fact]
+    public void GenerateSimpleFilename_EndsWithIsoExtension()
+    {
+        var result = GenerateFilename.GenerateSimpleFilename(42);
+        Assert.EndsWith(".iso", result);
+    }
+
+    [Fact]
+    public void GenerateSimpleFilename_StartsWithIsoPrefix()
+    {
+        var result = GenerateFilename.GenerateSimpleFilename(42);
+        Assert.StartsWith("iso_", result);
+    }
 }

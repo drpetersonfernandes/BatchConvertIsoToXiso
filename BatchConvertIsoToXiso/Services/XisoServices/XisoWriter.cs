@@ -16,6 +16,7 @@ public class XisoWriter
 {
     private readonly ILogger _logger;
     private readonly INativeIsoIntegrityService _integrityService;
+    private readonly IBugReportService _bugReportService;
     private static readonly long[] XisoOffset = [0x18300000, 0xFD90000, 0x89D80000, 0x2080000];
     private static readonly long[] XisoLength = [0x1A2DB0000, 0x1B3880000, 0xBF8A0000, 0x204510000];
     private static readonly long[] RedumpIsoLength = [0x1D26A8000, 0x1D3301800, 0x1D2FEF800, 0x1D3082000, 0x1D3390000, 0x1D31A0000, 0x208E05800, 0x208E03800];
@@ -54,10 +55,11 @@ public class XisoWriter
         }
     }
 
-    public XisoWriter(ILogger logger, INativeIsoIntegrityService integrityService)
+    public XisoWriter(ILogger logger, INativeIsoIntegrityService integrityService, IBugReportService bugReportService)
     {
         _logger = logger;
         _integrityService = integrityService;
+        _bugReportService = bugReportService;
     }
 
     public Task<FileProcessingStatus> RewriteIsoAsync(string sourcePath, string destPath, bool skipSystemUpdate, bool checkIntegrity, IProgress<BatchOperationProgress> progress, CancellationToken token)
@@ -131,6 +133,7 @@ public class XisoWriter
                 catch (Exception ex)
                 {
                     _logger.LogMessage($"[ERROR] '{Path.GetFileName(sourcePath)}' is not a valid Xbox ISO image. Details: {ex.Message}");
+                    _ = _bugReportService.SendBugReportAsync($"'{Path.GetFileName(sourcePath)}' is not a valid Xbox ISO image", ex);
                     return FileProcessingStatus.Failed;
                 }
 
@@ -339,6 +342,7 @@ public class XisoWriter
             catch (Exception ex)
             {
                 _logger.LogMessage($"Rewrite failed: {ex.Message}");
+                _ = _bugReportService.SendBugReportAsync($"Rewrite failed: '{Path.GetFileName(sourcePath)}'", ex);
                 return FileProcessingStatus.Failed;
             }
         }, token);
