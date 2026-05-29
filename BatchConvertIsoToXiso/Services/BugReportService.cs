@@ -34,9 +34,12 @@ public class BugReportService : IBugReportService, IDisposable
 
     public Task<bool> SendBugReportAsync(string errorMessage, Exception exception)
     {
-        var fullMessage = BuildFullMessage(errorMessage);
+        var sb = new StringBuilder(BuildFullMessage(errorMessage));
+        sb.AppendLine();
+        sb.AppendLine("=== Exception Details ===");
+        ExceptionFormatter.AppendExceptionDetails(sb, exception);
         var version = GetApplicationVersion.GetProgramVersion();
-        return SendToApiAsync(fullMessage, version);
+        return SendToApiAsync(sb.ToString(), version);
     }
 
     private async Task<bool> SendToApiAsync(string fullMessage, string version)
