@@ -52,6 +52,11 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
             {
                 throw;
             }
+            catch (InvalidDataException ex)
+            {
+                _logger.LogMessage($"Integrity check failed for {Path.GetFileName(isoPath)}: {ex.Message}");
+                return false;
+            }
             catch (Exception ex)
             {
                 _logger.LogMessage($"Integrity check failed for {Path.GetFileName(isoPath)}: {ex.Message}");

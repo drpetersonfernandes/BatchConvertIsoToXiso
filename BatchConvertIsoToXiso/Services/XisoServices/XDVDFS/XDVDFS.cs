@@ -323,70 +323,79 @@ internal static class Xdvdfs
             // Seek to the current directory entry
             isoFs.Seek(cur, SeekOrigin.Begin);
 
-            // Read LeftSubTree offset.
-            // 0xFFFF means no left child — it does NOT mean the current entry is absent.
-            var leftChildOffset = Utils.ReadUShort(isoFs);
-
-            // Always read the full entry regardless of left child status.
-            var rightChildOffset = Utils.ReadUShort(isoFs);
-            var entryOffsetRaw = Utils.ReadUInt(isoFs);
-            var entryOffset = (long)entryOffsetRaw * Utils.SectorSize;
-            var entrySize = Utils.ReadUInt(isoFs);
-            var attributes = (byte)isoFs.ReadByte();
-            var nameLength = (byte)isoFs.ReadByte();
-
-            var fileName = "";
-            if (nameLength > 0)
+            try
             {
-                var nameBuffer = new byte[nameLength];
-                // Use Read instead of ReadExactly for better compatibility/safety
-                var bytesRead = isoFs.Read(nameBuffer, 0, nameLength);
-                if (bytesRead == nameLength)
-                {
-                    fileName = Encoding.ASCII.GetString(nameBuffer);
-                }
-            }
+                // Read LeftSubTree offset.
+                // 0xFFFF means no left child — it does NOT mean the current entry is absent.
+                var leftChildOffset = Utils.ReadUShort(isoFs);
 
-            var isDirectory = (attributes & 0x10) != 0;
+                // Always read the full entry regardless of left child status.
+                var rightChildOffset = Utils.ReadUShort(isoFs);
+                var entryOffsetRaw = Utils.ReadUInt(isoFs);
+                var entryOffset = (long)entryOffsetRaw * Utils.SectorSize;
+                var entrySize = Utils.ReadUInt(isoFs);
+                var attributes = (byte)isoFs.ReadByte();
+                var nameLength = (byte)isoFs.ReadByte();
 
-            // Push Right Child to stack (process after current entry)
-            if (rightChildOffset != 0xFFFF && rightChildOffset != 0)
-            {
-                stack.Push(item with { ChildOffset = (long)rightChildOffset * 4 });
-            }
-
-            // Process Current Entry
-            if (isDirectory)
-            {
-                // Skip contents of $SystemUpdate if requested
-                if (skipSystemUpdate && fileName.Equals("$SystemUpdate", StringComparison.OrdinalIgnoreCase))
+                var fileName = "";
+                if (nameLength > 0)
                 {
-                    if (!quiet) Debug.WriteLine("Skipping $SystemUpdate directory contents.");
-                }
-                else if (entryOffsetRaw > 0 && entrySize > 0)
-                {
-                    // Push subdirectory onto stack for traversal
-                    stack.Push(new DirectoryWorkItem
+                    var nameBuffer = new byte[nameLength];
+                    // Use Read instead of ReadExactly for better compatibility/safety
+                    var bytesRead = isoFs.Read(nameBuffer, 0, nameLength);
+                    if (bytesRead == nameLength)
                     {
-                        RootOffset = entryOffset,
-                        RootSize = entrySize,
-                        ChildOffset = 0
-                    });
+                        fileName = Encoding.ASCII.GetString(nameBuffer);
+                    }
+                }
+
+                var isDirectory = (attributes & 0x10) != 0;
+
+                // Push Right Child to stack (process after current entry)
+                if (rightChildOffset != 0xFFFF && rightChildOffset != 0)
+                {
+                    stack.Push(item with { ChildOffset = (long)rightChildOffset * 4 });
+                }
+
+                // Process Current Entry
+                if (isDirectory)
+                {
+                    // Skip contents of $SystemUpdate if requested
+                    if (skipSystemUpdate && fileName.Equals("$SystemUpdate", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!quiet) Debug.WriteLine("Skipping $SystemUpdate directory contents.");
+                    }
+                    else if (entryOffsetRaw > 0 && entrySize > 0)
+                    {
+                        // Push subdirectory onto stack for traversal
+                        stack.Push(new DirectoryWorkItem
+                        {
+                            RootOffset = entryOffset,
+                            RootSize = entrySize,
+                            ChildOffset = 0
+                        });
+                    }
+                }
+                else if (entryOffsetRaw > 0)
+                {
+                    // Add file data sectors to valid list
+                    var fileOffset = (isoOffset + entryOffset) / Utils.SectorSize;
+                    var fileSize = (entrySize + Utils.SectorSize - 1) / Utils.SectorSize;
+                    for (var i = fileOffset; i < fileOffset + fileSize; i++)
+                        validSectors.Add((uint)i);
+                }
+
+                // Push Left Child to stack
+                if (leftChildOffset != 0xFFFF && leftChildOffset != 0)
+                {
+                    stack.Push(item with { ChildOffset = (long)leftChildOffset * 4 });
                 }
             }
-            else if (entryOffsetRaw > 0)
+            catch (EndOfStreamException)
             {
-                // Add file data sectors to valid list
-                var fileOffset = (isoOffset + entryOffset) / Utils.SectorSize;
-                var fileSize = (entrySize + Utils.SectorSize - 1) / Utils.SectorSize;
-                for (var i = fileOffset; i < fileOffset + fileSize; i++)
-                    validSectors.Add((uint)i);
-            }
-
-            // Push Left Child to stack
-            if (leftChildOffset != 0xFFFF && leftChildOffset != 0)
-            {
-                stack.Push(item with { ChildOffset = (long)leftChildOffset * 4 });
+                // Corrupted ISO: stop traversal and return partial results
+                if (!quiet) Debug.WriteLine("EndOfStreamException encountered — returning partial sector list.");
+                break;
             }
         }
     }

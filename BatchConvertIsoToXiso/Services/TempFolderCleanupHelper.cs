@@ -41,25 +41,51 @@ public static class TempFolderCleanupHelper
     }
 
     /// <summary>
-    /// Cleans up all BatchConvertIsoToXiso temp folders
+    /// Cleans up all BatchConvertIsoToXiso temp folders on all fixed drives
     /// </summary>
     public static async Task CleanupBatchConvertTempFoldersAsync(ILogger logger)
     {
-        var tempPath = Path.GetTempPath();
         const string searchPattern = "BatchConvertIsoToXiso_*";
+
+        // Collect all unique roots to scan: system temp + all fixed drives
+        var rootsToScan = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            rootsToScan.Add(Path.GetTempPath());
+        }
+        catch
+        {
+            // ignored
+        }
 
         try
         {
-            var directories = Directory.EnumerateDirectories(tempPath, searchPattern, SearchOption.TopDirectoryOnly);
-            foreach (var dir in directories)
+            foreach (var drive in DriveInfo.GetDrives())
             {
-                logger.LogMessage($"Cleaning up orphaned temp folder: {Path.GetFileName(dir)}");
-                await TryDeleteDirectoryWithRetryAsync(dir, 3, 1000, logger);
+                if (drive is { IsReady: true, DriveType: DriveType.Fixed })
+                    rootsToScan.Add(drive.Name);
             }
         }
-        catch (Exception ex)
+        catch
         {
-            logger.LogMessage($"Error enumerating temp folders: {ex.Message}");
+            // Ignore drive enumeration errors
+        }
+
+        foreach (var root in rootsToScan)
+        {
+            try
+            {
+                var directories = Directory.EnumerateDirectories(root, searchPattern, SearchOption.TopDirectoryOnly);
+                foreach (var dir in directories)
+                {
+                    logger.LogMessage($"Cleaning up orphaned temp folder: {Path.GetFileName(dir)}");
+                    await TryDeleteDirectoryWithRetryAsync(dir, 3, 1000, logger);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogMessage($"Error enumerating temp folders on {root}: {ex.Message}");
+            }
         }
     }
 }

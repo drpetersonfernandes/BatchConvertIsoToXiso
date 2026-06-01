@@ -11,12 +11,14 @@ public class ExtractXisoService : IExtractXisoService
 {
     private readonly ILogger _logger;
     private readonly IBugReportService _bugReportService;
+    private readonly IDiskMonitorService _diskMonitorService;
     private readonly string _extractXisoPath;
 
-    public ExtractXisoService(ILogger logger, IBugReportService bugReportService)
+    public ExtractXisoService(ILogger logger, IBugReportService bugReportService, IDiskMonitorService diskMonitorService)
     {
         _logger = logger;
         _bugReportService = bugReportService;
+        _diskMonitorService = diskMonitorService;
         var appDir = AppDomain.CurrentDomain.BaseDirectory;
         _extractXisoPath = Path.Combine(appDir, "extract-xiso.exe");
     }
@@ -35,7 +37,8 @@ public class ExtractXisoService : IExtractXisoService
 
         // Create a temporary working directory for simplified filenames
         // extract-xiso has issues with spaces and special characters in paths
-        var tempWorkDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Work", Guid.NewGuid().ToString());
+        var inputFileSize = new FileInfo(inputFile).Length;
+        var tempWorkDir = ResolveTempDirectory(inputFileSize, "BatchConvertIsoToXiso_Work");
 
         try
         {
@@ -179,6 +182,11 @@ public class ExtractXisoService : IExtractXisoService
             _logger.LogMessage($"Conversion of '{fileName}' was canceled.");
             throw;
         }
+        catch (Exception ex) when (IsDiskSpaceError(ex))
+        {
+            _logger.LogMessage($"[ERROR] Not enough disk space to convert '{fileName}': {ex.Message}");
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.LogMessage($"[ERROR] Failed to convert '{fileName}': {ex.Message}");
@@ -203,20 +211,91 @@ public class ExtractXisoService : IExtractXisoService
     }
 
     /// <summary>
-    /// Copies a file with progress reporting (simplified, no progress percentage for now)
+    /// Copies a file with progress reporting and retry logic for transient IO errors
     /// </summary>
     private static async Task CopyFileWithProgressAsync(string sourcePath, string destPath, CancellationToken token)
     {
         const int bufferSize = 81920; // 80KB buffer
-        await using var sourceStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous);
-        await using var destStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, FileOptions.Asynchronous);
+        const int maxRetries = 3;
 
-        var buffer = new byte[bufferSize];
-        int bytesRead;
-
-        while ((bytesRead = await sourceStream.ReadAsync(buffer, token)) > 0)
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
         {
-            await destStream.WriteAsync(buffer.AsMemory(0, bytesRead), token);
+            try
+            {
+                await using var sourceStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous);
+                await using var destStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, FileOptions.Asynchronous);
+
+                var buffer = new byte[bufferSize];
+                int bytesRead;
+
+                while ((bytesRead = await sourceStream.ReadAsync(buffer, token)) > 0)
+                {
+                    await destStream.WriteAsync(buffer.AsMemory(0, bytesRead), token);
+                }
+
+                return; // Success
+            }
+            catch (IOException) when (attempt < maxRetries)
+            {
+                // Clean up partial dest file before retry
+                try
+                {
+                    if (File.Exists(destPath)) File.Delete(destPath);
+                }
+                catch
+                {
+                    // ignored
+                }
+
+                await Task.Delay(attempt * 2000, token);
+            }
         }
+    }
+
+    private string ResolveTempDirectory(long requiredSize, string tempSubfolder)
+    {
+        var defaultTempPath = Path.GetTempPath();
+        var defaultTempDriveRoot = Path.GetPathRoot(defaultTempPath);
+        var requiredWithBuffer = requiredSize + Math.Max(requiredSize / 10, 200L * 1024 * 1024);
+
+        if (defaultTempDriveRoot != null)
+        {
+            try
+            {
+                var defaultDrive = new DriveInfo(defaultTempDriveRoot);
+                if (defaultDrive.IsReady && defaultDrive.AvailableFreeSpace >= requiredWithBuffer)
+                    return Path.Combine(defaultTempPath, tempSubfolder, Guid.NewGuid().ToString());
+            }
+            catch
+            {
+                // Ignore and fall through to alternative search
+            }
+        }
+
+        var altDrive = _diskMonitorService.FindDriveWithFreeSpace(requiredSize, defaultTempDriveRoot);
+        if (altDrive != null)
+        {
+            _logger.LogMessage($"  Default temp drive has insufficient space. Using alternative drive: {altDrive}");
+            return Path.Combine(altDrive, tempSubfolder, Guid.NewGuid().ToString());
+        }
+
+        var requiredFormatted = Formatter.FormatBytes(requiredWithBuffer);
+        var defaultAvailable = Formatter.FormatBytes(_diskMonitorService.GetAvailableFreeSpace(defaultTempPath));
+        throw new IOException($"Not enough disk space to create temporary files. Required: {requiredFormatted}, Available: {defaultAvailable}. No other local drives have sufficient free space.");
+    }
+
+    private static bool IsDiskSpaceError(Exception ex)
+    {
+        if (ex is IOException ioEx)
+        {
+            var hResult = ioEx.HResult & 0xFFFF;
+            if (hResult is 0x70 or 0x27) return true; // ERROR_DISK_FULL, ERROR_HANDLE_DISK_FULL
+        }
+
+        return ex is IOException ioEx2 &&
+               (ioEx2.Message.Contains("Not enough space", StringComparison.OrdinalIgnoreCase) ||
+                ioEx2.Message.Contains("not enough disk space", StringComparison.OrdinalIgnoreCase) ||
+                ioEx2.Message.Contains("insufficient disk space", StringComparison.OrdinalIgnoreCase) ||
+                ioEx2.Message.Contains("Disk full", StringComparison.OrdinalIgnoreCase));
     }
 }

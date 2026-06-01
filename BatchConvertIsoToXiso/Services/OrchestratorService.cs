@@ -65,12 +65,25 @@ public class OrchestratorService : IOrchestratorService
             RecurseSubdirectories = searchSubfolders
         };
 
-        var topLevelEntries = await Task.Run(() => Directory.GetFiles(inputFolder, "*.*", enumOptions)
-            .Where(static f =>
+        List<string> topLevelEntries = [];
+        const int maxRetries = 3;
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
             {
-                var ext = Path.GetExtension(f).ToLowerInvariant();
-                return ext is ".iso" or ".zip" or ".7z" or ".rar" or ".cue";
-            }).ToList(), token);
+                topLevelEntries = await Task.Run(() => Directory.GetFiles(inputFolder, "*.*", enumOptions)
+                    .Where(static f =>
+                    {
+                        var ext = Path.GetExtension(f).ToLowerInvariant();
+                        return ext is ".iso" or ".zip" or ".7z" or ".rar" or ".cue";
+                    }).ToList(), token);
+                break;
+            }
+            catch (IOException) when (attempt < maxRetries)
+            {
+                await Task.Delay(attempt * 2000, token);
+            }
+        }
 
         if (topLevelEntries.Count == 0) return;
 
@@ -602,7 +615,17 @@ public class OrchestratorService : IOrchestratorService
         {
             // Likely cloud file issue, use existing copy logic
             var simpleName = GenerateFilename.GenerateSimpleFilename(index);
-            var tempDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Test", Guid.NewGuid().ToString());
+            long estimatedSize = 0;
+            try
+            {
+                estimatedSize = new FileInfo(isoPath).Length;
+            }
+            catch
+            {
+                // ignored
+            }
+
+            var tempDir = ResolveTempDirectory(estimatedSize, "BatchConvertIsoToXiso_Test");
             Directory.CreateDirectory(tempDir);
             tempCloudCopy = Path.Combine(tempDir, simpleName);
 

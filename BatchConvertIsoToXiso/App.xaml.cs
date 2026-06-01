@@ -70,6 +70,12 @@ public partial class App
                 // Handle font-related InvalidOperationException
                 await HandleFontRenderingErrorAsync(opEx);
             }
+            catch (NullReferenceException nullEx)
+            {
+                // Handle UI initialization failures (e.g., ToolBar style issues)
+                _logger?.LogMessage($"UI initialization error during startup: {nullEx.Message}");
+                await ReportExceptionAsync(nullEx, "Bug OnStartup - UI Initialization Error");
+            }
         }
         catch (SEHException sehEx)
         {
@@ -140,7 +146,7 @@ public partial class App
         services.AddTransient<IFileMover, FileMoverService>(static provider => new FileMoverService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>(), provider.GetRequiredService<IDiskMonitorService>()));
         services.AddTransient<AboutWindow>();
         services.AddSingleton<IExternalToolService>(static provider => new ExternalToolService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
-        services.AddSingleton<IExtractXisoService>(static provider => new ExtractXisoService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));
+        services.AddSingleton<IExtractXisoService>(static provider => new ExtractXisoService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>(), provider.GetRequiredService<IDiskMonitorService>()));
         services.AddSingleton<IXdvdfsService, XdvdfsService>();
         services.AddSingleton<IOrchestratorService, OrchestratorService>();
         services.AddSingleton<INativeIsoIntegrityService>(static provider => new NativeIsoIntegrityService(provider.GetRequiredService<ILogger>(), provider.GetRequiredService<IBugReportService>()));

@@ -129,7 +129,7 @@ public partial class MainWindow
         {
             try
             {
-                var tempFolder = Path.Combine(Path.GetTempPath(), "XisoExplorer", Guid.NewGuid().ToString());
+                var tempFolder = ResolveExplorerTempDirectory(entry.FileSize, "XisoExplorer");
                 Directory.CreateDirectory(tempFolder);
                 var tempPath = Path.Combine(tempFolder, fileName);
 
@@ -224,7 +224,8 @@ public partial class MainWindow
             try
             {
                 // Extract files to temp folder for drag operation
-                var tempFolder = Path.Combine(Path.GetTempPath(), "XisoExplorer", "DragDrop", Guid.NewGuid().ToString());
+                var totalSize = selectedItems.Sum(static i => i.Entry.FileSize);
+                var tempFolder = ResolveExplorerTempDirectory(totalSize, "XisoExplorer_DragDrop");
                 Directory.CreateDirectory(tempFolder);
 
                 var tempFiles = new List<string>();
@@ -309,5 +310,33 @@ public partial class MainWindow
         var parentName = _explorerPathNames.Pop();
 
         LoadDirectory(parentEntry, parentName, false, true);
+    }
+
+    private string ResolveExplorerTempDirectory(long requiredSize, string tempSubfolder)
+    {
+        var defaultTempPath = Path.GetTempPath();
+        var defaultTempDriveRoot = Path.GetPathRoot(defaultTempPath);
+        var requiredWithBuffer = requiredSize + Math.Max(requiredSize / 10, 200L * 1024 * 1024);
+
+        if (defaultTempDriveRoot != null)
+        {
+            try
+            {
+                var defaultDrive = new DriveInfo(defaultTempDriveRoot);
+                if (defaultDrive.IsReady && defaultDrive.AvailableFreeSpace >= requiredWithBuffer)
+                    return Path.Combine(defaultTempPath, tempSubfolder, Guid.NewGuid().ToString());
+            }
+            catch
+            {
+                // Ignore and fall through to alternative search
+            }
+        }
+
+        var altDrive = _diskMonitorService.FindDriveWithFreeSpace(requiredSize, defaultTempDriveRoot);
+        if (altDrive != null)
+            return Path.Combine(altDrive, tempSubfolder, Guid.NewGuid().ToString());
+
+        // Fall back to default even if space is low — let the operation attempt and fail with a clear error
+        return Path.Combine(defaultTempPath, tempSubfolder, Guid.NewGuid().ToString());
     }
 }
