@@ -185,7 +185,7 @@ public class ExtractXisoService : IExtractXisoService
         catch (Exception ex) when (IsDiskSpaceError(ex))
         {
             _logger.LogMessage($"[ERROR] Not enough disk space to convert '{fileName}': {ex.Message}");
-            return false;
+            throw;
         }
         catch (Exception ex)
         {
@@ -288,14 +288,27 @@ public class ExtractXisoService : IExtractXisoService
     {
         if (ex is IOException ioEx)
         {
-            var hResult = ioEx.HResult & 0xFFFF;
+            var hResult = Math.Abs(ioEx.HResult) & 0xFFFF;
             if (hResult is 0x70 or 0x27) return true; // ERROR_DISK_FULL, ERROR_HANDLE_DISK_FULL
         }
 
-        return ex is IOException ioEx2 &&
-               (ioEx2.Message.Contains("Not enough space", StringComparison.OrdinalIgnoreCase) ||
-                ioEx2.Message.Contains("not enough disk space", StringComparison.OrdinalIgnoreCase) ||
-                ioEx2.Message.Contains("insufficient disk space", StringComparison.OrdinalIgnoreCase) ||
-                ioEx2.Message.Contains("Disk full", StringComparison.OrdinalIgnoreCase));
+        if (ex.InnerException is IOException innerIoEx)
+        {
+            var hResult = Math.Abs(innerIoEx.HResult) & 0xFFFF;
+            if (hResult is 0x70 or 0x27) return true;
+        }
+
+        var message = ex.Message;
+        if (ex.InnerException != null)
+        {
+            message += " " + ex.InnerException.Message;
+        }
+
+        return message.Contains("Not enough space", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("not enough disk space", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("insufficient disk space", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Disk full", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Espace insuffisant", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("disque plein", StringComparison.OrdinalIgnoreCase);
     }
 }
