@@ -357,68 +357,116 @@ public class FileExtractorService : IFileExtractor
                 {
                     return Task.Run(() =>
                     {
-                        using var archive = ArchiveFactory.OpenArchive(archivePath);
-                        var entries = archive.Entries.Where(static e => !e.IsDirectory).ToList();
-                        var fileCount = entries.Count;
-                        var totalSize = entries.Sum(static e => e.Size);
-                        var archiveFormat = archive.Type;
-
-                        _logger.LogMessage($"  Archive format: {archiveFormat}, Files to extract: {fileCount}, Total size: {Formatter.FormatBytes(totalSize)}");
-
-                        CheckDiskSpace(extractionPath, totalSize, archiveFileName);
-
-                        _logger.LogMessage($"  Extracting files from {archiveFileName}...");
-
-                        var isoExtracted = false;
-
-                        // Manually extract files to prevent "Zip Slip" (absolute paths or path traversal in archives)
-                        foreach (var entry in entries)
+                        try
                         {
-                            token.ThrowIfCancellationRequested();
+                            using var archive = ArchiveFactory.OpenArchive(archivePath);
+                            var entries = archive.Entries.Where(static e => !e.IsDirectory).ToList();
+                            var fileCount = entries.Count;
+                            var totalSize = entries.Sum(static e => e.Size);
+                            var archiveFormat = archive.Type;
 
-                            var entryPath = entry.Key;
+                            _logger.LogMessage($"  Archive format: {archiveFormat}, Files to extract: {fileCount}, Total size: {Formatter.FormatBytes(totalSize)}");
 
-                            // Strict Zip Slip check: Skip suspicious paths entirely
-                            if (entryPath != null && (Path.IsPathRooted(entryPath) || entryPath.Contains("..")))
+                            CheckDiskSpace(extractionPath, totalSize, archiveFileName);
+
+                            _logger.LogMessage($"  Extracting files from {archiveFileName}...");
+
+                            var isoExtracted = false;
+
+                            // Manually extract files to prevent "Zip Slip" (absolute paths or path traversal in archives)
+                            foreach (var entry in entries)
                             {
-                                _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
-                                continue;
-                            }
+                                token.ThrowIfCancellationRequested();
 
-                            // Check for multiple ISOs
-                            if (entryPath != null && Path.GetExtension(entryPath).Equals(".iso", StringComparison.OrdinalIgnoreCase))
-                            {
-                                if (isoExtracted)
-                                {
-                                    _logger.LogMessage($"  Skipping additional ISO: {entryPath} (Only the first ISO is processed per archive).");
-                                    continue;
-                                }
+                                var entryPath = entry.Key;
 
-                                isoExtracted = true;
-                            }
-
-                            if (entryPath != null)
-                            {
-                                var fullDestPath = Path.GetFullPath(Path.Combine(extractionPath, entryPath));
-
-                                // Ensure the resulting path is still inside our extraction directory
-                                // Fix: base path must end with directory separator to prevent bypass via similar-named directories
-                                var basePath = Path.GetFullPath(extractionPath);
-                                if (!basePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-                                {
-                                    basePath += Path.DirectorySeparatorChar;
-                                }
-
-                                if (!fullDestPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+                                // Strict Zip Slip check: Skip suspicious paths entirely
+                                if (entryPath != null && (Path.IsPathRooted(entryPath) || entryPath.Contains("..")))
                                 {
                                     _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
                                     continue;
                                 }
 
-                                Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath) ?? throw new InvalidOperationException("fullDestPath cannot be null"));
-                                using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);
-                                entry.WriteTo(fs);
+                                // Check for multiple ISOs
+                                if (entryPath != null && Path.GetExtension(entryPath).Equals(".iso", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (isoExtracted)
+                                    {
+                                        _logger.LogMessage($"  Skipping additional ISO: {entryPath} (Only the first ISO is processed per archive).");
+                                        continue;
+                                    }
+
+                                    isoExtracted = true;
+                                }
+
+                                if (entryPath != null)
+                                {
+                                    var fullDestPath = Path.GetFullPath(Path.Combine(extractionPath, entryPath));
+
+                                    // Ensure the resulting path is still inside our extraction directory
+                                    // Fix: base path must end with directory separator to prevent bypass via similar-named directories
+                                    var basePath = Path.GetFullPath(extractionPath);
+                                    if (!basePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                                    {
+                                        basePath += Path.DirectorySeparatorChar;
+                                    }
+
+                                    if (!fullDestPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
+                                        continue;
+                                    }
+
+                                    Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath) ?? throw new InvalidOperationException("fullDestPath cannot be null"));
+                                    using var fs = new FileStream(fullDestPath, FileMode.Create, FileAccess.Write);
+                                    entry.WriteTo(fs);
+                                }
                             }
+                        }
+                        catch (NotSupportedException notSupportedEx) when (
+                            notSupportedEx.Message.Contains("Unsupported compression method", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // SharpCompress doesn't support this compression method (e.g., ZSTD/method 21).
+                            // Fall back to 7-Zip CLI.
+                            _logger.LogMessage($"  SharpCompress doesn't support this compression method ({notSupportedEx.Message}). Falling back to 7-Zip CLI...");
+
+                            if (!File.Exists(_sevenZipExePath))
+                            {
+                                throw new IOException(
+                                    "This archive uses a compression method (e.g., ZSTD) not supported by the built-in extractor.\n\n" +
+                                    "To extract this file automatically, you can:\n" +
+                                    "1. Install 7-Zip from https://7-zip.org/ — the app auto-detects it in Program Files.\n" +
+                                    "2. Alternatively, place '7za.exe' (for x64) or '7za_arm64.exe' (for ARM64) in the application directory.\n\n" +
+                                    "Alternatively, you can manually extract the archive and place the ISO file directly in the input folder.",
+                                    notSupportedEx);
+                            }
+
+                            // Use synchronous extraction since we're already in Task.Run
+                            var args = $"x \"{archivePath}\" -o\"{extractionPath}\" -y";
+                            var exeDir = Path.GetDirectoryName(_sevenZipExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
+                            using var process = new Process();
+                            process.StartInfo = new ProcessStartInfo
+                            {
+                                FileName = _sevenZipExePath,
+                                Arguments = args,
+                                WorkingDirectory = exeDir,
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            };
+
+                            process.Start();
+                            process.StandardOutput.ReadToEnd();
+                            var stderr = process.StandardError.ReadToEnd();
+                            process.WaitForExit();
+
+                            if (process.ExitCode != 0)
+                            {
+                                throw new IOException($"7-Zip CLI extraction failed with exit code {process.ExitCode}: {stderr}");
+                            }
+
+                            _logger.LogMessage($"  Successfully extracted using 7-Zip CLI fallback: {archiveFileName}");
                         }
                     }, token);
                 }, $"Extraction of {archiveFileName}", token);

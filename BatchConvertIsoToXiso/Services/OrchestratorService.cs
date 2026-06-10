@@ -59,6 +59,18 @@ public class OrchestratorService : IOrchestratorService
         Func<string, Task<CloudRetryResult>> onCloudRetryRequired,
         CancellationToken token)
     {
+        if (!Directory.Exists(inputFolder))
+        {
+            throw new IOException(
+                $"The input folder does not exist or is not accessible: '{inputFolder}'\n\n" +
+                "Possible causes:\n" +
+                "• The folder was deleted, moved, or renamed\n" +
+                "• The folder is on a network drive that is disconnected\n" +
+                "• The folder is a cloud placeholder (OneDrive, Dropbox) that hasn't been synced\n" +
+                "• The path contains characters that are not supported by the file system\n\n" +
+                "Please verify the folder exists and try again.");
+        }
+
         var enumOptions = new EnumerationOptions
         {
             IgnoreInaccessible = true,
@@ -78,6 +90,14 @@ public class OrchestratorService : IOrchestratorService
                         return ext is ".iso" or ".zip" or ".7z" or ".rar" or ".cue";
                     }).ToList(), token);
                 break;
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                throw new IOException(
+                    $"The input folder was not found: '{inputFolder}'\n\n" +
+                    "The folder may have been deleted, moved, or is a cloud placeholder that hasn't been synced.\n" +
+                    $"Original error: {ex.Message}",
+                    ex);
             }
             catch (IOException) when (attempt < maxRetries)
             {
@@ -560,8 +580,33 @@ public class OrchestratorService : IOrchestratorService
 
     public async Task TestAsync(string inputFolder, bool moveSuccessful, bool moveFailed, bool searchSubfolders, bool performDeepScan, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> onCloudRetryRequired, CancellationToken token)
     {
+        if (!Directory.Exists(inputFolder))
+        {
+            throw new IOException(
+                $"The input folder does not exist or is not accessible: '{inputFolder}'\n\n" +
+                "Possible causes:\n" +
+                "• The folder was deleted, moved, or renamed\n" +
+                "• The folder is on a network drive that is disconnected\n" +
+                "• The folder is a cloud placeholder (OneDrive, Dropbox) that hasn't been synced\n" +
+                "• The path contains characters that are not supported by the file system\n\n" +
+                "Please verify the folder exists and try again.");
+        }
+
         var enumOptions = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = searchSubfolders };
-        var isoFiles = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", enumOptions).ToList(), token);
+
+        List<string> isoFiles;
+        try
+        {
+            isoFiles = await Task.Run(() => Directory.GetFiles(inputFolder, "*.iso", enumOptions).ToList(), token);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            throw new IOException(
+                $"The input folder was not found: '{inputFolder}'\n\n" +
+                "The folder may have been deleted, moved, or is a cloud placeholder that hasn't been synced.\n" +
+                $"Original error: {ex.Message}",
+                ex);
+        }
 
         if (isoFiles.Count == 0) return;
 
