@@ -457,6 +457,35 @@ public class FileExtractorService : IFileExtractor
             _logger.LogMessage($"  Extraction failed for {archiveFileName}.");
             return false;
         }
+        catch (NotSupportedException notSupportedEx) when (
+            notSupportedEx.Message.Contains("Unsupported compression method", StringComparison.OrdinalIgnoreCase) &&
+            Path.GetExtension(archivePath).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            // ZIP archives using newer compression methods (e.g., method 21 = ZSTD) are not supported by SharpCompress.
+            // Fall back to 7-Zip CLI which supports these methods.
+            _logger.LogMessage($"  ZIP archive uses unsupported compression method ({notSupportedEx.Message}). Falling back to 7-Zip CLI...");
+
+            if (!File.Exists(_sevenZipExePath))
+            {
+                const string userMessage = "This ZIP archive uses a compression method (e.g., ZSTD) not supported by the built-in extractor.\n\n" +
+                                           "To extract this file automatically, you can:\n" +
+                                           "1. Install 7-Zip from https://7-zip.org/ — the app auto-detects it in Program Files.\n" +
+                                           "2. Alternatively, place '7za.exe' (for x64) or '7za_arm64.exe' (for ARM64) in the application directory.\n\n" +
+                                           "Alternatively, you can manually extract the ZIP and place the ISO file directly in the input folder.";
+                _logger.LogMessage($"  ERROR: {userMessage}");
+                throw new IOException(userMessage, notSupportedEx);
+            }
+
+            var cliResult = await TryExtractWithSevenZipCliAsync(archivePath, extractionPath, token);
+            if (cliResult)
+            {
+                _logger.LogMessage($"  Successfully extracted: {archiveFileName}");
+                return true;
+            }
+
+            _logger.LogMessage($"  Extraction failed for {archiveFileName}.");
+            return false;
+        }
         catch (InvalidFormatException ex)
         {
             var userMessage = $"Error extracting {archiveFileName}: The archive uses a compression format not supported by SharpCompress.\n" +
