@@ -36,11 +36,11 @@ public class XdvdfsTests
         fs.Write(BitConverter.GetBytes((ushort)0xFFFF)); // right child
         fs.Write(BitConverter.GetBytes(0u)); // start sector
         fs.Write(BitConverter.GetBytes(0u)); // file size
-        fs.Write([(byte)0x10]); // attributes = directory
-        fs.Write([(byte)1]); // name length
+        fs.Write([0x10]); // attributes = directory
+        fs.Write([1]); // name length
         fs.Write([(byte)'x']); // name = "x"
         // padding: 14 + 1 = 15, need 1 byte padding
-        fs.Write([(byte)0]);
+        fs.Write([0]);
 
         return path;
     }

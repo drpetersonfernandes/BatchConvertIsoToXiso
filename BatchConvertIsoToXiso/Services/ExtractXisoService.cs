@@ -187,6 +187,15 @@ public class ExtractXisoService : IExtractXisoService
             _logger.LogMessage($"[ERROR] Not enough disk space to convert '{fileName}': {ex.Message}");
             throw;
         }
+        catch (Exception ex) when (IsNetworkError(ex))
+        {
+            _logger.LogMessage($"[ERROR] Network error while converting '{fileName}': {ex.Message}\n\n" +
+                "Please try:\n" +
+                "1. Check that the network drive is still connected and accessible\n" +
+                "2. Copy the file to a local drive before processing\n" +
+                "3. Check your network connection stability");
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogMessage($"[ERROR] Failed to convert '{fileName}': {ex.Message}");
@@ -310,5 +319,53 @@ public class ExtractXisoService : IExtractXisoService
                message.Contains("Disk full", StringComparison.OrdinalIgnoreCase) ||
                message.Contains("Espace insuffisant", StringComparison.OrdinalIgnoreCase) ||
                message.Contains("disque plein", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Determines if an exception is related to network connectivity issues.
+    /// Supports error messages in multiple languages (English, German, French, Spanish, Italian).
+    /// </summary>
+    private static bool IsNetworkError(Exception ex)
+    {
+        if (ex is not IOException ioEx)
+            return false;
+
+        var message = ioEx.Message;
+
+        // English
+        if (message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("no longer available", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // German
+        if (message.Contains("Netzwerk", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("nicht mehr verfügbar", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // French
+        if (message.Contains("réseau", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("n'est plus disponible", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Spanish
+        if (message.Contains("red", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Italian
+        if (message.Contains("rete", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 }

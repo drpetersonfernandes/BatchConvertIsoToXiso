@@ -89,7 +89,7 @@ internal static class Xdvdfs
                 return false;
 
             // Root size should be reasonable (not 0, not larger than file)
-            var rootOffsetBytes = (long)rootOffset * Utils.SectorSize;
+            var rootOffsetBytes = rootOffset * Utils.SectorSize;
             if (rootSize == 0 || rootSize > fileLength || offset + rootOffsetBytes + rootSize > fileLength)
                 return false;
 
@@ -230,7 +230,7 @@ internal static class Xdvdfs
             if (rootOffset == 0 || rootSize == 0)
                 return false;
 
-            var rootOffsetBytes = (long)rootOffset * Utils.SectorSize;
+            var rootOffsetBytes = rootOffset * Utils.SectorSize;
             if (offset + rootOffsetBytes + rootSize > isoFs.Length)
                 return false;
 
@@ -332,7 +332,7 @@ internal static class Xdvdfs
                 // Always read the full entry regardless of left child status.
                 var rightChildOffset = Utils.ReadUShort(isoFs);
                 var entryOffsetRaw = Utils.ReadUInt(isoFs);
-                var entryOffset = (long)entryOffsetRaw * Utils.SectorSize;
+                var entryOffset = entryOffsetRaw * Utils.SectorSize;
                 var entrySize = Utils.ReadUInt(isoFs);
                 var attributes = (byte)isoFs.ReadByte();
                 var nameLength = (byte)isoFs.ReadByte();
@@ -436,7 +436,7 @@ internal static class Xdvdfs
         if (rootSize == 0) return ranges;
 
         var visited = new HashSet<long>();
-        GetValidSectors(isoFs, offset, validSectors, (long)rootOffset * Utils.SectorSize, rootSize, quiet, skipSystemUpdate, visited);
+        GetValidSectors(isoFs, offset, validSectors, rootOffset * Utils.SectorSize, rootSize, quiet, skipSystemUpdate, visited);
 
         if (validSectors.Count == 0) return ranges;
 

@@ -131,6 +131,54 @@ public class FileExtractorService : IFileExtractor
     }
 
     /// <summary>
+    /// Determines if an exception is related to network connectivity issues.
+    /// Supports error messages in multiple languages (English, German, French, Spanish, Italian).
+    /// </summary>
+    private static bool IsNetworkError(Exception ex)
+    {
+        if (ex is not IOException ioEx)
+            return false;
+
+        var message = ioEx.Message;
+
+        // English
+        if (message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("no longer available", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // German
+        if (message.Contains("Netzwerk", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("nicht mehr verfügbar", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // French
+        if (message.Contains("réseau", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("n'est plus disponible", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Spanish
+        if (message.Contains("red", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Italian
+        if (message.Contains("rete", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Verifies that the drive containing the specified path is ready.
     /// </summary>
     private void VerifyDriveReady(string filePath)
@@ -608,6 +656,15 @@ public class FileExtractorService : IFileExtractor
             {
                 _logger.LogMessage($"ERROR: Not enough disk space to extract {archiveFileName}. Please free up some space on your drive and try again.");
             }
+            else if (IsNetworkError(ex))
+            {
+                _logger.LogMessage($"ERROR: Network error while extracting {archiveFileName}. The file may be on a network drive that is no longer available or experiencing connectivity issues.\n\n" +
+                    "Please try:\n" +
+                    "1. Check that the network drive is still connected and accessible\n" +
+                    "2. Copy the file to a local drive before processing\n" +
+                    "3. Check your network connection stability\n" +
+                    "4. If using WiFi, try a wired connection for better reliability");
+            }
             else
             {
                 _logger.LogMessage($"Error extracting {archiveFileName}: {ex.Message}");
@@ -617,7 +674,13 @@ public class FileExtractorService : IFileExtractor
             var isEnvironmentalError = ex is IOException ioEx &&
                                        (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
                                         ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("Netzwerk", StringComparison.OrdinalIgnoreCase) || // German: "network"
+                                        ioEx.Message.Contains("réseau", StringComparison.OrdinalIgnoreCase) || // French: "network"
+                                        ioEx.Message.Contains("red", StringComparison.OrdinalIgnoreCase) || // Spanish: "network"
+                                        ioEx.Message.Contains("rete", StringComparison.OrdinalIgnoreCase) || // Italian: "network"
                                         ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("nicht mehr verfügbar", StringComparison.OrdinalIgnoreCase) || // German
+                                        ioEx.Message.Contains("n'est plus disponible", StringComparison.OrdinalIgnoreCase) || // French
                                         ioEx.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
                                         ioEx.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase));
 
