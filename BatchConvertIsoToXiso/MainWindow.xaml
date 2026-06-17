@@ -145,6 +145,7 @@
                              BorderThickness="0"
                              VerticalScrollBarVisibility="Auto"
                              HorizontalScrollBarVisibility="Auto"
+                             VerticalContentAlignment="Top"
                              Padding="8"
                              CaretBrush="{StaticResource TerminalForegroundBrush}"
                              ToolTip="Displays real-time conversion, testing, and general operation output logs">

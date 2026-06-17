@@ -19,7 +19,19 @@ namespace BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
 public class VolumeDescriptor
 {
     private const int VolumeDescriptorSector = 32;
-    private const long GamePartitionOffset = 2048L * 32 * 6192;
+
+    /// <summary>
+    /// Known XDVDFS partition offsets for different Xbox game disc formats.
+    /// Must match the offsets used in XisoWriter.XisoOffset.
+    /// </summary>
+    private static readonly long[] GamePartitionOffsets =
+    [
+        0x18300000, // XGD1 (~387MB)
+        0xFD90000,  // XGD2 (~253.5MB)
+        0x2080000,  // XGD3 (~32.5MB)
+        0x89D80000  // Additional variant
+    ];
+
     private static readonly byte[] MagicId = "MICROSOFT*XBOX*MEDIA"u8.ToArray();
 
     public uint RootDirTableSector { get; private set; }
@@ -48,7 +60,7 @@ public class VolumeDescriptor
 
     public static VolumeDescriptor ReadFrom(IsoSt isoSt)
     {
-        // 1. Try Sector 32, Offset 0 (Standard)
+        // 1. Try Sector 32, Offset 0 (Standard XISO)
         try
         {
             var vol = new VolumeDescriptor(isoSt, VolumeDescriptorSector, 0);
@@ -60,16 +72,19 @@ public class VolumeDescriptor
             // ignored
         }
 
-        // 2. Try Game Partition Offset (Dual Layer)
-        try
+        // 2. Try all known Game Partition Offsets (XGD1, XGD2, XGD3, etc.)
+        foreach (var offset in GamePartitionOffsets)
         {
-            var vol = new VolumeDescriptor(isoSt, VolumeDescriptorSector, GamePartitionOffset);
-            isoSt.VolumeOffset = GamePartitionOffset;
-            return vol;
-        }
-        catch
-        {
-            // ignored
+            try
+            {
+                var vol = new VolumeDescriptor(isoSt, VolumeDescriptorSector, offset);
+                isoSt.VolumeOffset = offset;
+                return vol;
+            }
+            catch
+            {
+                // ignored
+            }
         }
 
         // 3. Try Sector 0 (Rebuilt XISO)
