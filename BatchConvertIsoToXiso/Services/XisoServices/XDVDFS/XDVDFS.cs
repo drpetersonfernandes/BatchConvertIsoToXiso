@@ -25,7 +25,8 @@ internal static class Xdvdfs
         0, // XISO (already trimmed or standard XISO without video partition)
         34078720, // XGD3 (0x02080000) - ~32.5MB offset
         265879552, // XGD2 (0x0FD90000) - ~253.5MB offset
-        405798912 // XGD1 (0x18300000) - ~387MB offset
+        405798912, // XGD1 (0x18300000) - ~387MB offset
+        2312634368 // Additional variant (0x89D80000) - ~2.2GB offset
     ];
 
     /// <summary>

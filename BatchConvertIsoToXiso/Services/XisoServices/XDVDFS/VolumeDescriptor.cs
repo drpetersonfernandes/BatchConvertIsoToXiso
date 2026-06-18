@@ -28,8 +28,8 @@ public class VolumeDescriptor
     [
         0x18300000, // XGD1 (~387MB)
         0xFD90000,  // XGD2 (~253.5MB)
-        0x2080000,  // XGD3 (~32.5MB)
-        0x89D80000  // Additional variant
+        0x89D80000, // Additional variant
+        0x2080000   // XGD3 (~32.5MB)
     ];
 
     private static readonly byte[] MagicId = "MICROSOFT*XBOX*MEDIA"u8.ToArray();
