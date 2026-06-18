@@ -508,6 +508,31 @@
         <!-- Named RadioButton Style (for explicit usage) -->
         <Style x:Key="CustomRadioButtonStyle" TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}"/>
 
+        <!-- ToolTip Style (fixes white-on-white in dark theme) -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="#2d333b"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushLight}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontFamily" Value="{StaticResource DefaultFontFamily}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ListView Item Style for XIso Explorer -->
         <Style x:Key="ExplorerListViewItemStyle" TargetType="ListViewItem">
             <Setter Property="Padding" Value="10,5"/>
