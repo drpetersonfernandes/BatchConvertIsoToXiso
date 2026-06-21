@@ -11,6 +11,8 @@ public static class CheckForTempPath
     /// <returns>True if the path is the system temp folder or a subfolder, false otherwise.</returns>
     public static bool IsSystemTempPath(string selectedPath)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
+
         var systemTempPath = Path.GetTempPath();
 
         // Normalize both paths to ensure consistent comparison (e.g., handle trailing slashes)

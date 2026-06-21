@@ -1,5 +1,5 @@
 using System.Windows;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -7,12 +7,12 @@ public class MessageBoxService : IMessageBoxService
 {
     public MessageBoxResult Show(string message, string title, MessageBoxButton buttons, MessageBoxImage icon)
     {
-        if (Application.Current.MainWindow != null)
+        if (Application.Current is { MainWindow: not null } app)
         {
-            return MessageBox.Show(Application.Current.MainWindow, message, title, buttons, icon);
+            return MessageBox.Show(app.MainWindow, message, title, buttons, icon);
         }
 
-        return MessageBoxResult.None; // Return a default value if MainWindow is null
+        return MessageBox.Show(message, title, buttons, icon);
     }
 
     public void ShowError(string message)

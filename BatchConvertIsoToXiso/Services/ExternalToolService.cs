@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -67,10 +67,15 @@ public partial class ExternalToolService : IExternalToolService
                 Arguments = arguments,
                 UseShellExecute = false,
                 CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 WorkingDirectory = workingDir ?? AppDomain.CurrentDomain.BaseDirectory
             };
 
             process.Start();
+
+            var stdOutTask = process.StandardOutput.ReadToEndAsync(token);
+            var stdErrTask = process.StandardError.ReadToEndAsync(token);
 
             await using (token.Register(state =>
                          {
@@ -78,12 +83,21 @@ public partial class ExternalToolService : IExternalToolService
                              if (p != null)
                              {
                                  // Offload to background thread to avoid blocking UI thread
-                                 _ = Task.Run(() => ProcessTerminatorHelper.TerminateProcess(p, contextName, _logger), token);
+                                 // Use CancellationToken.None because 'token' is already cancelled at this point
+                                 _ = Task.Run(() => ProcessTerminatorHelper.TerminateProcess(p, contextName, _logger), CancellationToken.None);
                              }
                          }, process))
             {
                 await process.WaitForExitAsync(token);
             }
+
+            var stdOut = await stdOutTask;
+            var stdErr = await stdErrTask;
+
+            if (!string.IsNullOrWhiteSpace(stdOut))
+                _logger.LogMessage(stdOut.TrimEnd());
+            if (!string.IsNullOrWhiteSpace(stdErr))
+                _logger.LogMessage(stdErr.TrimEnd());
 
             return process.ExitCode;
         }

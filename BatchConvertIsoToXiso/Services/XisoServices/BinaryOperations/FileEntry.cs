@@ -28,6 +28,8 @@ namespace BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 /// - GetFirstChild(IsoSt isoSt): Retrieves the first child entry if this entry represents a directory.
 public class FileEntry
 {
+    private static readonly Encoding Win1252 = Encoding.GetEncoding(1252);
+
     public long EntrySector { get; internal set; }
     public ushort LeftSubTree { get; internal set; }
     public ushort RightSubTree { get; internal set; }
@@ -35,7 +37,7 @@ public class FileEntry
     public uint FileSize { get; internal set; }
     public XisoFsFileAttributes Attributes { get; internal set; }
     public string FileName { get; internal set; } = string.Empty;
-    public long EntryOffset { get; set; }
+    public long EntryOffset { get; internal set; }
     public bool IsDirectory => (Attributes & XisoFsFileAttributes.Directory) != 0;
     public bool HasLeftChild => LeftSubTree != 0xFFFF;
     public bool HasRightChild => RightSubTree != 0xFFFF;
@@ -69,7 +71,7 @@ public class FileEntry
         if (nameLength > 0)
         {
             var nameBytes = reader.ReadBytes(nameLength);
-            var rawString = Encoding.ASCII.GetString(nameBytes);
+            var rawString = Win1252.GetString(nameBytes);
             var nullIndex = rawString.IndexOf('\0');
             FileName = nullIndex >= 0 ? rawString.Substring(0, nullIndex).Trim() : rawString.Trim();
         }

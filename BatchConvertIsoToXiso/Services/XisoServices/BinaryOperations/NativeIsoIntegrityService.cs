@@ -1,5 +1,6 @@
+using System.Buffers;
 using System.IO;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;
 
@@ -78,36 +79,43 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
             var stream = reader.BaseStream;
             stream.Seek(0, SeekOrigin.Begin);
 
-            var buffer = new byte[4 * 1024 * 1024]; // 4MB chunks
-            var totalBytes = stream.Length;
-            long bytesRead = 0;
-            long lastReportedPercent = -1;
-
-            while (bytesRead < totalBytes)
+            var buffer = ArrayPool<byte>.Shared.Rent(4 * 1024 * 1024); // 4MB chunks
+            try
             {
-                token.ThrowIfCancellationRequested();
+                var totalBytes = stream.Length;
+                long bytesRead = 0;
+                long lastReportedPercent = -1;
 
-                var toRead = (int)Math.Min(buffer.Length, totalBytes - bytesRead);
-                var read = stream.Read(buffer, 0, toRead);
-
-                if (read == 0 && bytesRead < totalBytes)
+                while (bytesRead < totalBytes)
                 {
-                    _logger.LogMessage($"[ERROR] Surface scan failed: Unexpected end of file at {bytesRead}.");
-                    return; // Exit the Action (scanSuccessful remains false)
+                    token.ThrowIfCancellationRequested();
+
+                    var toRead = (int)Math.Min(buffer.Length, totalBytes - bytesRead);
+                    var read = stream.Read(buffer, 0, toRead);
+
+                    if (read == 0 && bytesRead < totalBytes)
+                    {
+                        _logger.LogMessage($"[ERROR] Surface scan failed: Unexpected end of file at {bytesRead}.");
+                        return; // Exit the Action (scanSuccessful remains false)
+                    }
+
+                    bytesRead += read;
+
+                    // Report progress every 1%
+                    var percent = bytesRead * 100 / totalBytes;
+                    if (percent > lastReportedPercent)
+                    {
+                        lastReportedPercent = percent;
+                        progress.Report(new BatchOperationProgress { StatusText = $"Surface scan: {percent}%" });
+                    }
                 }
 
-                bytesRead += read;
-
-                // Report progress every 1%
-                var percent = bytesRead * 100 / totalBytes;
-                if (percent > lastReportedPercent)
-                {
-                    lastReportedPercent = percent;
-                    progress.Report(new BatchOperationProgress { StatusText = $"Surface scan: {percent}%" });
-                }
+                scanSuccessful = true; // If we reached here, the entire file was read
             }
-
-            scanSuccessful = true; // If we reached here, the entire file was read
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         });
 
         if (scanSuccessful)
@@ -124,36 +132,42 @@ public class NativeIsoIntegrityService : INativeIsoIntegrityService
         var dirQueue = new Queue<FileEntry>();
         dirQueue.Enqueue(rootEntry);
 
-        var buffer = new byte[4 * 1024 * 1024]; // 4MB buffer for file reading
-
-        while (dirQueue.Count > 0)
+        var buffer = ArrayPool<byte>.Shared.Rent(4 * 1024 * 1024); // 4MB buffer for file reading
+        try
         {
-            token.ThrowIfCancellationRequested();
-            var currentDir = dirQueue.Dequeue();
-
-            var entries = GetDirectoryEntries(isoSt, currentDir);
-            foreach (var entry in entries)
+            while (dirQueue.Count > 0)
             {
                 token.ThrowIfCancellationRequested();
+                var currentDir = dirQueue.Dequeue();
 
-                if (entry.IsDirectory)
+                var entries = GetDirectoryEntries(isoSt, currentDir);
+                foreach (var entry in entries)
                 {
-                    dirQueue.Enqueue(entry);
-                }
-                else
-                {
-                    progress.Report(new BatchOperationProgress { StatusText = $"Verifying: {entry.FileName}" });
+                    token.ThrowIfCancellationRequested();
 
-                    if (!VerifyFileContent(entry, isoSt, buffer, token))
+                    if (entry.IsDirectory)
                     {
-                        _logger.LogMessage($"[ERROR] Data corruption detected in file: {entry.FileName}");
-                        return false;
+                        dirQueue.Enqueue(entry);
+                    }
+                    else
+                    {
+                        progress.Report(new BatchOperationProgress { StatusText = $"Verifying: {entry.FileName}" });
+
+                        if (!VerifyFileContent(entry, isoSt, buffer, token))
+                        {
+                            _logger.LogMessage($"[ERROR] Data corruption detected in file: {entry.FileName}");
+                            return false;
+                        }
                     }
                 }
             }
-        }
 
-        return true;
+            return true;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     private static bool VerifyFileContent(FileEntry file, IsoSt isoSt, byte[] buffer, CancellationToken token)

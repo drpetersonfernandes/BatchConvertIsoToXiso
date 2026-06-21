@@ -19,7 +19,7 @@ public static class Formatter
         };
     }
 
-    public static string FormatBytesPerSecond(float bytesPerSecond)
+    public static string FormatBytesPerSecond(double bytesPerSecond)
     {
         const int kilobyte = 1024;
         const int megabyte = kilobyte * 1024;

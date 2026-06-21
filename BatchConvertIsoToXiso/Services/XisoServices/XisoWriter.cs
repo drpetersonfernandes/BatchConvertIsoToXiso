@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 using BatchConvertIsoToXiso.Services.XisoServices.XDVDFS;

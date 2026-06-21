@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
@@ -34,13 +35,23 @@ public partial class MainWindow
     {
         try
         {
-            _explorerIsoSt?.Dispose();
+            lock (_explorerIsoStLock)
+            {
+                _explorerIsoSt?.Dispose();
+                _explorerIsoSt = new IsoSt(isoPath);
+            }
+
             _parentDirectoryStack.Clear();
             _explorerPathNames.Clear();
             _currentDirectoryEntry = null;
 
-            _explorerIsoSt = new IsoSt(isoPath);
-            var volume = VolumeDescriptor.ReadFrom(_explorerIsoSt);
+            IsoSt isoSt;
+            lock (_explorerIsoStLock)
+            {
+                isoSt = _explorerIsoSt;
+            }
+
+            var volume = VolumeDescriptor.ReadFrom(isoSt);
             var root = FileEntry.CreateRootEntry(volume.RootDirTableSector);
 
             LoadDirectory(root, "Root", true);
@@ -53,11 +64,15 @@ public partial class MainWindow
 
     private void LoadDirectory(FileEntry dirEntry, string folderName, bool isRoot = false, bool isUpNavigation = false)
     {
-        if (_explorerIsoSt == null) return;
+        IsoSt isoSt;
+        lock (_explorerIsoStLock)
+        {
+            isoSt = _explorerIsoSt!;
+        }
 
         try
         {
-            var entries = _nativeIsoTester.GetDirectoryEntries(_explorerIsoSt, dirEntry);
+            var entries = _nativeIsoTester.GetDirectoryEntries(isoSt, dirEntry);
             var uiItems = entries.Select(static e => new XisoExplorerItem
             {
                 Name = e.FileName,
@@ -123,7 +138,11 @@ public partial class MainWindow
 
     private void OpenFileFromIso(FileEntry entry, string fileName)
     {
-        if (_explorerIsoSt == null) return;
+        IsoSt isoSt;
+        lock (_explorerIsoStLock)
+        {
+            isoSt = _explorerIsoSt!;
+        }
 
         Task.Run(async () =>
         {
@@ -134,7 +153,7 @@ public partial class MainWindow
                 var tempPath = Path.Combine(tempFolder, fileName);
 
                 // Extract file to temp location
-                await ExtractFileToDiskAsync(entry, tempPath);
+                await ExtractFileToDiskAsync(isoSt, entry, tempPath);
 
                 // Open with default application on UI thread
                 await Dispatcher.InvokeAsync(() =>
@@ -148,6 +167,19 @@ public partial class MainWindow
                         _messageBoxService.ShowError($"Failed to open file: {ex.Message}");
                     }
                 });
+
+                // Schedule delayed cleanup of temp file
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(30_000);
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* in use */ }
+                    try
+                    {
+                        var dir = Path.GetDirectoryName(tempPath);
+                        if (dir != null && Directory.Exists(dir)) Directory.Delete(dir, true);
+                    }
+                    catch { /* ignore cleanup failures */ }
+                });
             }
             catch (Exception ex)
             {
@@ -159,37 +191,9 @@ public partial class MainWindow
         });
     }
 
-    private Task ExtractFileToDiskAsync(FileEntry entry, string outputPath)
+    private static Task ExtractFileToDiskAsync(IsoSt isoSt, FileEntry entry, string outputPath)
     {
-        if (_explorerIsoSt == null) throw new InvalidOperationException("ISO stream not available");
-
-        return Task.Run(() =>
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? throw new InvalidOperationException("outputPath cannot be null"));
-
-            const int bufferSize = 4 * 1024 * 1024; // 4MB buffer
-            var buffer = new byte[bufferSize];
-
-            using var fileStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None);
-
-            long bytesRemaining = entry.FileSize;
-            long currentOffset = 0;
-
-            while (bytesRemaining > 0)
-            {
-                var toRead = (int)Math.Min(bufferSize, bytesRemaining);
-                var read = _explorerIsoSt.Read(entry, buffer.AsSpan(0, toRead), currentOffset);
-
-                if (read == 0)
-                {
-                    throw new IOException($"Unexpected end of file while extracting: {entry.FileName}");
-                }
-
-                fileStream.Write(buffer, 0, read);
-                bytesRemaining -= read;
-                currentOffset += read;
-            }
-        });
+        return Task.Run(() => ExtractFileToDisk(isoSt, entry, outputPath));
     }
 
     private void ExplorerListView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -202,7 +206,12 @@ public partial class MainWindow
         try
         {
             if (e.LeftButton != MouseButtonState.Pressed || _isDragging) return;
-            if (_explorerIsoSt == null) return;
+
+            IsoSt isoSt;
+            lock (_explorerIsoStLock)
+            {
+                isoSt = _explorerIsoSt!;
+            }
 
             var currentPosition = e.GetPosition(null);
             var diff = _dragStartPoint - currentPosition;
@@ -219,10 +228,9 @@ public partial class MainWindow
 
             if (selectedItems.Count == 0) return;
 
-            _isDragging = true;
-
             try
             {
+                _isDragging = true;
                 // Extract files to temp folder for drag operation
                 var totalSize = selectedItems.Sum(static i => i.Entry.FileSize);
                 var tempFolder = ResolveExplorerTempDirectory(totalSize, "XisoExplorer_DragDrop");
@@ -236,7 +244,7 @@ public partial class MainWindow
                     foreach (var item in selectedItems)
                     {
                         var tempPath = Path.Combine(tempFolder, item.Name);
-                        ExtractFileToDisk(item.Entry, tempPath);
+                        ExtractFileToDisk(isoSt, item.Entry, tempPath);
                         tempFiles.Add(tempPath);
                     }
                 });
@@ -270,10 +278,8 @@ public partial class MainWindow
         }
     }
 
-    private void ExtractFileToDisk(FileEntry entry, string outputPath)
+    private static void ExtractFileToDisk(IsoSt isoSt, FileEntry entry, string outputPath)
     {
-        if (_explorerIsoSt == null) throw new InvalidOperationException("ISO stream not available");
-
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? throw new InvalidOperationException("outputPath cannot be null"));
 
         const int bufferSize = 4 * 1024 * 1024; // 4MB buffer
@@ -287,7 +293,7 @@ public partial class MainWindow
         while (bytesRemaining > 0)
         {
             var toRead = (int)Math.Min(bufferSize, bytesRemaining);
-            var read = _explorerIsoSt.Read(entry, buffer.AsSpan(0, toRead), currentOffset);
+            var read = isoSt.Read(entry, buffer.AsSpan(0, toRead), currentOffset);
 
             if (read == 0)
             {
@@ -302,14 +308,29 @@ public partial class MainWindow
 
     private void ExplorerUpButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_explorerIsoSt == null) return;
-        if (_parentDirectoryStack.Count == 0) return;
+        lock (_explorerIsoStLock)
+        {
+            if (_explorerIsoSt == null) return;
+        }
+
+        if (_parentDirectoryStack.Count == 0 || _explorerPathNames.Count == 0) return;
 
         // Pop the parent directory from the stack and navigate to it
         var parentEntry = _parentDirectoryStack.Pop();
         var parentName = _explorerPathNames.Pop();
 
         LoadDirectory(parentEntry, parentName, false, true);
+    }
+
+    private void ExplorerListView_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is not ListView listView) return;
+
+        var remainingWidth = listView.ActualWidth - ExplorerSizeColumn.Width - ExplorerTypeColumn.Width - 10;
+        if (remainingWidth > 100)
+        {
+            ExplorerNameColumn.Width = remainingWidth;
+        }
     }
 
     private string ResolveExplorerTempDirectory(long requiredSize, string tempSubfolder)

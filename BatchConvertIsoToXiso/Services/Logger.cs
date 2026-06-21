@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -16,25 +16,29 @@ public class LoggerService : ILogger
 
     public void LogMessage(string message)
     {
-        if (_logViewer == null)
+        var logViewer = _logViewer;
+        if (logViewer == null)
         {
             return;
         }
 
         var timestampedMessage = $"[{DateTime.Now:HH:mm:ss}] {message}";
-        _ = Application.Current.Dispatcher.InvokeAsync(() =>
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        _ = dispatcher.InvokeAsync(() =>
         {
             // Truncate the log if it gets too long to prevent UI freezing
-            if (_logViewer.Text.Length > MaxLogLength)
+            if (logViewer.Text.Length > MaxLogLength)
             {
-                var text = _logViewer.Text;
+                var text = logViewer.Text;
                 // Keep the last ~50% of the log, try to cut at a newline
                 var cutIndex = text.IndexOf('\n', text.Length / 2);
-                _logViewer.Text = cutIndex >= 0 ? text.Substring(cutIndex + 1) : text.Substring(text.Length / 2);
+                logViewer.Text = cutIndex >= 0 ? text.Substring(cutIndex + 1) : text.Substring(text.Length / 2);
             }
 
-            _logViewer.AppendText($"{timestampedMessage}{Environment.NewLine}");
-            _logViewer.ScrollToEnd();
+            logViewer.AppendText($"{timestampedMessage}{Environment.NewLine}");
+            logViewer.ScrollToEnd();
         });
     }
 }

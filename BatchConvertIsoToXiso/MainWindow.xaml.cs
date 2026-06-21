@@ -1,7 +1,8 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using BatchConvertIsoToXiso.Services;
 using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
@@ -13,6 +14,7 @@ public partial class MainWindow
     private readonly IDiskMonitorService _diskMonitorService;
     private readonly INativeIsoIntegrityService _nativeIsoTester;
     private CancellationTokenSource _cts = new();
+    private TaskCompletionSource _operationCompletedTcs = new();
     private readonly IUpdateChecker _updateChecker;
     private readonly ILogger _logger;
     private readonly IBugReportService _bugReportService;
@@ -20,7 +22,7 @@ public partial class MainWindow
     private readonly IUrlOpener _urlOpener;
 
     // Summary Stats
-    private DateTime _operationStartTime;
+    private readonly Stopwatch _operationStopwatch = new();
     private readonly DispatcherTimer _processingTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _memoryTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private int _uiTotalFiles;
@@ -32,10 +34,11 @@ public partial class MainWindow
 
     private int _invalidIsoErrorCount;
     private int _totalProcessedFiles;
-    private readonly List<string> _failedFilePaths = [];
+    private readonly HashSet<string> _failedFilePaths = new(StringComparer.OrdinalIgnoreCase);
 
     // XIso Explorer State
     private IsoSt? _explorerIsoSt;
+    private readonly object _explorerIsoStLock = new();
     private readonly Stack<FileEntry> _parentDirectoryStack = new();
     private readonly Stack<string> _explorerPathNames = new();
     private FileEntry? _currentDirectoryEntry;
@@ -57,7 +60,6 @@ public partial class MainWindow
         _logger.Initialize(LogViewer);
         _processingTimer.Tick += ProcessingTimer_Tick;
         _memoryTimer.Tick += MemoryTimer_Tick;
-        _memoryTimer.Start();
 
         ResetSummaryStats();
         DisplayInstructions.Initialize(_logger);
@@ -100,7 +102,6 @@ public partial class MainWindow
             }
 
             // Cancel the operation and prevent immediate window close
-            _cts.Cancel();
             e.Cancel = true;
 
             // Wait for the operation to complete in the background, then close
@@ -116,17 +117,14 @@ public partial class MainWindow
     {
         _logger.LogMessage("Waiting for current operation to cancel before exiting...");
 
+        // Signal the operation to stop
+        _cts.Cancel();
+
         // Wait up to 10 seconds for the operation to complete
-        var maxWaitTime = TimeSpan.FromSeconds(10);
-        var startTime = DateTime.Now;
+        var completedTask = await Task.WhenAny(_operationCompletedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
 
-        while (_isOperationRunning && DateTime.Now - startTime < maxWaitTime)
-        {
-            await Task.Delay(100);
-        }
-
-        var timedOut = false;
-        if (_isOperationRunning)
+        var timedOut = completedTask != _operationCompletedTcs.Task;
+        if (timedOut)
         {
             _logger.LogMessage("Warning: Operation did not complete within timeout. Closing anyway.");
             timedOut = true;
@@ -145,13 +143,14 @@ public partial class MainWindow
         });
 
         // If the operation timed out, the dispatcher may still be blocked by a
-        // queued message box or another modal dialog.  Force a process-level exit
-        // after a short delay as a safety net.
+        // queued message box or another modal dialog. Force a process-level exit
+        // after a delay as a last resort — this skips normal cleanup but prevents
+        // a permanently hung process.
         if (timedOut || !_isForceClosing)
         {
             ThreadPool.QueueUserWorkItem(static _ =>
             {
-                Thread.Sleep(3000);
+                Thread.Sleep(5000);
                 Environment.Exit(0);
             });
         }
@@ -159,7 +158,10 @@ public partial class MainWindow
 
     private void CleanupResources()
     {
-        _explorerIsoSt?.Dispose();
+        lock (_explorerIsoStLock)
+        {
+            _explorerIsoSt?.Dispose();
+        }
         _processingTimer.Stop();
         _memoryTimer.Stop();
         StopPerformanceCounter();

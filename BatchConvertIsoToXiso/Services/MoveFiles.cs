@@ -1,5 +1,5 @@
 using System.IO;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 

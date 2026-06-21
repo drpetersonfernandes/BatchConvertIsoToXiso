@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -13,25 +13,15 @@ public static class ProcessTerminatorHelper
     {
         try
         {
-            // Safely check if process has exited
-            try
+            if (process.HasExited)
             {
-                if (process.HasExited)
-                {
-                    logger.LogMessage($"Process {processName} has already exited.");
-                    return;
-                }
-            }
-            catch (InvalidOperationException)
-            {
-                logger.LogMessage($"Process {processName} is not associated with a running process or has been disposed.");
+                logger.LogMessage($"Process {processName} has already exited.");
                 return;
             }
         }
         catch (InvalidOperationException)
         {
-            // Process was never started or already disposed
-            logger.LogMessage($"Process {processName} was not running or already disposed.");
+            logger.LogMessage($"Process {processName} is not associated with a running process or has been disposed.");
             return;
         }
 

@@ -4,13 +4,25 @@ using Xunit;
 
 namespace BatchConvertIsoToXiso.Tests.XisoServices;
 
-public class VolumeDescriptorTests
+public class VolumeDescriptorTests : IDisposable
 {
     private static readonly byte[] MagicId = "MICROSOFT*XBOX*MEDIA"u8.ToArray();
+    private readonly List<string> _tempFiles = [];
 
-    private static string CreateValidIsoFile(long gamePartitionOffset = 0)
+    public void Dispose()
+    {
+        foreach (var file in _tempFiles)
+        {
+            try { if (File.Exists(file)) File.Delete(file); }
+            catch { /* best effort */ }
+        }
+        GC.SuppressFinalize(this);
+    }
+
+    private string CreateValidIsoFile(long gamePartitionOffset = 0)
     {
         var path = Path.GetTempFileName();
+        _tempFiles.Add(path);
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
         // Write zeros up to the volume descriptor area
         const int volumeDescriptorSector = 32;
@@ -38,9 +50,10 @@ public class VolumeDescriptorTests
         return path;
     }
 
-    private static string CreateInvalidIsoFile()
+    private string CreateInvalidIsoFile()
     {
         var path = Path.GetTempFileName();
+        _tempFiles.Add(path);
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
         fs.SetLength(1024 * 1024); // 1MB
         // Leave as zeros - invalid
@@ -79,6 +92,7 @@ public class VolumeDescriptorTests
     public void ReadFromWithValidRebuiltXisoReturnsVolumeDescriptor()
     {
         var path = Path.GetTempFileName();
+        _tempFiles.Add(path);
         using (var buildFs = new FileStream(path, FileMode.Create, FileAccess.Write))
         {
             // Rebuilt XISO: volume descriptor at sector 0, offset 0

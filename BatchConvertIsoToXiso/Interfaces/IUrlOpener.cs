@@ -1,4 +1,4 @@
-﻿namespace BatchConvertIsoToXiso.interfaces;
+namespace BatchConvertIsoToXiso.Interfaces;
 
 public interface IUrlOpener
 {

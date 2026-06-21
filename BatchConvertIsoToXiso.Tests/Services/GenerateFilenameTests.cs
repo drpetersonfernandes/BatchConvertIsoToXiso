@@ -18,10 +18,9 @@ public class GenerateFilenameTests
     }
 
     [Fact]
-    public void GenerateSimpleFilename_NegativeIndex_FormatsWithSign()
+    public void GenerateSimpleFilename_NegativeIndex_ThrowsArgumentOutOfRange()
     {
-        var result = GenerateFilename.GenerateSimpleFilename(-1);
-        Assert.Equal("iso_-000001.iso", result);
+        Assert.Throws<ArgumentOutOfRangeException>(() => GenerateFilename.GenerateSimpleFilename(-1));
     }
 
     [Fact]

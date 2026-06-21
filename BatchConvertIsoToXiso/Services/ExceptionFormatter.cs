@@ -17,7 +17,18 @@ public static class ExceptionFormatter
             sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}StackTrace:");
             sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}{exception.StackTrace}");
 
-            // If there's an inner exception, include it too
+            if (exception is AggregateException aggregateException)
+            {
+                var innerExceptions = aggregateException.InnerExceptions;
+                for (var i = 0; i < innerExceptions.Count; i++)
+                {
+                    sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}Inner Exception [{i}]:");
+                    AppendExceptionDetails(sb, innerExceptions[i], level + 1);
+                }
+
+                return;
+            }
+
             if (exception.InnerException != null)
             {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}Inner Exception:");

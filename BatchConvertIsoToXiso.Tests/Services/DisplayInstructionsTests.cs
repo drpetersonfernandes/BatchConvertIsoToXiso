@@ -1,4 +1,4 @@
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using BatchConvertIsoToXiso.Services;
 using Moq;
 using Xunit;

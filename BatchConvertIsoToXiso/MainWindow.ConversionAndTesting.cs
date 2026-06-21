@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services;
@@ -55,6 +56,7 @@ public partial class MainWindow
             if (_isOperationRunning) return;
 
             _isOperationRunning = true;
+            _operationCompletedTcs = new TaskCompletionSource();
             SetControlsState(false);
             LogViewer.Clear();
             ResetSummaryStats();
@@ -76,6 +78,20 @@ public partial class MainWindow
                 return;
             }
 
+            if (!Directory.Exists(inputFolder))
+            {
+                _messageBoxService.ShowError($"The input folder no longer exists:\n{inputFolder}");
+                FinalizeUiState();
+                return;
+            }
+
+            if (!Directory.Exists(outputFolder))
+            {
+                _messageBoxService.ShowError($"The output folder no longer exists:\n{outputFolder}");
+                FinalizeUiState();
+                return;
+            }
+
             if (!ValidateInputOutputFolders(inputFolder, outputFolder))
             {
                 FinalizeUiState();
@@ -83,7 +99,7 @@ public partial class MainWindow
             }
 
             var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
-            oldCts.Dispose();
+            try { oldCts.Dispose(); } catch { /* Already disposed by CleanupResources */ }
 
             var progress = new Progress<BatchOperationProgress>(p =>
             {
@@ -139,9 +155,15 @@ public partial class MainWindow
                 }
             });
 
-            _operationStartTime = DateTime.Now;
+            _operationStopwatch.Restart();
             _processingTimer.Start();
+            _memoryTimer.Start();
             UpdateStatus("Starting batch conversion...");
+
+            // Determine conversion method from radio buttons
+            // If neither extract-xiso nor xdvdfs is selected, the built-in writer is used
+            var useExtractXiso = UseExtractXisoRadioButton.IsChecked == true;
+            var useXdvdfs = UseXdvdfsRadioButton.IsChecked == true;
 
             await _orchestratorService.ConvertAsync(
                 inputFolder, outputFolder,
@@ -149,8 +171,8 @@ public partial class MainWindow
                 SkipSystemUpdateCheckBox.IsChecked ?? false,
                 CheckOutputIntegrityCheckBox.IsChecked ?? false,
                 SearchSubfoldersConversionCheckBox.IsChecked ?? false,
-                UseExtractXisoRadioButton.IsChecked ?? true,
-                UseXdvdfsRadioButton.IsChecked ?? false,
+                useExtractXiso,
+                useXdvdfs,
                 progress, HandleCloudRetryRequestAsync, _cts.Token);
         }
         catch (OperationCanceledException)
@@ -165,7 +187,7 @@ public partial class MainWindow
         finally
         {
             FinalizeUiState();
-            LogOperationSummary("Conversion");
+            await LogOperationSummaryAsync("Conversion");
         }
     }
 
@@ -176,6 +198,7 @@ public partial class MainWindow
             if (_isOperationRunning) return;
 
             _isOperationRunning = true;
+            _operationCompletedTcs = new TaskCompletionSource();
             SetControlsState(false);
             LogViewer.Clear();
             ResetSummaryStats();
@@ -195,8 +218,15 @@ public partial class MainWindow
                 return;
             }
 
+            if (!Directory.Exists(inputFolder))
+            {
+                _messageBoxService.ShowError($"The input folder no longer exists:\n{inputFolder}");
+                FinalizeUiState();
+                return;
+            }
+
             var oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
-            oldCts.Dispose();
+            try { oldCts.Dispose(); } catch { /* Already disposed by CleanupResources */ }
 
             var progress = new Progress<BatchOperationProgress>(p =>
             {
@@ -245,15 +275,16 @@ public partial class MainWindow
                 }
             });
 
-            _operationStartTime = DateTime.Now;
+            _operationStopwatch.Restart();
             _processingTimer.Start();
+            _memoryTimer.Start();
             UpdateStatus("Starting batch ISO test...");
 
             await _orchestratorService.TestAsync(
                 inputFolder,
                 MoveSuccessFilesCheckBox.IsChecked == true,
                 MoveFailedFilesCheckBox.IsChecked == true,
-                true,
+                SearchSubfoldersTestCheckBox.IsChecked == true,
                 PerformDeepScanCheckBox.IsChecked ?? false,
                 progress, HandleCloudRetryRequestAsync, _cts.Token);
         }
@@ -269,7 +300,7 @@ public partial class MainWindow
         finally
         {
             FinalizeUiState();
-            LogOperationSummary("Test");
+            await LogOperationSummaryAsync("Test");
         }
     }
 }

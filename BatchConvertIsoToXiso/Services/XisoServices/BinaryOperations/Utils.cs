@@ -39,7 +39,7 @@ internal static class Utils
             fs.Seek(offset, SeekOrigin.Begin);
         while (numBytes < outBa.Length)
         {
-            var bytesRead = fs.Read(outBa, 0, (int)(outBa.Length - numBytes));
+            var bytesRead = fs.Read(outBa, (int)numBytes, (int)(outBa.Length - numBytes));
             if (bytesRead == 0)
                 break;
 

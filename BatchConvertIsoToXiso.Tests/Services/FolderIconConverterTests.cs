@@ -30,9 +30,9 @@ public class FolderIconConverterTests
     }
 
     [Fact]
-    public void ConvertBackThrowsNotImplementedException()
+    public void ConvertBackThrowsNotSupportedException()
     {
-        Assert.Throws<NotImplementedException>(() =>
+        Assert.Throws<NotSupportedException>(() =>
             _converter.ConvertBack("📁", typeof(bool), null, CultureInfo.InvariantCulture));
     }
 }

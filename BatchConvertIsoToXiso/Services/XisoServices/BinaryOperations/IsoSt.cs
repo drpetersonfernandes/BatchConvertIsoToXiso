@@ -17,17 +17,17 @@ public class IsoSt : IDisposable
     public IsoSt(string isoPath)
     {
         _fileStream = new FileStream(isoPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        Reader = new BinaryReader(_fileStream);
+        Reader = new BinaryReader(_fileStream, System.Text.Encoding.UTF8, leaveOpen: true);
     }
 
     public int Read(FileEntry entry, Span<byte> buffer, long offset)
     {
-        var fileOffset = VolumeOffset + (long)entry.StartSector * SectorSize + offset;
-
-        if (fileOffset >= _fileStream.Length) return 0;
-
         lock (_fileStream)
         {
+            var fileOffset = VolumeOffset + (long)entry.StartSector * SectorSize + offset;
+
+            if (fileOffset >= _fileStream.Length) return 0;
+
             _fileStream.Seek(fileOffset, SeekOrigin.Begin);
             return _fileStream.Read(buffer);
         }
@@ -35,11 +35,11 @@ public class IsoSt : IDisposable
 
     public FileEntry? ReadFileEntry(long sector, long offset)
     {
-        var position = VolumeOffset + sector * SectorSize + offset;
-        if (position >= _fileStream.Length) return null;
-
         lock (_fileStream)
         {
+            var position = VolumeOffset + sector * SectorSize + offset;
+            if (position >= _fileStream.Length) return null;
+
             _fileStream.Seek(position, SeekOrigin.Begin);
             var entry = new FileEntry();
             try

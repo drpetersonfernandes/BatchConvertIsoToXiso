@@ -14,12 +14,13 @@ public partial class MainWindow
     private void FinalizeUiState()
     {
         _processingTimer.Stop();
+        _memoryTimer.Stop();
         _diskMonitorService.StopMonitoring();
+        _isPerformanceCounterStopped = false;
         StopPerformanceCounter();
-        _isOperationRunning = false;
-        SetControlsState(true);
+        ProgressBar.IsIndeterminate = false;
 
-        var finalElapsedTime = DateTime.Now - _operationStartTime;
+        var finalElapsedTime = _operationStopwatch.Elapsed;
         ProcessingTimeValue.Text = finalElapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
     }
 
@@ -54,7 +55,15 @@ public partial class MainWindow
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
-        _cts.Cancel();
+        try
+        {
+            _cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS already disposed during shutdown — ignore
+        }
+
         _logger.LogMessage("Cancellation requested. Finishing current file...");
     }
 
@@ -114,7 +123,7 @@ public partial class MainWindow
         }
     }
 
-    private void LogOperationSummary(string operationType)
+    private async Task LogOperationSummaryAsync(string operationType)
     {
         _logger.LogMessage("");
         _logger.LogMessage($"--- Batch {operationType.ToLowerInvariant()} completed. ---");
@@ -134,7 +143,7 @@ public partial class MainWindow
             _logger.LogMessage("");
         }
 
-        Application.Current.Dispatcher.InvokeAsync(() =>
+        await Application.Current.Dispatcher.InvokeAsync(() =>
         {
             if (_isForceClosing) return;
 
@@ -151,12 +160,16 @@ public partial class MainWindow
                                     $"Failed: {_uiFailedCount} files",
                 $"{operationType} Complete", MessageBoxButton.OK,
                 _uiFailedCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+
+            _isOperationRunning = false;
+            _operationCompletedTcs.TrySetResult();
+            SetControlsState(true);
         });
     }
 
     private void ProcessingTimer_Tick(object? sender, EventArgs e)
     {
-        var elapsedTime = DateTime.Now - _operationStartTime;
+        var elapsedTime = _operationStopwatch.Elapsed;
         ProcessingTimeValue.Text = elapsedTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
 
         // Update read speed
@@ -264,8 +277,14 @@ public partial class MainWindow
         selectedButton.Style = (Style)FindResource("SelectedMenuButtonStyle");
     }
 
+    private bool _isPerformanceCounterStopped;
+
     private void StopPerformanceCounter()
     {
+        if (_isPerformanceCounterStopped) return;
+
+        _isPerformanceCounterStopped = true;
+
         _diskMonitorService.StopMonitoring();
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {

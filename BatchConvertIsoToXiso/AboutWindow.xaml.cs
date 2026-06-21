@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Navigation;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using BatchConvertIsoToXiso.Services;
 
 namespace BatchConvertIsoToXiso;

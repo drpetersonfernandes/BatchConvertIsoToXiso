@@ -1,6 +1,6 @@
 using BatchConvertIsoToXiso.Models;
 
-namespace BatchConvertIsoToXiso.interfaces;
+namespace BatchConvertIsoToXiso.Interfaces;
 
 public interface IOrchestratorService
 {

@@ -1,4 +1,4 @@
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using BatchConvertIsoToXiso.Services;
 using Moq;
 using Xunit;
@@ -15,5 +15,17 @@ public class UrlOpenerServiceTests
     {
         var service = new UrlOpenerService(_loggerMock.Object, _bugReportMock.Object);
         Assert.NotNull(service);
+    }
+
+    [Fact]
+    public void OpenUrl_WithInvalidUrl_ThrowsAndLogs()
+    {
+        var service = new UrlOpenerService(_loggerMock.Object, _bugReportMock.Object);
+
+        var ex = Record.Exception(() => service.OpenUrl("not_a_valid_url"));
+
+        Assert.NotNull(ex);
+        _loggerMock.Verify(l => l.LogMessage(It.Is<string>(s => s.Contains("Error opening URL"))), Times.Once);
+        _bugReportMock.Verify(b => b.SendBugReportAsync(It.IsAny<string>(), It.IsAny<Exception>()), Times.Once);
     }
 }

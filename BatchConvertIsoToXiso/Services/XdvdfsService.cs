@@ -1,6 +1,6 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -10,11 +10,13 @@ namespace BatchConvertIsoToXiso.Services;
 public class XdvdfsService : IXdvdfsService
 {
     private readonly ILogger _logger;
+    private readonly IBugReportService _bugReportService;
     private readonly string _xdvdfsPath;
 
-    public XdvdfsService(ILogger logger)
+    public XdvdfsService(ILogger logger, IBugReportService bugReportService)
     {
         _logger = logger;
+        _bugReportService = bugReportService;
         var appDir = AppDomain.CurrentDomain.BaseDirectory;
         _xdvdfsPath = Path.Combine(appDir, "xdvdfs.exe");
     }
@@ -91,7 +93,8 @@ public class XdvdfsService : IXdvdfsService
                 if (p != null)
                 {
                     // Offload to background thread to avoid blocking UI thread
-                    _ = Task.Run(() => ProcessTerminatorHelper.TerminateProcess(p, "xdvdfs", _logger), token);
+                    // Use CancellationToken.None because 'token' is already cancelled at this point
+                    _ = Task.Run(() => ProcessTerminatorHelper.TerminateProcess(p, "xdvdfs", _logger), CancellationToken.None);
                 }
             }, process);
 
@@ -106,10 +109,12 @@ public class XdvdfsService : IXdvdfsService
                 }
 
                 _logger.LogMessage($"[WARNING] xdvdfs completed but output file not found for '{fileName}'.");
+                _ = _bugReportService.SendBugReportAsync($"xdvdfs completed but output file not found for '{fileName}'");
                 return false;
             }
 
             _logger.LogMessage($"[ERROR] xdvdfs.exe exited with code {process.ExitCode} for '{fileName}'.");
+            _ = _bugReportService.SendBugReportAsync($"xdvdfs.exe exited with code {process.ExitCode} for '{fileName}'");
             return false;
         }
         catch (OperationCanceledException)

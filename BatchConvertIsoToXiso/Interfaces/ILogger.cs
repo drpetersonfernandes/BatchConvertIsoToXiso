@@ -1,6 +1,6 @@
-﻿using System.Windows.Controls;
+using System.Windows.Controls;
 
-namespace BatchConvertIsoToXiso.interfaces;
+namespace BatchConvertIsoToXiso.Interfaces;
 
 public interface ILogger
 {

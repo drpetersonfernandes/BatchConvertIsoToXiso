@@ -2,21 +2,21 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 
-public class StatsService : IStatsService, IDisposable
+public class StatsService : IStatsService
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiUrl;
     private readonly string _applicationId;
 
-    public StatsService(string apiUrl, string apiKey, string applicationId)
+    public StatsService(HttpClient httpClient, string apiUrl, string apiKey, string applicationId)
     {
         _apiUrl = apiUrl;
         _applicationId = applicationId;
-        _httpClient = new HttpClient();
+        _httpClient = httpClient;
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
     }
 
@@ -35,11 +35,5 @@ public class StatsService : IStatsService, IDisposable
         {
             // Silently ignore network or other errors during startup stats reporting
         }
-    }
-
-    public void Dispose()
-    {
-        _httpClient.Dispose();
-        GC.SuppressFinalize(this);
     }
 }

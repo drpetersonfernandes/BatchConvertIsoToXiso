@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using SharpCompress.Archives;
 using SharpCompress.Common;
 
@@ -131,54 +131,6 @@ public class FileExtractorService : IFileExtractor
     }
 
     /// <summary>
-    /// Determines if an exception is related to network connectivity issues.
-    /// Supports error messages in multiple languages (English, German, French, Spanish, Italian).
-    /// </summary>
-    private static bool IsNetworkError(Exception ex)
-    {
-        if (ex is not IOException ioEx)
-            return false;
-
-        var message = ioEx.Message;
-
-        // English
-        if (message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("no longer available", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // German
-        if (message.Contains("Netzwerk", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("nicht mehr verfügbar", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // French
-        if (message.Contains("réseau", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("n'est plus disponible", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // Spanish
-        if (message.Contains("red", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // Italian
-        if (message.Contains("rete", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
     /// Verifies that the drive containing the specified path is ready.
     /// </summary>
     private void VerifyDriveReady(string filePath)
@@ -283,7 +235,7 @@ public class FileExtractorService : IFileExtractor
             using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             return false;
         }
-        catch (IOException ex) when (ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
+        catch (IOException ex) when (ex.HResult == unchecked((int)0x80070020)) // ERROR_SHARING_VIOLATION
         {
             return true;
         }
@@ -429,7 +381,7 @@ public class FileExtractorService : IFileExtractor
                                 var entryPath = entry.Key;
 
                                 // Strict Zip Slip check: Skip suspicious paths entirely
-                                if (entryPath != null && (Path.IsPathRooted(entryPath) || entryPath.Contains("..")))
+                                if (entryPath != null && (Path.IsPathRooted(entryPath) || entryPath.Split('\\', '/').Any(static p => p == "..")))
                                 {
                                     _logger.LogMessage($"  WARNING: Skipping entry '{entryPath}' - potential path traversal (Zip Slip) detected.");
                                     continue;
@@ -505,9 +457,10 @@ public class FileExtractorService : IFileExtractor
                             };
 
                             process.Start();
-                            process.StandardOutput.ReadToEnd();
-                            var stderr = process.StandardError.ReadToEnd();
+                            var stderrTask = process.StandardError.ReadToEndAsync();
+                            _ = process.StandardOutput.ReadToEnd();
                             process.WaitForExit();
+                            var stderr = stderrTask.GetAwaiter().GetResult();
 
                             if (process.ExitCode != 0)
                             {
@@ -656,7 +609,7 @@ public class FileExtractorService : IFileExtractor
             {
                 _logger.LogMessage($"ERROR: Not enough disk space to extract {archiveFileName}. Please free up some space on your drive and try again.");
             }
-            else if (IsNetworkError(ex))
+            else if (PathHelper.IsNetworkError(ex))
             {
                 _logger.LogMessage($"ERROR: Network error while extracting {archiveFileName}. The file may be on a network drive that is no longer available or experiencing connectivity issues.\n\n" +
                     "Please try:\n" +
@@ -672,15 +625,17 @@ public class FileExtractorService : IFileExtractor
 
             // Filter out environmental/hardware errors (disconnected drives, file locks, etc.)
             var isEnvironmentalError = ex is IOException ioEx &&
-                                       (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
-                                        ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
-                                        ioEx.Message.Contains("Netzwerk", StringComparison.OrdinalIgnoreCase) || // German: "network"
-                                        ioEx.Message.Contains("réseau", StringComparison.OrdinalIgnoreCase) || // French: "network"
-                                        ioEx.Message.Contains("red", StringComparison.OrdinalIgnoreCase) || // Spanish: "network"
-                                        ioEx.Message.Contains("rete", StringComparison.OrdinalIgnoreCase) || // Italian: "network"
+                                       (ioEx.Message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                                        (ioEx.Message.Contains("device", StringComparison.OrdinalIgnoreCase) &&
+                                         !ioEx.Message.Contains("device is not ready", StringComparison.OrdinalIgnoreCase)) ||
+                                        ioEx.Message.Contains("Netzwerk", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("réseau", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("la red", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("de red", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("rete", StringComparison.OrdinalIgnoreCase) ||
                                         ioEx.Message.Contains("no longer available", StringComparison.OrdinalIgnoreCase) ||
-                                        ioEx.Message.Contains("nicht mehr verfügbar", StringComparison.OrdinalIgnoreCase) || // German
-                                        ioEx.Message.Contains("n'est plus disponible", StringComparison.OrdinalIgnoreCase) || // French
+                                        ioEx.Message.Contains("nicht mehr verfügbar", StringComparison.OrdinalIgnoreCase) ||
+                                        ioEx.Message.Contains("n'est plus disponible", StringComparison.OrdinalIgnoreCase) ||
                                         ioEx.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
                                         ioEx.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase));
 

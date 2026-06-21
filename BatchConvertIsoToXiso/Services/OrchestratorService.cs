@@ -1,5 +1,5 @@
 using System.IO;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services.XisoServices;
 
@@ -155,7 +155,7 @@ public class OrchestratorService : IOrchestratorService
                 {
                     throw;
                 }
-                catch (Exception ex) when (IsDiskSpaceError(ex))
+                catch (Exception ex) when (PathHelper.IsDiskSpaceError(ex))
                 {
                     // Stop the batch — no point continuing without disk space
                     progress.Report(new BatchOperationProgress
@@ -219,34 +219,7 @@ public class OrchestratorService : IOrchestratorService
 
     private string ResolveTempDirectory(long requiredSize, string tempSubfolder)
     {
-        var defaultTempPath = Path.GetTempPath();
-        var defaultTempDriveRoot = Path.GetPathRoot(defaultTempPath);
-        var requiredWithBuffer = requiredSize + Math.Max(requiredSize / 10, 200L * 1024 * 1024);
-
-        if (defaultTempDriveRoot != null)
-        {
-            try
-            {
-                var defaultDrive = new DriveInfo(defaultTempDriveRoot);
-                if (defaultDrive.IsReady && defaultDrive.AvailableFreeSpace >= requiredWithBuffer)
-                    return Path.Combine(defaultTempPath, tempSubfolder, Guid.NewGuid().ToString());
-            }
-            catch
-            {
-                // Ignore and fall through to alternative search
-            }
-        }
-
-        var altDrive = _diskMonitorService.FindDriveWithFreeSpace(requiredSize, defaultTempDriveRoot);
-        if (altDrive != null)
-        {
-            var altPath = Path.Combine(altDrive, tempSubfolder, Guid.NewGuid().ToString());
-            return altPath;
-        }
-
-        var requiredFormatted = Formatter.FormatBytes(requiredWithBuffer);
-        var defaultAvailable = Formatter.FormatBytes(_diskMonitorService.GetAvailableFreeSpace(defaultTempPath));
-        throw new IOException($"Not enough disk space to create temporary files. Required: {requiredFormatted}, Available: {defaultAvailable}. No other local drives have sufficient free space. Please free up disk space and try again.");
+        return PathHelper.ResolveTempDirectory(requiredSize, tempSubfolder, _diskMonitorService);
     }
 
     private async Task ProcessArchiveAsync(string archivePath, string outputFolder, bool deleteOriginal, bool skipUpdate, bool checkIntegrity, bool useExtractXiso, bool useXdvdfs, ProcessingContext context, List<string> tempFolders, IProgress<BatchOperationProgress> progress, Func<string, Task<CloudRetryResult>> cloudRetry, CancellationToken token)
@@ -326,7 +299,7 @@ public class OrchestratorService : IOrchestratorService
             // Re-throw cancellation exceptions to stop the batch
             throw;
         }
-        catch (Exception ex) when (IsDiskSpaceError(ex))
+        catch (Exception ex) when (PathHelper.IsDiskSpaceError(ex))
         {
             // Stop the batch — no point continuing without disk space
             throw;
@@ -481,14 +454,13 @@ public class OrchestratorService : IOrchestratorService
                     var fileSize = new FileInfo(inputFile).Length;
                     localTempWorkingDir = ResolveTempDirectory(fileSize, "BatchConvertIsoToXiso_Convert");
                 }
-                catch (IOException ex) when (ex.Message.Contains("not enough space", StringComparison.OrdinalIgnoreCase) ||
-                                             ex.Message.Contains("Not enough disk space", StringComparison.OrdinalIgnoreCase))
+                catch (IOException ex) when (PathHelper.IsDiskSpaceError(ex))
                 {
                     throw;
                 }
                 catch (Exception ex)
                 {
-                    progress.Report(new BatchOperationProgress { LogMessage = $"Could not resolve temp directory for copy: {ex.Message}. Using default temp path." });
+                    progress.Report(new BatchOperationProgress { LogMessage = $"Could not resolve temp directory for copy: {ex.Message}. Falling back to default temp path." });
                     localTempWorkingDir = Path.Combine(Path.GetTempPath(), "BatchConvertIsoToXiso_Convert", Guid.NewGuid().ToString());
                 }
 
@@ -510,7 +482,7 @@ public class OrchestratorService : IOrchestratorService
             Directory.CreateDirectory(outputFolder);
 
             // Generate output filename with .iso extension
-            var outputFileName = Path.GetFileNameWithoutExtension(sourcePath) + ".iso";
+            var outputFileName = Path.GetFileNameWithoutExtension(originalFileName) + ".iso";
             var destinationPath = Path.Combine(outputFolder, outputFileName);
 
             // Ensure destination path does not exist before invoking external tools
@@ -722,34 +694,6 @@ public class OrchestratorService : IOrchestratorService
     #endregion
 
     #region Helpers
-
-    private static bool IsDiskSpaceError(Exception ex)
-    {
-        if (ex is IOException ioEx)
-        {
-            var hResult = Math.Abs(ioEx.HResult) & 0xFFFF;
-            if (hResult is 0x70 or 0x27) return true; // ERROR_DISK_FULL, ERROR_HANDLE_DISK_FULL
-        }
-
-        if (ex.InnerException is IOException innerIoEx)
-        {
-            var hResult = Math.Abs(innerIoEx.HResult) & 0xFFFF;
-            if (hResult is 0x70 or 0x27) return true;
-        }
-
-        var message = ex.Message;
-        if (ex.InnerException != null)
-        {
-            message += " " + ex.InnerException.Message;
-        }
-
-        return message.Contains("Not enough space", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("not enough disk space", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("insufficient disk space", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("Disk full", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("Espace insuffisant", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("disque plein", StringComparison.OrdinalIgnoreCase);
-    }
 
     private static bool IsFatalEnvironmentalError(Exception ex)
     {

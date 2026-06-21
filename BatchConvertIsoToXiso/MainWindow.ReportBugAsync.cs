@@ -7,7 +7,7 @@ namespace BatchConvertIsoToXiso;
 
 public partial class MainWindow
 {
-    public async Task ReportBugAsync(string message, Exception? exception = null)
+    private async Task ReportBugAsync(string message, Exception? exception = null)
     {
         try
         {
@@ -41,7 +41,7 @@ public partial class MainWindow
             if (LogViewer != null)
             {
                 var logContent = string.Empty;
-                Dispatcher.Invoke(() => { logContent = LogViewer.Text; });
+                await Dispatcher.InvokeAsync(() => { logContent = LogViewer.Text; });
                 if (!string.IsNullOrEmpty(logContent))
                 {
                     fullReport.AppendLine();

@@ -12,8 +12,12 @@ public class ConvertToPastTenseTests
     [InlineData("test", "tested")]
     [InlineData("Test", "tested")]
     [InlineData("process", "processed")]
-    [InlineData("copy", "copyed")]
-    [InlineData("move", "moveed")]
+    [InlineData("copy", "copied")]
+    [InlineData("move", "moved")]
+    [InlineData("create", "created")]
+    [InlineData("carry", "carried")]
+    [InlineData("play", "played")]
+    [InlineData("upload", "uploaded")]
     public void GetPastTenseReturnsExpectedPastTense(string verb, string expected)
     {
         var result = ConvertToPastTense.GetPastTense(verb);
@@ -30,8 +34,8 @@ public class ConvertToPastTenseTests
     [Fact]
     public void GetPastTense_UnknownVerb_AppendsEdLowercased()
     {
-        var result = ConvertToPastTense.GetPastTense("UPLOAD");
-        Assert.Equal("uploaded", result);
+        var result = ConvertToPastTense.GetPastTense("DOWNLOAD");
+        Assert.Equal("downloaded", result);
     }
 
     [Fact]

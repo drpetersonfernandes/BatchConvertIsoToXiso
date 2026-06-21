@@ -1,6 +1,6 @@
-﻿using System.Windows;
+using System.Windows;
 
-namespace BatchConvertIsoToXiso.interfaces;
+namespace BatchConvertIsoToXiso.Interfaces;
 
 public interface IMessageBoxService
 {

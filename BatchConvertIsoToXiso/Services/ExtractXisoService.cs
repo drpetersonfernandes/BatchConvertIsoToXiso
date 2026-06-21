@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.IO;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -45,10 +45,10 @@ public class ExtractXisoService : IExtractXisoService
             Directory.CreateDirectory(tempWorkDir);
 
             // Create simplified filenames without spaces/special characters
+            // extract-xiso rewrites the file in-place (-r flag), so the output filename
+            // matches the input filename. Using "input.iso" as both input and expected output.
             const string simpleInputName = "input.iso";
-            const string simpleOutputName = "output.iso";
             var tempInputFile = Path.Combine(tempWorkDir, simpleInputName);
-            var tempOutputFile = Path.Combine(tempWorkDir, simpleOutputName);
 
             // Copy input file to temp location with simple name
             _logger.LogMessage("  Preparing file for conversion...");
@@ -117,7 +117,8 @@ public class ExtractXisoService : IExtractXisoService
                     if (p != null)
                     {
                         // Offload to background thread to avoid blocking UI thread
-                        _ = Task.Run(() => ProcessTerminatorHelper.TerminateProcess(p, "extract-xiso", _logger), token);
+                        // Use CancellationToken.None because 'token' is already cancelled at this point
+                        _ = Task.Run(() => ProcessTerminatorHelper.TerminateProcess(p, "extract-xiso", _logger), CancellationToken.None);
                     }
                 }, process);
 
@@ -125,12 +126,12 @@ public class ExtractXisoService : IExtractXisoService
 
                 if (process.ExitCode == 0)
                 {
-                    // Check if output file was created in temp directory
-                    if (File.Exists(tempOutputFile))
+                    // extract-xiso rewrites in-place (-r flag), so the output is the same file as the input
+                    if (File.Exists(tempInputFile))
                     {
                         // Move the converted file to the final destination
                         _logger.LogMessage("  Moving converted file to output folder...");
-                        File.Move(tempOutputFile, outputPath, true);
+                        File.Move(tempInputFile, outputPath, true);
                         _logger.LogMessage($"Successfully converted '{fileName}' to XISO format.");
                         return true;
                     }
@@ -182,12 +183,12 @@ public class ExtractXisoService : IExtractXisoService
             _logger.LogMessage($"Conversion of '{fileName}' was canceled.");
             throw;
         }
-        catch (Exception ex) when (IsDiskSpaceError(ex))
+        catch (Exception ex) when (PathHelper.IsDiskSpaceError(ex))
         {
             _logger.LogMessage($"[ERROR] Not enough disk space to convert '{fileName}': {ex.Message}");
             throw;
         }
-        catch (Exception ex) when (IsNetworkError(ex))
+        catch (Exception ex) when (PathHelper.IsNetworkError(ex))
         {
             _logger.LogMessage($"[ERROR] Network error while converting '{fileName}': {ex.Message}\n\n" +
                 "Please try:\n" +
@@ -263,109 +264,6 @@ public class ExtractXisoService : IExtractXisoService
 
     private string ResolveTempDirectory(long requiredSize, string tempSubfolder)
     {
-        var defaultTempPath = Path.GetTempPath();
-        var defaultTempDriveRoot = Path.GetPathRoot(defaultTempPath);
-        var requiredWithBuffer = requiredSize + Math.Max(requiredSize / 10, 200L * 1024 * 1024);
-
-        if (defaultTempDriveRoot != null)
-        {
-            try
-            {
-                var defaultDrive = new DriveInfo(defaultTempDriveRoot);
-                if (defaultDrive.IsReady && defaultDrive.AvailableFreeSpace >= requiredWithBuffer)
-                    return Path.Combine(defaultTempPath, tempSubfolder, Guid.NewGuid().ToString());
-            }
-            catch
-            {
-                // Ignore and fall through to alternative search
-            }
-        }
-
-        var altDrive = _diskMonitorService.FindDriveWithFreeSpace(requiredSize, defaultTempDriveRoot);
-        if (altDrive != null)
-        {
-            _logger.LogMessage($"  Default temp drive has insufficient space. Using alternative drive: {altDrive}");
-            return Path.Combine(altDrive, tempSubfolder, Guid.NewGuid().ToString());
-        }
-
-        var requiredFormatted = Formatter.FormatBytes(requiredWithBuffer);
-        var defaultAvailable = Formatter.FormatBytes(_diskMonitorService.GetAvailableFreeSpace(defaultTempPath));
-        throw new IOException($"Not enough disk space to create temporary files. Required: {requiredFormatted}, Available: {defaultAvailable}. No other local drives have sufficient free space.");
-    }
-
-    private static bool IsDiskSpaceError(Exception ex)
-    {
-        if (ex is IOException ioEx)
-        {
-            var hResult = Math.Abs(ioEx.HResult) & 0xFFFF;
-            if (hResult is 0x70 or 0x27) return true; // ERROR_DISK_FULL, ERROR_HANDLE_DISK_FULL
-        }
-
-        if (ex.InnerException is IOException innerIoEx)
-        {
-            var hResult = Math.Abs(innerIoEx.HResult) & 0xFFFF;
-            if (hResult is 0x70 or 0x27) return true;
-        }
-
-        var message = ex.Message;
-        if (ex.InnerException != null)
-        {
-            message += " " + ex.InnerException.Message;
-        }
-
-        return message.Contains("Not enough space", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("not enough disk space", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("insufficient disk space", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("Disk full", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("Espace insuffisant", StringComparison.OrdinalIgnoreCase) ||
-               message.Contains("disque plein", StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Determines if an exception is related to network connectivity issues.
-    /// Supports error messages in multiple languages (English, German, French, Spanish, Italian).
-    /// </summary>
-    private static bool IsNetworkError(Exception ex)
-    {
-        if (ex is not IOException ioEx)
-            return false;
-
-        var message = ioEx.Message;
-
-        // English
-        if (message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("device", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("no longer available", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // German
-        if (message.Contains("Netzwerk", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("nicht mehr verfügbar", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // French
-        if (message.Contains("réseau", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("n'est plus disponible", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // Spanish
-        if (message.Contains("red", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // Italian
-        if (message.Contains("rete", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return false;
+        return PathHelper.ResolveTempDirectory(requiredSize, tempSubfolder, _diskMonitorService);
     }
 }

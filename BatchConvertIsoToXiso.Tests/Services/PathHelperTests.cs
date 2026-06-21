@@ -92,4 +92,71 @@ public class PathHelperTests
         var ex = new IOException("NETWORK PATH WAS NOT FOUND");
         Assert.True(PathHelper.IsNetworkError(ex));
     }
+
+    [Theory]
+    [InlineData("Netzwerk nicht erreichbar", true)]
+    [InlineData("nicht mehr verfügbar", true)]
+    [InlineData("erreur réseau", true)]
+    [InlineData("n'est plus disponible", true)]
+    [InlineData("error de red", true)]
+    [InlineData("connettività di rete", true)]
+    [InlineData("errore generico", false)]
+    public void IsNetworkErrorMultilingualReturnsExpectedResult(string message, bool expected)
+    {
+        var ex = new IOException(message);
+        Assert.Equal(expected, PathHelper.IsNetworkError(ex));
+    }
+
+    [Fact]
+    public void IsNetworkErrorDeviceNotReadyReturnsFalse()
+    {
+        var ex = new IOException("The device is not ready");
+        Assert.False(PathHelper.IsNetworkError(ex));
+    }
+
+    [Fact]
+    public void IsNetworkErrorDeviceGenericReturnsTrue()
+    {
+        var ex = new IOException("A device attached to the system is not functioning");
+        Assert.True(PathHelper.IsNetworkError(ex));
+    }
+
+    [Fact]
+    public void IsNetworkErrorChecksInnerException()
+    {
+        var inner = new IOException("network name is no longer available");
+        var ex = new IOException("outer", inner);
+        Assert.True(PathHelper.IsNetworkError(ex));
+    }
+
+    [Fact]
+    public void IsDiskSpaceErrorWithNullReturnsFalse()
+    {
+        // Null would throw NRE, so we test with a non-disk-space error
+        var ex = new IOException("some other error");
+        Assert.False(PathHelper.IsDiskSpaceError(ex));
+    }
+
+    [Theory]
+    [InlineData("Not enough space on disk", true)]
+    [InlineData("not enough disk space", true)]
+    [InlineData("insufficient disk space", true)]
+    [InlineData("Disk full", true)]
+    [InlineData("Espace insuffisant sur le disque", true)]
+    [InlineData("disque plein", true)]
+    [InlineData("file not found", false)]
+    [InlineData("access denied", false)]
+    public void IsDiskSpaceErrorWithKnownPatternsReturnsExpectedResult(string message, bool expected)
+    {
+        var ex = new IOException(message);
+        Assert.Equal(expected, PathHelper.IsDiskSpaceError(ex));
+    }
+
+    [Fact]
+    public void IsDiskSpaceErrorChecksInnerException()
+    {
+        var inner = new IOException("Not enough space");
+        var ex = new IOException("outer", inner);
+        Assert.True(PathHelper.IsDiskSpaceError(ex));
+    }
 }

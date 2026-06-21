@@ -1,8 +1,9 @@
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using BatchConvertIsoToXiso.Services;
 using Microsoft.Extensions.DependencyInjection;
 using BatchConvertIsoToXiso.Services.XisoServices;
@@ -57,8 +58,7 @@ public partial class App
             // Create and show the main window with enhanced error handling
             try
             {
-                using var scope = ServiceProvider.CreateScope();
-                var mainWindow = scope.ServiceProvider.GetRequiredService<MainWindow>();
+                var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
                 mainWindow.Show();
             }
             catch (SEHException sehEx)
@@ -82,11 +82,11 @@ public partial class App
         catch (SEHException sehEx)
         {
             // Handle SEH exceptions during service setup
-            await HandleFontRenderingErrorAsync(sehEx);
+            try { await HandleFontRenderingErrorAsync(sehEx); } catch { /* prevent async void crash */ }
         }
         catch (Exception ex)
         {
-            _ = ReportExceptionAsync(ex, "Bug OnStartup");
+            try { _ = ReportExceptionAsync(ex, "Bug OnStartup"); } catch { /* prevent async void crash */ }
         }
     }
 
@@ -137,9 +137,28 @@ public partial class App
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton<IBugReportService>(static _ => new BugReportService(BugReportApiUrl, BugReportApiKey, ApplicationName));
-        services.AddSingleton<IStatsService>(static _ => new StatsService(StatsApiUrl, BugReportApiKey, ApplicationName));
-        services.AddSingleton<IUpdateChecker, UpdateChecker>();
+        services.AddHttpClient("BugReport", client => { client.BaseAddress = new Uri(BugReportApiUrl); })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(10) });
+        services.AddHttpClient("Stats", client => { client.BaseAddress = new Uri(StatsApiUrl); })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(10) });
+        services.AddHttpClient("UpdateChecker")
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(10) });
+
+        services.AddSingleton<IBugReportService>(static provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            return new BugReportService(httpClientFactory.CreateClient("BugReport"), BugReportApiUrl, BugReportApiKey, ApplicationName);
+        });
+        services.AddSingleton<IStatsService>(static provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            return new StatsService(httpClientFactory.CreateClient("Stats"), StatsApiUrl, BugReportApiKey, ApplicationName);
+        });
+        services.AddSingleton<IUpdateChecker>(static provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            return new UpdateChecker(httpClientFactory.CreateClient("UpdateChecker"));
+        });
         services.AddSingleton<ILogger, LoggerService>();
         services.AddSingleton<IDiskMonitorService, DiskMonitorService>();
         services.AddSingleton<IMessageBoxService, MessageBoxService>();

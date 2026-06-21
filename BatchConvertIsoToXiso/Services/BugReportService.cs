@@ -4,25 +4,24 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Text;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 
-public class BugReportService : IBugReportService, IDisposable
+public class BugReportService : IBugReportService
 {
-    private readonly HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient;
     private readonly string _apiUrl;
-    private readonly string _apiKey;
     private readonly string _applicationName;
 
-    public BugReportService(string apiUrl, string apiKey, string applicationName)
+    public BugReportService(HttpClient httpClient, string apiUrl, string apiKey, string applicationName)
     {
         _apiUrl = apiUrl;
-        _apiKey = apiKey;
         _applicationName = applicationName;
 
+        _httpClient = httpClient;
         _httpClient.Timeout = TimeSpan.FromSeconds(15);
-        _httpClient.DefaultRequestHeaders.Add("X-API-KEY", _apiKey);
+        _httpClient.DefaultRequestHeaders.Add("X-API-KEY", apiKey);
     }
 
     public Task<bool> SendBugReportAsync(string message)
@@ -53,9 +52,8 @@ public class BugReportService : IBugReportService, IDisposable
                 { "version", version }
             };
 
-            var content = JsonContent.Create(payload);
-
-            var response = await _httpClient.PostAsync(_apiUrl, content);
+            using var content = JsonContent.Create(payload);
+            using var response = await _httpClient.PostAsync(_apiUrl, content);
 
             return response.IsSuccessStatusCode;
         }
@@ -83,7 +81,7 @@ public class BugReportService : IBugReportService, IDisposable
     internal static void AppendEnvironmentDetails(StringBuilder sb)
     {
         sb.AppendLine("=== Environment Details ===");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Date: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Application Name: {App.ApplicationName}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Application Version: {GetApplicationVersion.GetProgramVersion()}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"OS Version: {Environment.OSVersion}");
@@ -93,11 +91,5 @@ public class BugReportService : IBugReportService, IDisposable
         sb.AppendLine(CultureInfo.InvariantCulture, $"Processor Count: {Environment.ProcessorCount}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Base Directory: {AppContext.BaseDirectory}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Temp Path: {Path.GetTempPath()}");
-    }
-
-    public void Dispose()
-    {
-        _httpClient.Dispose();
-        GC.SuppressFinalize(this);
     }
 }

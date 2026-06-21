@@ -2,19 +2,19 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using BatchConvertIsoToXiso.Models;
 
 namespace BatchConvertIsoToXiso.Services;
 
-public partial class UpdateChecker : IUpdateChecker, IDisposable
+public partial class UpdateChecker : IUpdateChecker
 {
     private const string GitHubApiUrl = "https://api.github.com/repos/drpetersonfernandes/BatchConvertIsoToXiso/releases/latest";
     private readonly HttpClient _httpClient;
     private readonly string _currentVersion;
 
-    public UpdateChecker()
-        : this(new HttpClient(), GetApplicationVersion.GetProgramVersion())
+    public UpdateChecker(HttpClient httpClient)
+        : this(httpClient, GetApplicationVersion.GetProgramVersion())
     {
     }
 
@@ -59,12 +59,6 @@ public partial class UpdateChecker : IUpdateChecker, IDisposable
         }
 
         return (false, null, null);
-    }
-
-    public void Dispose()
-    {
-        _httpClient.Dispose();
-        GC.SuppressFinalize(this);
     }
 
     [GeneratedRegex(@"\d+(\.\d+){1,3}")]

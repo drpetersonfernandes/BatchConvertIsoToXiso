@@ -54,15 +54,16 @@ public class BugReportServiceTests
     [Fact]
     public void Constructor_InitializesWithValidParameters()
     {
-        var service = new BugReportService("https://api.example.com", "test-key", "TestApp");
+        using var httpClient = new HttpClient();
+        var service = new BugReportService(httpClient, "https://api.example.com", "test-key", "TestApp");
         Assert.NotNull(service);
     }
 
     [Fact]
     public void Constructor_WithDispose_DoesNotThrow()
     {
-        var service = new BugReportService("https://api.example.com", "test-key", "TestApp");
-        var exception = Record.Exception(service.Dispose);
-        Assert.Null(exception);
+        using var httpClient = new HttpClient();
+        var service = new BugReportService(httpClient, "https://api.example.com", "test-key", "TestApp");
+        Assert.NotNull(service);
     }
 }

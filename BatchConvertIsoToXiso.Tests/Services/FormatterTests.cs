@@ -31,14 +31,14 @@ public class FormatterTests
     }
 
     [Theory]
-    [InlineData(0f, 0f, "B/s")]
-    [InlineData(512f, 512f, "B/s")]
-    [InlineData(1023f, 1023f, "B/s")]
-    [InlineData(1024f, 1f, "KB/s")]
-    [InlineData(1536f, 1.5f, "KB/s")]
-    [InlineData(1048576f, 1f, "MB/s")]
-    [InlineData(10485760f, 10f, "MB/s")]
-    public void FormatBytesPerSecondReturnsCorrectString(float bytesPerSecond, float expectedValue, string unit)
+    [InlineData(0d, 0d, "B/s")]
+    [InlineData(512d, 512d, "B/s")]
+    [InlineData(1023d, 1023d, "B/s")]
+    [InlineData(1024d, 1d, "KB/s")]
+    [InlineData(1536d, 1.5d, "KB/s")]
+    [InlineData(1048576d, 1d, "MB/s")]
+    [InlineData(10485760d, 10d, "MB/s")]
+    public void FormatBytesPerSecondReturnsCorrectString(double bytesPerSecond, double expectedValue, string unit)
     {
         var result = Formatter.FormatBytesPerSecond(bytesPerSecond);
         var expected = $"{expectedValue.ToString("F1", CultureInfo.CurrentCulture)} {unit}";
@@ -65,9 +65,9 @@ public class FormatterTests
     }
 
     [Theory]
-    [InlineData(1024f, 1f, "KB/s")]
-    [InlineData(1048576f, 1f, "MB/s")]
-    public void FormatBytesPerSecond_ExactBoundaryValues(float bytesPerSecond, float expectedValue, string unit)
+    [InlineData(1024d, 1d, "KB/s")]
+    [InlineData(1048576d, 1d, "MB/s")]
+    public void FormatBytesPerSecond_ExactBoundaryValues(double bytesPerSecond, double expectedValue, string unit)
     {
         var result = Formatter.FormatBytesPerSecond(bytesPerSecond);
         var expected = $"{expectedValue.ToString("F1", CultureInfo.CurrentCulture)} {unit}";
@@ -77,8 +77,8 @@ public class FormatterTests
     [Fact]
     public void FormatBytesPerSecond_NegativeValue_ReturnsFormattedBytes()
     {
-        var result = Formatter.FormatBytesPerSecond(-1f);
-        var expected = $"{(-1f).ToString("F1", CultureInfo.CurrentCulture)} B/s";
+        var result = Formatter.FormatBytesPerSecond(-1d);
+        var expected = $"{(-1d).ToString("F1", CultureInfo.CurrentCulture)} B/s";
         Assert.Equal(expected, result);
     }
 }

@@ -1,12 +1,12 @@
 using System.IO;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 using System.Runtime.InteropServices;
 
 namespace BatchConvertIsoToXiso.Services;
 
 public static class DisplayInstructions
 {
-    private static ILogger? _logger;
+    private static volatile ILogger? _logger;
 
     public static void Initialize(ILogger logger)
     {

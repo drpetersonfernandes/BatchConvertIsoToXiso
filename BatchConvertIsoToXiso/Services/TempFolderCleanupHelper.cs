@@ -1,5 +1,5 @@
 using System.IO;
-using BatchConvertIsoToXiso.interfaces;
+using BatchConvertIsoToXiso.Interfaces;
 
 namespace BatchConvertIsoToXiso.Services;
 
@@ -8,7 +8,7 @@ public static class TempFolderCleanupHelper
     /// <summary>
     /// Deletes a directory with retry logic for locked files
     /// </summary>
-    public static async Task TryDeleteDirectoryWithRetryAsync(string directoryPath, int maxRetries, int delayMs, ILogger? logger)
+    public static async Task TryDeleteDirectoryWithRetryAsync(string directoryPath, int maxRetries, int delayMs, ILogger? logger, CancellationToken cancellationToken = default)
     {
         for (var attempt = 1; attempt <= maxRetries; attempt++)
         {
@@ -23,12 +23,16 @@ public static class TempFolderCleanupHelper
             catch (IOException) when (attempt < maxRetries)
             {
                 logger?.LogMessage($"Deletion attempt {attempt}/{maxRetries} failed for '{Path.GetFileName(directoryPath)}' (files locked). Retrying...");
-                await Task.Delay(delayMs);
+                await Task.Delay(delayMs, cancellationToken);
             }
             catch (UnauthorizedAccessException) when (attempt < maxRetries)
             {
                 logger?.LogMessage($"Deletion attempt {attempt}/{maxRetries} failed for '{Path.GetFileName(directoryPath)}' (access denied). Retrying...");
-                await Task.Delay(delayMs);
+                await Task.Delay(delayMs, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -43,7 +47,7 @@ public static class TempFolderCleanupHelper
     /// <summary>
     /// Cleans up all BatchConvertIsoToXiso temp folders on all fixed drives
     /// </summary>
-    public static async Task CleanupBatchConvertTempFoldersAsync(ILogger logger)
+    public static async Task CleanupBatchConvertTempFoldersAsync(ILogger logger, CancellationToken cancellationToken = default)
     {
         const string searchPattern = "BatchConvertIsoToXiso_*";
 
@@ -73,14 +77,21 @@ public static class TempFolderCleanupHelper
 
         foreach (var root in rootsToScan)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
                 var directories = Directory.EnumerateDirectories(root, searchPattern, SearchOption.TopDirectoryOnly);
                 foreach (var dir in directories)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     logger.LogMessage($"Cleaning up orphaned temp folder: {Path.GetFileName(dir)}");
-                    await TryDeleteDirectoryWithRetryAsync(dir, 3, 1000, logger);
+                    await TryDeleteDirectoryWithRetryAsync(dir, 3, 1000, logger, cancellationToken);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

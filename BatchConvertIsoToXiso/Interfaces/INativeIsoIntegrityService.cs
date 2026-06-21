@@ -1,7 +1,7 @@
 using BatchConvertIsoToXiso.Models;
 using BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 
-namespace BatchConvertIsoToXiso.interfaces;
+namespace BatchConvertIsoToXiso.Interfaces;
 
 public interface INativeIsoIntegrityService
 {
