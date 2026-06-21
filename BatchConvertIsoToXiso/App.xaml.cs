@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using BatchConvertIsoToXiso.interfaces;
@@ -34,6 +35,7 @@ public partial class App
         try
         {
             base.OnStartup(e);
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
             var serviceCollection = new ServiceCollection();
             ConfigureServices(serviceCollection);

@@ -16,6 +16,9 @@ internal static class Xdvdfs
     // Standard XDVDFS signature
     private const string XdvdfsSignature = "MICROSOFT*XBOX*MEDIA";
 
+    // Windows-1252 encoding for Xbox filenames (supports accented characters)
+    private static readonly Encoding Win1252 = Encoding.GetEncoding(1252);
+
     /// <summary>
     /// Known XDVDFS partition offsets for different Xbox game disc formats.
     /// Based on xdvdfs reference implementation by antangelo.
@@ -56,7 +59,16 @@ internal static class Xdvdfs
 
         // Fallback: sector-by-sector scan for non-standard offsets
         // This handles unknown Redump variants or corrupted images
-        return ScanForSignature(isoFs);
+        var scanned = ScanForSignature(isoFs);
+        if (scanned.HasValue)
+            return scanned;
+
+        // Final fallback: try Sector 0 (rebuilt XISO without video partition header)
+        // VolumeDescriptor.ReadFrom() handles this case, so FindXisoSignatureOffset should too
+        if (TryValidateVolumeAtSector0(isoFs))
+            return 0;
+
+        return null;
     }
 
     /// <summary>
@@ -80,6 +92,15 @@ internal static class Xdvdfs
             if (!signature.StartsWith(XdvdfsSignature, StringComparison.Ordinal))
                 return false;
 
+            // Check secondary signature at offset + 0x7EC (matching xdvdfs and extract-xiso references)
+            isoFs.Seek(offset + XisoHeaderOffset + 0x7EC, SeekOrigin.Begin);
+            var secondaryBuffer = new byte[20];
+            if (isoFs.Read(secondaryBuffer, 0, 20) != 20)
+                return false;
+
+            if (!Encoding.ASCII.GetString(secondaryBuffer).StartsWith(XdvdfsSignature, StringComparison.Ordinal))
+                return false;
+
             // Validate root directory exists and has valid parameters
             isoFs.Seek(offset + XisoHeaderOffset + 20, SeekOrigin.Begin);
             var rootOffset = Utils.ReadUInt(isoFs);
@@ -92,6 +113,43 @@ internal static class Xdvdfs
             // Root size should be reasonable (not 0, not larger than file)
             var rootOffsetBytes = rootOffset * Utils.SectorSize;
             if (rootSize == 0 || rootSize > fileLength || offset + rootOffsetBytes + rootSize > fileLength)
+                return false;
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Validates that a valid XDVDFS volume exists at Sector 0 (rebuilt XISO without video partition).
+    /// For rebuilt XISOs, the volume descriptor starts at byte offset 0 instead of Sector 32.
+    /// </summary>
+    private static bool TryValidateVolumeAtSector0(FileStream isoFs)
+    {
+        try
+        {
+            if (isoFs.Length < 0x800)
+                return false;
+
+            // Check primary signature at byte offset 0
+            isoFs.Seek(0, SeekOrigin.Begin);
+            var sigBuffer = new byte[20];
+            if (isoFs.Read(sigBuffer, 0, 20) != 20)
+                return false;
+
+            if (!Encoding.ASCII.GetString(sigBuffer).StartsWith(XdvdfsSignature, StringComparison.Ordinal))
+                return false;
+
+            // Check secondary signature at byte offset 0x7EC
+            isoFs.Seek(0x7EC, SeekOrigin.Begin);
+            var secondaryBuffer = new byte[20];
+            if (isoFs.Read(secondaryBuffer, 0, 20) != 20)
+                return false;
+
+            if (!Encoding.ASCII.GetString(secondaryBuffer).StartsWith(XdvdfsSignature, StringComparison.Ordinal))
                 return false;
 
             return true;
@@ -118,7 +176,7 @@ internal static class Xdvdfs
         {
             (start: 0x800000L, end: Math.Min(fileLength, 0x20000000L)), // 8MB to 512MB
             (start: 0x18000000L, end: Math.Min(fileLength, 0x30000000L)), // 384MB to 768MB (XGD1 area)
-            (start: 0x80000000L, end: Math.Min(fileLength, 0xA0000000L)) // 2GB to 2.5GB (XGD3 area)
+            (start: 0x80000000L, end: Math.Min(fileLength, 0xA0000000L)) // 2GB to 2.5GB (XGD2-Hybrid area)
         };
 
         foreach (var (start, end) in scanRegions)
@@ -286,7 +344,7 @@ internal static class Xdvdfs
                     var bytesRead = isoFs.Read(nameBuffer, 0, nameLength);
                     if (bytesRead == nameLength)
                     {
-                        fileName = Encoding.ASCII.GetString(nameBuffer);
+                        fileName = Win1252.GetString(nameBuffer);
                     }
                 }
 
