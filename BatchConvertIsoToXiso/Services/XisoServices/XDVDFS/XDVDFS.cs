@@ -94,24 +94,7 @@ internal static class Xdvdfs
             if (rootSize == 0 || rootSize > fileLength || offset + rootOffsetBytes + rootSize > fileLength)
                 return false;
 
-            // Try to read the first directory entry to ensure it's a valid filesystem
-            var firstEntryOffset = offset + rootOffsetBytes;
-            if (firstEntryOffset + 14 > fileLength)
-                return false;
-
-            isoFs.Seek(firstEntryOffset, SeekOrigin.Begin);
-            var entryBuffer = new byte[14];
-            if (isoFs.Read(entryBuffer, 0, 14) != 14)
-                return false;
-
-            // Read entry attributes and name length
-            var attributes = entryBuffer[12];
-            var nameLength = entryBuffer[13];
-
-            // Validate entry attributes (should be 0x00-0x1F for files, 0x10-0x1F for directories)
-            // and name length should be reasonable (1-255 for valid files)
-            // ReSharper disable once PatternIsRedundant
-            return nameLength is > 0 and <= 255 && (attributes & 0xE0) == 0;
+            return true;
         }
         catch
         {
@@ -235,50 +218,7 @@ internal static class Xdvdfs
             if (offset + rootOffsetBytes + rootSize > isoFs.Length)
                 return false;
 
-            // Additional validation: try to read the first file entry in the root directory
-            // This ensures we're not hitting a false positive from video partition data
-            var firstEntryOffset = offset + rootOffsetBytes;
-            if (firstEntryOffset + 14 > isoFs.Length)
-                return false;
-
-            try
-            {
-                isoFs.Seek(firstEntryOffset, SeekOrigin.Begin);
-                var entryBuffer = new byte[14];
-                if (isoFs.Read(entryBuffer, 0, 14) != 14)
-                    return false;
-
-                // Read entry attributes and name length
-                var attributes = entryBuffer[12];
-                var nameLength = entryBuffer[13];
-
-                // Validate entry attributes (should be 0x00-0x1F for files, 0x10-0x1F for directories)
-                // and name length should be reasonable (1-255 for valid files)
-                if (nameLength > 0 && (attributes & 0xE0) == 0)
-                {
-                    // Try to read the filename
-                    if (firstEntryOffset + 14 + nameLength <= isoFs.Length)
-                    {
-                        var nameBuffer = new byte[nameLength];
-                        isoFs.Seek(firstEntryOffset + 14, SeekOrigin.Begin);
-                        if (isoFs.Read(nameBuffer, 0, nameLength) == nameLength)
-                        {
-                            var fileName = Encoding.ASCII.GetString(nameBuffer).TrimEnd('\0');
-                            // If we can read a non-empty filename, this is likely a real game partition
-                            if (!string.IsNullOrWhiteSpace(fileName) && fileName.All(static c => char.IsAscii(c) && !char.IsControl(c)))
-                            {
-                                return true;
-                            }
-                        }
-                    }
-                }
-
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
+            return true;
         }
         catch
         {
