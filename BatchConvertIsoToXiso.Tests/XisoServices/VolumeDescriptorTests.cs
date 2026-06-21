@@ -19,7 +19,7 @@ public class VolumeDescriptorTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private string CreateValidIsoFile(long gamePartitionOffset = 0)
+    private string CreateValidIsoFile(long gamePartitionOffset = 0, uint rootDirSector = 20u, uint rootDirSize = 64u)
     {
         var path = Path.GetTempFileName();
         _tempFiles.Add(path);
@@ -39,7 +39,10 @@ public class VolumeDescriptorTests : IDisposable
         fs.Write(MagicId);
 
         // Write RootDirTableSector (4 bytes)
-        fs.Write(BitConverter.GetBytes(20u));
+        fs.Write(BitConverter.GetBytes(rootDirSector));
+
+        // Write RootDirSize (4 bytes)
+        fs.Write(BitConverter.GetBytes(rootDirSize));
 
         // Pad to offset 0x7EC from header start
         fs.Position = volumePosition + 0x7EC;
@@ -71,6 +74,7 @@ public class VolumeDescriptorTests : IDisposable
 
         Assert.NotNull(vol);
         Assert.Equal(20u, vol.RootDirTableSector);
+        Assert.Equal(64u, vol.RootDirSize);
         Assert.Equal(0, isoSt.VolumeOffset);
     }
 
@@ -85,7 +89,22 @@ public class VolumeDescriptorTests : IDisposable
 
         Assert.NotNull(vol);
         Assert.Equal(20u, vol.RootDirTableSector);
+        Assert.Equal(64u, vol.RootDirSize);
         Assert.Equal(gamePartitionOffset, isoSt.VolumeOffset);
+    }
+
+    [Fact]
+    public void ReadFromWithEmptyRootDirectoryReturnsVolumeDescriptor()
+    {
+        var path = CreateValidIsoFile(rootDirSector: 0, rootDirSize: 0);
+        using var isoSt = new IsoSt(path);
+
+        var vol = VolumeDescriptor.ReadFrom(isoSt);
+
+        Assert.NotNull(vol);
+        Assert.Equal(0u, vol.RootDirTableSector);
+        Assert.Equal(0u, vol.RootDirSize);
+        Assert.Equal(0, isoSt.VolumeOffset);
     }
 
     [Fact]
@@ -102,6 +121,7 @@ public class VolumeDescriptorTests : IDisposable
             buildFs.Position = headerOffset;
             buildFs.Write(MagicId);
             buildFs.Write(BitConverter.GetBytes(10u));
+            buildFs.Write(BitConverter.GetBytes(32u));
             buildFs.Position = headerOffset + 0x7EC;
             buildFs.Write(MagicId);
         }
@@ -112,6 +132,7 @@ public class VolumeDescriptorTests : IDisposable
 
         Assert.NotNull(vol);
         Assert.Equal(10u, vol.RootDirTableSector);
+        Assert.Equal(32u, vol.RootDirSize);
         Assert.Equal(0, isoSt.VolumeOffset);
     }
 

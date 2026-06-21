@@ -16,21 +16,21 @@ internal static class Xdvdfs
     // Standard XDVDFS signature
     private const string XdvdfsSignature = "MICROSOFT*XBOX*MEDIA";
 
+    // Sentinel value indicating no child entry in directory tree (XISO_PAD_SHORT in extract-xiso.c)
+    private const ushort NoChildSentinel = 0xFFFF;
+
     // Windows-1252 encoding for Xbox filenames (supports accented characters)
     private static readonly Encoding Win1252 = Encoding.GetEncoding(1252);
 
     /// <summary>
     /// Known XDVDFS partition offsets for different Xbox game disc formats.
-    /// Based on xdvdfs reference implementation by antangelo.
+    /// Uses shared constant from VolumeDescriptor for consistency.
     /// </summary>
-    private static readonly long[] XdvfsOffsets =
-    [
-        0, // XISO (already trimmed or standard XISO without video partition)
-        34078720, // XGD3 (0x02080000) - ~32.5MB offset
-        265879552, // XGD2 (0x0FD90000) - ~253.5MB offset
-        405798912, // XGD1 (0x18300000) - ~387MB offset
-        2312634368 // Additional variant (0x89D80000) - ~2.2GB offset
-    ];
+    private static readonly long[] XdvfsOffsets = VolumeDescriptor.GamePartitionOffsets;
+
+    // Filler pattern used to locate system update boundary in XGD3 video partitions
+    // Matches XboxKit's FILLER constant: "ABCDABCDABCDABCD"
+    private static readonly byte[] SystemUpdateFiller = "ABCDABCDABCDABCD"u8.ToArray();
 
     /// <summary>
     /// Searches for the XDVDFS signature in the ISO file.
@@ -89,7 +89,7 @@ internal static class Xdvdfs
                 return false;
 
             var signature = Encoding.ASCII.GetString(sigBuffer);
-            if (!signature.StartsWith(XdvdfsSignature, StringComparison.Ordinal))
+            if (signature != XdvdfsSignature)
                 return false;
 
             // Check secondary signature at offset + 0x7EC (matching xdvdfs and extract-xiso references)
@@ -98,7 +98,7 @@ internal static class Xdvdfs
             if (isoFs.Read(secondaryBuffer, 0, 20) != 20)
                 return false;
 
-            if (!Encoding.ASCII.GetString(secondaryBuffer).StartsWith(XdvdfsSignature, StringComparison.Ordinal))
+            if (Encoding.ASCII.GetString(secondaryBuffer) != XdvdfsSignature)
                 return false;
 
             // Validate root directory exists and has valid parameters
@@ -106,9 +106,10 @@ internal static class Xdvdfs
             var rootOffset = Utils.ReadUInt(isoFs);
             var rootSize = Utils.ReadUInt(isoFs);
 
-            // Root offset should be reasonable (not 0, within file bounds)
-            if (rootOffset == 0)
-                return false;
+            // Empty root directory is valid (rootOffset == 0 && rootSize == 0)
+            // Non-empty root must have valid offset and size within file bounds
+            if (rootOffset == 0 && rootSize == 0)
+                return true;
 
             // Root size should be reasonable (not 0, not larger than file)
             var rootOffsetBytes = rootOffset * Utils.SectorSize;
@@ -140,7 +141,7 @@ internal static class Xdvdfs
             if (isoFs.Read(sigBuffer, 0, 20) != 20)
                 return false;
 
-            if (!Encoding.ASCII.GetString(sigBuffer).StartsWith(XdvdfsSignature, StringComparison.Ordinal))
+            if (Encoding.ASCII.GetString(sigBuffer) != XdvdfsSignature)
                 return false;
 
             // Check secondary signature at byte offset 0x7EC
@@ -149,7 +150,7 @@ internal static class Xdvdfs
             if (isoFs.Read(secondaryBuffer, 0, 20) != 20)
                 return false;
 
-            if (!Encoding.ASCII.GetString(secondaryBuffer).StartsWith(XdvdfsSignature, StringComparison.Ordinal))
+            if (Encoding.ASCII.GetString(secondaryBuffer) != XdvdfsSignature)
                 return false;
 
             return true;
@@ -163,20 +164,23 @@ internal static class Xdvdfs
     /// <summary>
     /// Performs a sector-by-sector scan for XDVDFS signature.
     /// Used as fallback when known offsets don't work.
+    /// Scan regions cover all known extract-xiso offsets with margin:
+    /// - XGD3: 0x02080000 (~32.5MB)
+    /// - XGD2: 0x0FD90000 (~253.5MB)
+    /// - XGD1: 0x18300000 (~387MB)
+    /// - 0x89D80000 (~2.2GB)
     /// </summary>
     private static long? ScanForSignature(FileStream isoFs)
     {
         var signatureBytes = Encoding.ASCII.GetBytes(XdvdfsSignature);
         var fileLength = isoFs.Length;
 
-        // Scan key regions where game partitions are typically found
-        // Video partition on Redump ISOs is usually ~7-10MB, game partition starts after
-        const int sectorSize = 2048;
+        // Scan regions covering all known XGD offsets with margin for variants
         var scanRegions = new[]
         {
-            (start: 0x800000L, end: Math.Min(fileLength, 0x20000000L)), // 8MB to 512MB
-            (start: 0x18000000L, end: Math.Min(fileLength, 0x30000000L)), // 384MB to 768MB (XGD1 area)
-            (start: 0x80000000L, end: Math.Min(fileLength, 0xA0000000L)) // 2GB to 2.5GB (XGD2-Hybrid area)
+            (start: 0x10000L, end: Math.Min(fileLength, 0x20000000L)),   // 64KB to 512MB (covers XGD3, XGD2)
+            (start: 0x18000000L, end: Math.Min(fileLength, 0x20000000L)), // 384MB to 512MB (covers XGD1)
+            (start: 0x80000000L, end: Math.Min(fileLength, 0xB0000000L))  // 2GB to 2.75GB (covers 0x89D80000)
         };
 
         foreach (var (start, end) in scanRegions)
@@ -185,7 +189,7 @@ internal static class Xdvdfs
                 continue;
 
             isoFs.Seek(start, SeekOrigin.Begin);
-            var buffer = new byte[sectorSize * 16]; // Read 16 sectors at a time for efficiency
+            var buffer = new byte[Utils.SectorSize * 16]; // Read 16 sectors at a time for efficiency
             var position = start;
 
             while (position < end)
@@ -268,12 +272,13 @@ internal static class Xdvdfs
             var rootOffset = BitConverter.ToUInt32(rootOffsetBuffer, 0);
             var rootSize = BitConverter.ToUInt32(rootSizeBuffer, 0);
 
-            // Root offset should be within file bounds and not unreasonably large
-            if (rootOffset == 0 || rootSize == 0)
-                return false;
+            // Empty root directory is valid (rootOffset == 0 && rootSize == 0)
+            if (rootOffset == 0 && rootSize == 0)
+                return true;
 
+            // Non-empty root must have valid offset and size within file bounds
             var rootOffsetBytes = rootOffset * Utils.SectorSize;
-            if (offset + rootOffsetBytes + rootSize > isoFs.Length)
+            if (rootSize == 0 || offset + rootOffsetBytes + rootSize > isoFs.Length)
                 return false;
 
             return true;
@@ -291,7 +296,11 @@ internal static class Xdvdfs
         public long ChildOffset;
     }
 
-    // Traverse file tree to get all valid data sectors in XISO using an iterative approach
+    // Traverse file tree to get all valid data sectors in XISO using an iterative approach.
+    // Note: Uses stack-based iteration (right → current → left) instead of XboxKit's recursive
+    // left → current → right. Both produce the same valid sectors set since the final result
+    // is sorted and deduplicated. The iterative approach adds cycle detection via visited HashSet
+    // for robustness against corrupted trees.
     private static void GetValidSectors(FileStream isoFs, long isoOffset, List<uint> validSectors,
         long rootOffset, uint rootSize, bool quiet, bool skipSystemUpdate, HashSet<long> visited)
     {
@@ -351,7 +360,8 @@ internal static class Xdvdfs
                 var isDirectory = (attributes & 0x10) != 0;
 
                 // Push Right Child to stack (process after current entry)
-                if (rightChildOffset != 0xFFFF && rightChildOffset != 0)
+                // 0xFFFF = no entry (padding), 0 = no child (valid but empty)
+                if (rightChildOffset != NoChildSentinel && rightChildOffset != 0)
                 {
                     stack.Push(item with { ChildOffset = (long)rightChildOffset * 4 });
                 }
@@ -359,10 +369,12 @@ internal static class Xdvdfs
                 // Process Current Entry
                 if (isDirectory)
                 {
-                    // Skip contents of $SystemUpdate if requested
+                    // Skip $SystemUpdate directory entirely if requested (matching extract-xiso -s flag)
+                    // The directory entry itself remains in the parent's table sectors (already counted),
+                    // but we skip traversing into its subdirectory table.
                     if (skipSystemUpdate && fileName.Equals("$SystemUpdate", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (!quiet) Debug.WriteLine("Skipping $SystemUpdate directory contents.");
+                        if (!quiet) Debug.WriteLine("Skipping $SystemUpdate directory and contents.");
                     }
                     else if (entryOffsetRaw > 0 && entrySize > 0)
                     {
@@ -385,7 +397,8 @@ internal static class Xdvdfs
                 }
 
                 // Push Left Child to stack
-                if (leftChildOffset != 0xFFFF && leftChildOffset != 0)
+                // 0xFFFF = no entry (padding), 0 = no child (valid but empty)
+                if (leftChildOffset != NoChildSentinel && leftChildOffset != 0)
                 {
                     stack.Push(item with { ChildOffset = (long)leftChildOffset * 4 });
                 }
@@ -403,20 +416,20 @@ internal static class Xdvdfs
     {
         var validSectors = new List<uint>();
         var headerOffset = offset + XisoHeaderOffset;
+        var ranges = new List<(uint, uint)>();
 
-        // Validate Header Signature
+        // Validate Header Signature — return empty list if invalid (matching XboxKit behavior)
         isoFs.Seek(headerOffset, SeekOrigin.Begin);
         var signatureBuffer = new byte[20];
         if (isoFs.Read(signatureBuffer, 0, 20) != 20)
         {
-            throw new EndOfStreamException("Could not read XISO header signature (EOF).");
+            return ranges;
         }
 
         var signature = Encoding.ASCII.GetString(signatureBuffer);
-        if (!signature.StartsWith(XdvdfsSignature, StringComparison.Ordinal))
+        if (signature != XdvdfsSignature)
         {
-            // If signature is invalid, throw exception to be caught by XisoWriter
-            throw new InvalidDataException($"Invalid XISO header signature found: '{signature.Trim()}' at offset {headerOffset}. Expected '{XdvdfsSignature}'.");
+            return ranges;
         }
 
         // Add Header sectors (Standard XISO behavior)
@@ -428,8 +441,6 @@ internal static class Xdvdfs
         isoFs.Seek(headerOffset + 20, SeekOrigin.Begin);
         var rootOffset = Utils.ReadUInt(isoFs);
         var rootSize = Utils.ReadUInt(isoFs);
-
-        var ranges = new List<(uint, uint)>();
 
         // Guard against empty or invalid filesystem
         if (rootSize == 0) return ranges;
@@ -461,5 +472,39 @@ internal static class Xdvdfs
         ranges.Add((start, prev));
 
         return ranges;
+    }
+
+    /// <summary>
+    /// Locates the system update file offset in XGD3 video partitions.
+    /// Searches backwards from the end of the file for the filler pattern
+    /// "ABCDABCDABCDABCD" which marks the boundary of the system update area.
+    /// Based on XboxKit's SUOffset implementation.
+    /// </summary>
+    /// <param name="videoFs">The video partition file stream.</param>
+    /// <returns>The offset where the system update area begins, or file length if not found.</returns>
+    public static long GetSystemUpdateOffset(FileStream videoFs)
+    {
+        var updateOffset = videoFs.Length;
+        var videoBuf = new byte[16];
+
+        while (updateOffset >= Utils.SectorSize)
+        {
+            videoFs.Seek(updateOffset - Utils.SectorSize, SeekOrigin.Begin);
+            var bytesRead = 0;
+            while (bytesRead < videoBuf.Length)
+            {
+                var n = videoFs.Read(videoBuf, bytesRead, videoBuf.Length - bytesRead);
+                if (n == 0) break;
+
+                bytesRead += n;
+            }
+
+            if (videoBuf.AsSpan().SequenceEqual(SystemUpdateFiller))
+                break;
+
+            updateOffset -= Utils.SectorSize;
+        }
+
+        return updateOffset;
     }
 }

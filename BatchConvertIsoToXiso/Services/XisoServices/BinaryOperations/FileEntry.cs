@@ -30,6 +30,13 @@ public class FileEntry
 {
     private static readonly Encoding Win1252 = Encoding.GetEncoding(1252);
 
+    /// <summary>
+    /// Size of the fixed directory entry header in bytes:
+    /// LeftSubTree (2) + RightSubTree (2) + StartSector (4) + FileSize (4) + Attributes (1) + NameLength (1) = 14
+    /// Matches XISO_FILENAME_OFFSET in extract-xiso.c
+    /// </summary>
+    private const int DirentHeaderSize = 14;
+
     public long EntrySector { get; internal set; }
     public ushort LeftSubTree { get; internal set; }
     public ushort RightSubTree { get; internal set; }
@@ -80,8 +87,8 @@ public class FileEntry
             FileName = string.Empty;
         }
 
-        // Skip padding
-        var entrySize = 14 + nameLength;
+        // Skip padding to align to 4-byte boundary
+        var entrySize = DirentHeaderSize + nameLength;
         var padding = (4 - entrySize % 4) % 4;
         if (padding > 0) reader.BaseStream.Seek(padding, SeekOrigin.Current);
     }

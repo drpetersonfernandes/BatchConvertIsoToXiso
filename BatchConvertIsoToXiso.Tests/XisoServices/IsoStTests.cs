@@ -37,7 +37,7 @@ public class IsoStTests
     public void ReadReadsDataSuccessfully()
     {
         var path = Path.GetTempFileName();
-        var data = new byte[IsoSt.SectorSize * 2];
+        var data = new byte[Utils.SectorSize * 2];
         data[100] = 42;
         File.WriteAllBytes(path, data);
 

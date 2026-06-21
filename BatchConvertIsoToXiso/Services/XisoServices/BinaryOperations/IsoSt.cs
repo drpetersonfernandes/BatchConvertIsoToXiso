@@ -9,7 +9,6 @@ namespace BatchConvertIsoToXiso.Services.XisoServices.BinaryOperations;
 /// </summary>
 public class IsoSt : IDisposable
 {
-    public const int SectorSize = 2048;
     private readonly FileStream _fileStream;
     public long VolumeOffset { get; set; }
     internal BinaryReader Reader { get; }
@@ -24,7 +23,7 @@ public class IsoSt : IDisposable
     {
         lock (_fileStream)
         {
-            var fileOffset = VolumeOffset + (long)entry.StartSector * SectorSize + offset;
+            var fileOffset = VolumeOffset + entry.StartSector * Utils.SectorSize + offset;
 
             if (fileOffset >= _fileStream.Length) return 0;
 
@@ -37,7 +36,7 @@ public class IsoSt : IDisposable
     {
         lock (_fileStream)
         {
-            var position = VolumeOffset + sector * SectorSize + offset;
+            var position = VolumeOffset + sector * Utils.SectorSize + offset;
             if (position >= _fileStream.Length) return null;
 
             _fileStream.Seek(position, SeekOrigin.Begin);

@@ -107,13 +107,14 @@ public class XdvdfsTests
     }
 
     [Fact]
-    public void GetXisoRangesWithInvalidSignatureThrowsInvalidDataException()
+    public void GetXisoRangesWithInvalidSignatureReturnsEmptyRanges()
     {
         var path = Path.GetTempFileName();
         File.WriteAllBytes(path, new byte[1024 * 1024]);
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.DeleteOnClose);
 
-        Assert.Throws<InvalidDataException>(() => Xdvdfs.GetXisoRanges(fs, 0, true, false));
+        var ranges = Xdvdfs.GetXisoRanges(fs, 0, true, false);
+        Assert.Empty(ranges);
     }
 
     [Fact]

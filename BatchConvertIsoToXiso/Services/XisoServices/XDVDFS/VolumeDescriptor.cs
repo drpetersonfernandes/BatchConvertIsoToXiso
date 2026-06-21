@@ -22,57 +22,50 @@ public class VolumeDescriptor
 
     /// <summary>
     /// Known XDVDFS partition offsets for different Xbox game disc formats.
-    /// Must match the offsets used in XisoWriter.XisoOffset.
+    /// Shared between VolumeDescriptor and Xdvdfs for consistency.
     /// </summary>
-    private static readonly long[] GamePartitionOffsets =
+    public static readonly long[] GamePartitionOffsets =
     [
-        0x18300000, // XGD1 (~387MB)
-        0xFD90000,  // XGD2 (~253.5MB)
-        0x89D80000, // Additional variant
-        0x2080000   // XGD3 (~32.5MB)
+        0,              // XISO (already trimmed or standard XISO without video partition)
+        0x02080000,     // XGD3 (~32.5MB)
+        0x0FD90000,     // XGD2 (~253.5MB)
+        0x18300000,     // XGD1 (~387MB)
+        0x89D80000      // Additional variant (~2.2GB)
     ];
 
     private static readonly byte[] MagicId = "MICROSOFT*XBOX*MEDIA"u8.ToArray();
 
     public uint RootDirTableSector { get; private set; }
+    public uint RootDirSize { get; private set; }
 
     private VolumeDescriptor(IsoSt isoSt, uint sector, long byteOffset)
     {
         isoSt.ExecuteLocked(reader =>
         {
-            var sectorStart = byteOffset + (long)sector * IsoSt.SectorSize;
+            var sectorStart = byteOffset + sector * Utils.SectorSize;
             if (sectorStart + 0x800 > reader.BaseStream.Length) throw new EndOfStreamException();
 
+            // Validate Magic ID 1 first (before reading any data)
             reader.BaseStream.Seek(sectorStart, SeekOrigin.Begin);
             var id1 = reader.ReadBytes(0x14);
-
-            RootDirTableSector = reader.ReadUInt32();
-
-            // Validate Magic ID 1
             if (!id1.SequenceEqual(MagicId)) throw new InvalidDataException();
 
             // Validate Magic ID 2
             reader.BaseStream.Seek(sectorStart + 0x7EC, SeekOrigin.Begin);
             var id2 = reader.ReadBytes(0x14);
             if (!id2.SequenceEqual(MagicId)) throw new InvalidDataException();
+
+            // Now read root directory info (sector + size)
+            reader.BaseStream.Seek(sectorStart + 0x14, SeekOrigin.Begin);
+            RootDirTableSector = reader.ReadUInt32();
+            RootDirSize = reader.ReadUInt32();
         });
     }
 
     public static VolumeDescriptor ReadFrom(IsoSt isoSt)
     {
-        // 1. Try Sector 32, Offset 0 (Standard XISO)
-        try
-        {
-            var vol = new VolumeDescriptor(isoSt, VolumeDescriptorSector, 0);
-            isoSt.VolumeOffset = 0;
-            return vol;
-        }
-        catch
-        {
-            // ignored
-        }
-
-        // 2. Try all known Game Partition Offsets (XGD1, XGD2, XGD3, etc.)
+        // 1. Try all known Game Partition Offsets at Sector 32 (standard XDVDFS location)
+        //    This includes offset 0 for standard XISOs and various XGD offsets for dual-layer discs
         foreach (var offset in GamePartitionOffsets)
         {
             try
@@ -87,7 +80,7 @@ public class VolumeDescriptor
             }
         }
 
-        // 3. Try Sector 0 (Rebuilt XISO)
+        // 2. Try Sector 0 (Rebuilt XISO without video partition header)
         try
         {
             var vol = new VolumeDescriptor(isoSt, 0, 0);
