@@ -318,7 +318,7 @@ public class OrchestratorService : IOrchestratorService
         }
         finally
         {
-            await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(tempDir, 3, 1000, null);
+            await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(tempDir, 3, 1000, null, token);
             tempFolders.Remove(tempDir);
         }
 
@@ -421,7 +421,7 @@ public class OrchestratorService : IOrchestratorService
         }
         finally
         {
-            await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(tempCueDir, 3, 1000, null);
+            await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(tempCueDir, 3, 1000, null, token);
             tempFolders.Remove(tempCueDir);
         }
     }
@@ -542,7 +542,7 @@ public class OrchestratorService : IOrchestratorService
         finally
         {
             if (localTempWorkingDir != null)
-                await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(localTempWorkingDir, 5, 1000, null);
+                await TempFolderCleanupHelper.TryDeleteDirectoryWithRetryAsync(localTempWorkingDir, 5, 1000, null, token);
         }
     }
 

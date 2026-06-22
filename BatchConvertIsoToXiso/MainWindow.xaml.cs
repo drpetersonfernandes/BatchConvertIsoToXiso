@@ -162,6 +162,7 @@ public partial class MainWindow
         {
             _explorerIsoSt?.Dispose();
         }
+
         _processingTimer.Stop();
         _memoryTimer.Stop();
         StopPerformanceCounter();

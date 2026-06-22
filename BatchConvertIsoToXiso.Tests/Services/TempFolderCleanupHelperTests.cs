@@ -8,7 +8,7 @@ namespace BatchConvertIsoToXiso.Tests.Services;
 public class TempFolderCleanupHelperTests
 {
     [Fact]
-    public async Task TryDeleteDirectoryWithRetryAsync_NonExistentDirectory_DoesNotThrow()
+    public async Task TryDeleteDirectoryWithRetryAsyncNonExistentDirectoryDoesNotThrow()
     {
         var nonExistentPath = Path.Combine(Path.GetTempPath(), $"NonExistent_Test_{Guid.NewGuid()}");
         var mockLogger = new Mock<ILogger>();
@@ -21,7 +21,7 @@ public class TempFolderCleanupHelperTests
     }
 
     [Fact]
-    public async Task TryDeleteDirectoryWithRetryAsync_ExistingEmptyDirectory_GetsDeleted()
+    public async Task TryDeleteDirectoryWithRetryAsyncExistingEmptyDirectoryGetsDeleted()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"BatchConvertIsoToXiso_Test_{Guid.NewGuid()}");
         Directory.CreateDirectory(tempDir);
@@ -44,7 +44,7 @@ public class TempFolderCleanupHelperTests
     }
 
     [Fact]
-    public async Task TryDeleteDirectoryWithRetryAsync_NullLogger_DoesNotThrow()
+    public async Task TryDeleteDirectoryWithRetryAsyncNullLoggerDoesNotThrow()
     {
         var nonExistentPath = Path.Combine(Path.GetTempPath(), $"NonExistent_Test_{Guid.NewGuid()}");
 
@@ -55,7 +55,7 @@ public class TempFolderCleanupHelperTests
     }
 
     [Fact]
-    public async Task TryDeleteDirectoryWithRetryAsync_ExistingDirectory_CallsLogSuccess()
+    public async Task TryDeleteDirectoryWithRetryAsyncExistingDirectoryCallsLogSuccess()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"BatchConvertIsoToXiso_Test_{Guid.NewGuid()}");
         Directory.CreateDirectory(tempDir);

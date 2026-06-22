@@ -178,9 +178,9 @@ internal static class Xdvdfs
         // Scan regions covering all known XGD offsets with margin for variants
         var scanRegions = new[]
         {
-            (start: 0x10000L, end: Math.Min(fileLength, 0x20000000L)),   // 64KB to 512MB (covers XGD3, XGD2)
+            (start: 0x10000L, end: Math.Min(fileLength, 0x20000000L)), // 64KB to 512MB (covers XGD3, XGD2)
             (start: 0x18000000L, end: Math.Min(fileLength, 0x20000000L)), // 384MB to 512MB (covers XGD1)
-            (start: 0x80000000L, end: Math.Min(fileLength, 0xB0000000L))  // 2GB to 2.75GB (covers 0x89D80000)
+            (start: 0x80000000L, end: Math.Min(fileLength, 0xB0000000L)) // 2GB to 2.75GB (covers 0x89D80000)
         };
 
         foreach (var (start, end) in scanRegions)

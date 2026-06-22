@@ -8,14 +8,14 @@ namespace BatchConvertIsoToXiso.Tests.Services;
 public class DisplayInstructionsTests
 {
     [Fact]
-    public void DisplayInitialInstructions_WhenNotInitialized_DoesNotThrow()
+    public void DisplayInitialInstructionsWhenNotInitializedDoesNotThrow()
     {
         var exception = Record.Exception(DisplayInstructions.DisplayInitialInstructions);
         Assert.Null(exception);
     }
 
     [Fact]
-    public void DisplayInitialInstructions_WhenInitialized_LogsWelcomeMessage()
+    public void DisplayInitialInstructionsWhenInitializedLogsWelcomeMessage()
     {
         var mockLogger = new Mock<ILogger>();
         DisplayInstructions.Initialize(mockLogger.Object);
@@ -27,7 +27,7 @@ public class DisplayInstructionsTests
     }
 
     [Fact]
-    public void DisplayInitialInstructions_LogsApplicationFunctions()
+    public void DisplayInitialInstructionsLogsApplicationFunctions()
     {
         var mockLogger = new Mock<ILogger>();
         DisplayInstructions.Initialize(mockLogger.Object);
@@ -45,7 +45,7 @@ public class DisplayInstructionsTests
     }
 
     [Fact]
-    public void DisplayInitialInstructions_LogsPlatformWarning()
+    public void DisplayInitialInstructionsLogsPlatformWarning()
     {
         var mockLogger = new Mock<ILogger>();
         DisplayInstructions.Initialize(mockLogger.Object);
@@ -57,7 +57,7 @@ public class DisplayInstructionsTests
     }
 
     [Fact]
-    public void DisplayInitialInstructions_LogsReadyMessage()
+    public void DisplayInitialInstructionsLogsReadyMessage()
     {
         var mockLogger = new Mock<ILogger>();
         DisplayInstructions.Initialize(mockLogger.Object);
@@ -69,7 +69,7 @@ public class DisplayInstructionsTests
     }
 
     [Fact]
-    public void DisplayInitialInstructions_LogsBchunkStatus()
+    public void DisplayInitialInstructionsLogsBchunkStatus()
     {
         var mockLogger = new Mock<ILogger>();
         DisplayInstructions.Initialize(mockLogger.Object);
@@ -81,7 +81,7 @@ public class DisplayInstructionsTests
     }
 
     [Fact]
-    public void DisplayInitialInstructions_LogsExtractXisoStatus()
+    public void DisplayInitialInstructionsLogsExtractXisoStatus()
     {
         var mockLogger = new Mock<ILogger>();
         DisplayInstructions.Initialize(mockLogger.Object);
@@ -93,7 +93,7 @@ public class DisplayInstructionsTests
     }
 
     [Fact]
-    public void DisplayInitialInstructions_LogsXdvdfsStatus()
+    public void DisplayInitialInstructionsLogsXdvdfsStatus()
     {
         var mockLogger = new Mock<ILogger>();
         DisplayInstructions.Initialize(mockLogger.Object);

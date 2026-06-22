@@ -25,21 +25,21 @@ public class ConvertToPastTenseTests
     }
 
     [Fact]
-    public void GetPastTense_EmptyString_ReturnsEd()
+    public void GetPastTenseEmptyStringReturnsEd()
     {
         var result = ConvertToPastTense.GetPastTense("");
         Assert.Equal("ed", result);
     }
 
     [Fact]
-    public void GetPastTense_UnknownVerb_AppendsEdLowercased()
+    public void GetPastTenseUnknownVerbAppendsEdLowercased()
     {
         var result = ConvertToPastTense.GetPastTense("DOWNLOAD");
         Assert.Equal("downloaded", result);
     }
 
     [Fact]
-    public void GetPastTense_SingleCharacter_AppendsEd()
+    public void GetPastTenseSingleCharacterAppendsEd()
     {
         var result = ConvertToPastTense.GetPastTense("x");
         Assert.Equal("xed", result);

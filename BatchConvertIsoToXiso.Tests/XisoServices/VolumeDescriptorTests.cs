@@ -16,6 +16,7 @@ public class VolumeDescriptorTests : IDisposable
             try { if (File.Exists(file)) File.Delete(file); }
             catch { /* best effort */ }
         }
+
         GC.SuppressFinalize(this);
     }
 

@@ -173,6 +173,7 @@ public partial class MainWindow
                 {
                     await Task.Delay(30_000);
                     try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* in use */ }
+
                     try
                     {
                         var dir = Path.GetDirectoryName(tempPath);

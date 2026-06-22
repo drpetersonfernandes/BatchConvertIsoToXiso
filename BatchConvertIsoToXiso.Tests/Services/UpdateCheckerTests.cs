@@ -32,7 +32,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_NewVersionAvailable_ReturnsTrueAndVersionInfo()
+    public async Task CheckForUpdateAsyncNewVersionAvailableReturnsTrueAndVersionInfo()
     {
         var json = CreateReleaseJson("v2.4.0", "https://github.com/test/releases/tag/v2.4.0");
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);
@@ -46,7 +46,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_SameVersion_ReturnsFalse()
+    public async Task CheckForUpdateAsyncSameVersionReturnsFalse()
     {
         var json = CreateReleaseJson("v2.3.1", "https://github.com/test/releases/tag/v2.3.1");
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);
@@ -60,7 +60,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_RemoteVersionOlder_ReturnsFalse()
+    public async Task CheckForUpdateAsyncRemoteVersionOlderReturnsFalse()
     {
         var json = CreateReleaseJson("v2.2.0", "https://github.com/test/releases/tag/v2.2.0");
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);
@@ -74,7 +74,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_TagWithoutVersionPrefix_DetectsVersion()
+    public async Task CheckForUpdateAsyncTagWithoutVersionPrefixDetectsVersion()
     {
         var json = CreateReleaseJson("release-3.0.0", "https://github.com/test/releases/tag/release-3.0.0");
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);
@@ -87,7 +87,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_NullTagName_ReturnsFalse()
+    public async Task CheckForUpdateAsyncNullTagNameReturnsFalse()
     {
         var json = CreateReleaseJson(null!, "https://github.com/test/releases/tag/v1.0.0");
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);
@@ -99,7 +99,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_NullHtmlUrl_ReturnsFalse()
+    public async Task CheckForUpdateAsyncNullHtmlUrlReturnsFalse()
     {
         var json = CreateReleaseJson("v2.0.0", null!);
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);
@@ -111,7 +111,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_NoVersionInTag_ReturnsFalse()
+    public async Task CheckForUpdateAsyncNoVersionInTagReturnsFalse()
     {
         var json = CreateReleaseJson("latest-stable", "https://github.com/test/releases/tag/latest-stable");
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);
@@ -125,7 +125,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_HttpRequestFails_ReturnsFalse()
+    public async Task CheckForUpdateAsyncHttpRequestFailsReturnsFalse()
     {
         var handlerMock = new Mock<HttpMessageHandler>();
         handlerMock.Protected()
@@ -144,7 +144,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_InvalidJson_ReturnsFalse()
+    public async Task CheckForUpdateAsyncInvalidJsonReturnsFalse()
     {
         var httpClient = CreateHttpClient(HttpStatusCode.OK, "{invalid-json");
         var checker = new UpdateChecker(httpClient, "1.0.0");
@@ -157,7 +157,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_UnexpectedVersionFormat_ReturnsFalse()
+    public async Task CheckForUpdateAsyncUnexpectedVersionFormatReturnsFalse()
     {
         var json = CreateReleaseJson("not-a-version-v1.2.3", "https://github.com/test/releases/tag/nonsense");
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);
@@ -169,7 +169,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_ServerError_ReturnsFalse()
+    public async Task CheckForUpdateAsyncServerErrorReturnsFalse()
     {
         var httpClient = CreateHttpClient(HttpStatusCode.InternalServerError, "Server error");
         var checker = new UpdateChecker(httpClient, "1.0.0");
@@ -182,7 +182,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_MajorVersionBump_ReturnsTrue()
+    public async Task CheckForUpdateAsyncMajorVersionBumpReturnsTrue()
     {
         var json = CreateReleaseJson("v3.0.0", "https://github.com/test/releases/tag/v3.0.0");
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);
@@ -195,7 +195,7 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_FourComponentVersion_ReturnsTrue()
+    public async Task CheckForUpdateAsyncFourComponentVersionReturnsTrue()
     {
         var json = CreateReleaseJson("v1.2.3.4", "https://github.com/test/releases/tag/v1.2.3.4");
         var httpClient = CreateHttpClient(HttpStatusCode.OK, json);

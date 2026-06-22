@@ -26,11 +26,11 @@ public class VolumeDescriptor
     /// </summary>
     public static readonly long[] GamePartitionOffsets =
     [
-        0,              // XISO (already trimmed or standard XISO without video partition)
-        0x02080000,     // XGD3 (~32.5MB)
-        0x0FD90000,     // XGD2 (~253.5MB)
-        0x18300000,     // XGD1 (~387MB)
-        0x89D80000      // Additional variant (~2.2GB)
+        0, // XISO (already trimmed or standard XISO without video partition)
+        0x02080000, // XGD3 (~32.5MB)
+        0x0FD90000, // XGD2 (~253.5MB)
+        0x18300000, // XGD1 (~387MB)
+        0x89D80000 // Additional variant (~2.2GB)
     ];
 
     private static readonly byte[] MagicId = "MICROSOFT*XBOX*MEDIA"u8.ToArray();

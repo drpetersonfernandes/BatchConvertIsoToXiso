@@ -6,7 +6,7 @@ namespace BatchConvertIsoToXiso.Tests.Services;
 public class BugReportServiceTests
 {
     [Fact]
-    public void BuildFullMessage_MessageAlreadyContainsEnvironmentDetails_ReturnsUnchanged()
+    public void BuildFullMessageMessageAlreadyContainsEnvironmentDetailsReturnsUnchanged()
     {
         const string message = "=== Environment Details ===\nSome existing details\nMore info";
         var result = BugReportService.BuildFullMessage(message);
@@ -14,7 +14,7 @@ public class BugReportServiceTests
     }
 
     [Fact]
-    public void BuildFullMessage_CaseInsensitive_ReturnsUnchanged()
+    public void BuildFullMessageCaseInsensitiveReturnsUnchanged()
     {
         const string message = "=== environment details ===\nSome existing details";
         var result = BugReportService.BuildFullMessage(message);
@@ -22,7 +22,7 @@ public class BugReportServiceTests
     }
 
     [Fact]
-    public void BuildFullMessage_SimpleMessage_ContainsExpectedEnvironmentSections()
+    public void BuildFullMessageSimpleMessageContainsExpectedEnvironmentSections()
     {
         const string message = "Test bug report message";
         var result = BugReportService.BuildFullMessage(message);
@@ -42,7 +42,7 @@ public class BugReportServiceTests
     }
 
     [Fact]
-    public void BuildFullMessage_CreatesValidFormattedOutput()
+    public void BuildFullMessageCreatesValidFormattedOutput()
     {
         const string message = "Something broke!";
         var result = BugReportService.BuildFullMessage(message);
@@ -52,7 +52,7 @@ public class BugReportServiceTests
     }
 
     [Fact]
-    public void Constructor_InitializesWithValidParameters()
+    public void ConstructorInitializesWithValidParameters()
     {
         using var httpClient = new HttpClient();
         var service = new BugReportService(httpClient, "https://api.example.com", "test-key", "TestApp");
@@ -60,7 +60,7 @@ public class BugReportServiceTests
     }
 
     [Fact]
-    public void Constructor_WithDispose_DoesNotThrow()
+    public void ConstructorWithDisposeDoesNotThrow()
     {
         using var httpClient = new HttpClient();
         var service = new BugReportService(httpClient, "https://api.example.com", "test-key", "TestApp");

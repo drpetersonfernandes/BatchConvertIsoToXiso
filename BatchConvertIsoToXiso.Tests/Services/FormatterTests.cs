@@ -50,7 +50,7 @@ public class FormatterTests
     [InlineData(1048576, 1f, "MB")]
     [InlineData(1073741824, 1f, "GB")]
     [InlineData(1099511627776, 1f, "TB")]
-    public void FormatBytes_ExactBoundaryValues(long bytes, float expectedValue, string unit)
+    public void FormatBytesExactBoundaryValues(long bytes, float expectedValue, string unit)
     {
         var result = Formatter.FormatBytes(bytes);
         var expected = $"{expectedValue.ToString("F1", CultureInfo.CurrentCulture)} {unit}";
@@ -58,7 +58,7 @@ public class FormatterTests
     }
 
     [Fact]
-    public void FormatBytes_NegativeValue_ReturnsFormattedBytes()
+    public void FormatBytesNegativeValueReturnsFormattedBytes()
     {
         var result = Formatter.FormatBytes(-1);
         Assert.Equal("-1 B", result);
@@ -67,7 +67,7 @@ public class FormatterTests
     [Theory]
     [InlineData(1024d, 1d, "KB/s")]
     [InlineData(1048576d, 1d, "MB/s")]
-    public void FormatBytesPerSecond_ExactBoundaryValues(double bytesPerSecond, double expectedValue, string unit)
+    public void FormatBytesPerSecondExactBoundaryValues(double bytesPerSecond, double expectedValue, string unit)
     {
         var result = Formatter.FormatBytesPerSecond(bytesPerSecond);
         var expected = $"{expectedValue.ToString("F1", CultureInfo.CurrentCulture)} {unit}";
@@ -75,7 +75,7 @@ public class FormatterTests
     }
 
     [Fact]
-    public void FormatBytesPerSecond_NegativeValue_ReturnsFormattedBytes()
+    public void FormatBytesPerSecondNegativeValueReturnsFormattedBytes()
     {
         var result = Formatter.FormatBytesPerSecond(-1d);
         var expected = $"{(-1d).ToString("F1", CultureInfo.CurrentCulture)} B/s";

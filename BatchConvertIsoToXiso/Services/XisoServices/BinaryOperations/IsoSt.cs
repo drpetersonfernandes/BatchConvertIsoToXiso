@@ -16,7 +16,7 @@ public class IsoSt : IDisposable
     public IsoSt(string isoPath)
     {
         _fileStream = new FileStream(isoPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        Reader = new BinaryReader(_fileStream, System.Text.Encoding.UTF8, leaveOpen: true);
+        Reader = new BinaryReader(_fileStream, System.Text.Encoding.UTF8, true);
     }
 
     public int Read(FileEntry entry, Span<byte> buffer, long offset)

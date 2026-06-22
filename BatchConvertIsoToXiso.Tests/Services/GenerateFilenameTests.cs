@@ -18,27 +18,27 @@ public class GenerateFilenameTests
     }
 
     [Fact]
-    public void GenerateSimpleFilename_NegativeIndex_ThrowsArgumentOutOfRange()
+    public void GenerateSimpleFilenameNegativeIndexThrowsArgumentOutOfRange()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => GenerateFilename.GenerateSimpleFilename(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(static () => GenerateFilename.GenerateSimpleFilename(-1));
     }
 
     [Fact]
-    public void GenerateSimpleFilename_OverflowIndex_FormatsBeyondSixDigits()
+    public void GenerateSimpleFilenameOverflowIndexFormatsBeyondSixDigits()
     {
         var result = GenerateFilename.GenerateSimpleFilename(1000000);
         Assert.Equal("iso_1000000.iso", result);
     }
 
     [Fact]
-    public void GenerateSimpleFilename_EndsWithIsoExtension()
+    public void GenerateSimpleFilenameEndsWithIsoExtension()
     {
         var result = GenerateFilename.GenerateSimpleFilename(42);
         Assert.EndsWith(".iso", result);
     }
 
     [Fact]
-    public void GenerateSimpleFilename_StartsWithIsoPrefix()
+    public void GenerateSimpleFilenameStartsWithIsoPrefix()
     {
         var result = GenerateFilename.GenerateSimpleFilename(42);
         Assert.StartsWith("iso_", result);

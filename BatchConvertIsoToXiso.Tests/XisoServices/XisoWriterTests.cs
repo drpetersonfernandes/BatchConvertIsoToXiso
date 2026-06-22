@@ -14,7 +14,7 @@ public class XisoWriterTests
     [InlineData(5, 2)]
     [InlineData(6, 3)]
     [InlineData(7, 3)]
-    public void GetXgdType_ReturnsExpectedMapping(int redumpType, int expectedXgd)
+    public void GetXgdTypeReturnsExpectedMapping(int redumpType, int expectedXgd)
     {
         var result = XisoWriter.GetXgdType(redumpType);
         Assert.Equal(expectedXgd, result);
@@ -24,7 +24,7 @@ public class XisoWriterTests
     [InlineData(-1, 0)]
     [InlineData(8, 0)]
     [InlineData(100, 0)]
-    public void GetXgdType_OutOfRange_ReturnsZero(int redumpType, int expectedXgd)
+    public void GetXgdTypeOutOfRangeReturnsZero(int redumpType, int expectedXgd)
     {
         var result = XisoWriter.GetXgdType(redumpType);
         Assert.Equal(expectedXgd, result);
