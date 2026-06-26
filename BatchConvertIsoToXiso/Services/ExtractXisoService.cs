@@ -197,6 +197,12 @@ public class ExtractXisoService : IExtractXisoService
                 "3. Check your network connection stability");
             throw;
         }
+        catch (DirectoryNotFoundException ex)
+        {
+            _logger.LogMessage($"[ERROR] Drive or path not found for '{fileName}': {ex.Message}\n\n" +
+                "Please check that the drive is connected and the path exists.");
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogMessage($"[ERROR] Failed to convert '{fileName}': {ex.Message}");
